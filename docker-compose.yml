@@ -1,0 +1,318 @@
+# Central Docker orchestration for local development (PRD §14.2).
+#
+# HQ environment:      hq-db, hq-redis, hq-api, hq-worker, hq-web
+# Outlet A environment: outlet-a-db, outlet-a-redis, outlet-a-api,
+#                       outlet-a-worker, outlet-a-web
+#
+# Topology notes (PRD §2, §14.2):
+# - HQ and outlet databases/queues are fully separated (dedicated
+#   networks and volumes). HQ has no route to any outlet database.
+# - The outlet worker reaches HQ only through the `hq-sync` network to
+#   make its outbound menu-pull / event-push calls. All synchronization
+#   is outlet-initiated.
+# - Outlet sales never depend on hq-api reachability.
+
+name: fnb-platform
+
+services:
+  # --------------------------------------------------------------------------
+  # HQ environment
+  # --------------------------------------------------------------------------
+  hq-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${HQ_POSTGRES_USER:-fnb_hq}
+      POSTGRES_PASSWORD: ${HQ_POSTGRES_PASSWORD:-fnb_hq_dev_password}
+      POSTGRES_DB: ${HQ_POSTGRES_DB:-fnb_hq}
+    volumes:
+      - hq-db-data:/var/lib/postgresql/data
+      - ./hq-backend/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Local development convenience only (host loopback): lets non-Docker
+      # dev runs and e2e tests reach the HQ database.
+      - "127.0.0.1:15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${HQ_POSTGRES_USER:-fnb_hq} -d ${HQ_POSTGRES_DB:-fnb_hq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - hq-internal
+    restart: unless-stopped
+
+  hq-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - hq-redis-data:/data
+      - ./hq-backend/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "127.0.0.1:16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - hq-internal
+    restart: unless-stopped
+
+  hq-migrate:
+    # Single controlled migration job (PRD §14.2): runs to completion before
+    # the API starts; never executed concurrently on API replicas.
+    build:
+      context: ./hq-backend
+    image: fnb/hq-backend:local
+    command: ["node", "dist/database/migrate.js", "run"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${HQ_POSTGRES_USER:-fnb_hq}:${HQ_POSTGRES_PASSWORD:-fnb_hq_dev_password}@hq-db:5432/${HQ_POSTGRES_DB:-fnb_hq}
+    depends_on:
+      hq-db:
+        condition: service_healthy
+    networks:
+      - hq-internal
+    restart: "no"
+
+  hq-api:
+    build:
+      context: ./hq-backend
+    image: fnb/hq-backend:local
+    environment:
+      NODE_ENV: production
+      # Entrypoint profile for env validation (also pinned by the entrypoint
+      # itself): `api` requires the auth secrets below.
+      APP_ENTRYPOINT: api
+      PORT: 3000
+      DATABASE_URL: postgresql://${HQ_POSTGRES_USER:-fnb_hq}:${HQ_POSTGRES_PASSWORD:-fnb_hq_dev_password}@hq-db:5432/${HQ_POSTGRES_DB:-fnb_hq}
+      REDIS_URL: redis://hq-redis:6379
+      HQ_JWT_ISSUER: ${HQ_JWT_ISSUER:-fnb-hq}
+      HQ_JWT_AUDIENCE: ${HQ_JWT_AUDIENCE:-fnb-hq-api}
+      HQ_JWT_PRIVATE_KEY: ${HQ_JWT_PRIVATE_KEY:-dev-only-placeholder-key}
+      HQ_JWT_PUBLIC_KEY: ${HQ_JWT_PUBLIC_KEY:-dev-only-placeholder-key}
+      OUTLET_KEY_PEPPER: ${OUTLET_KEY_PEPPER:-dev-only-placeholder-pepper}
+      CORS_ORIGINS: http://localhost:${HQ_WEB_PORT:-8080}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SYNC_MAX_BODY_BYTES: "1048576"
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-900}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-1209600}
+      # Local dev cluster doubles as the admin-restricted docs environment.
+      SWAGGER_ENABLED: "true"
+    ports:
+      - "${HQ_API_PORT:-4000}:3000"
+    depends_on:
+      hq-migrate:
+        condition: service_completed_successfully
+      hq-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks:
+      - hq-internal
+      - hq-sync
+    restart: unless-stopped
+
+  hq-worker:
+    # Same image as hq-api; worker entrypoint instead of the HTTP API.
+    build:
+      context: ./hq-backend
+    image: fnb/hq-backend:local
+    command: ["node", "dist/worker-main.js"]
+    environment:
+      NODE_ENV: production
+      # Worker profile: validates the worker contract (no API auth secrets
+      # needed — PRD §3).
+      APP_ENTRYPOINT: worker
+      DATABASE_URL: postgresql://${HQ_POSTGRES_USER:-fnb_hq}:${HQ_POSTGRES_PASSWORD:-fnb_hq_dev_password}@hq-db:5432/${HQ_POSTGRES_DB:-fnb_hq}
+      REDIS_URL: redis://hq-redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      HEARTBEAT_INTERVAL_MS: "60000"
+    depends_on:
+      hq-db:
+        condition: service_healthy
+      hq-redis:
+        condition: service_healthy
+    networks:
+      - hq-internal
+    restart: unless-stopped
+
+  hq-web:
+    build:
+      context: ./hq-frontend
+      args:
+        VITE_API_BASE_URL: /api/v1
+    image: fnb/hq-frontend:local
+    ports:
+      - "${HQ_WEB_PORT:-8080}:80"
+    depends_on:
+      hq-api:
+        condition: service_healthy
+    networks:
+      - hq-internal
+    restart: unless-stopped
+
+  # --------------------------------------------------------------------------
+  # Outlet A environment (independently deployable; repeat per outlet site)
+  # --------------------------------------------------------------------------
+  outlet-a-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${OUTLET_A_POSTGRES_USER:-fnb_outlet_a}
+      POSTGRES_PASSWORD: ${OUTLET_A_POSTGRES_PASSWORD:-fnb_outlet_a_dev_password}
+      POSTGRES_DB: ${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}
+    volumes:
+      - outlet-a-db-data:/var/lib/postgresql/data
+      - ./outlet-backend/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Local development convenience only (host loopback).
+      - "127.0.0.1:15433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OUTLET_A_POSTGRES_USER:-fnb_outlet_a} -d ${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - outlet-a-internal
+    restart: unless-stopped
+
+  outlet-a-redis:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    volumes:
+      - outlet-a-redis-data:/data
+      - ./outlet-backend/docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    ports:
+      - "127.0.0.1:16380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    networks:
+      - outlet-a-internal
+    restart: unless-stopped
+
+  outlet-a-migrate:
+    # Single controlled migration job for the outlet database (PRD §14.2).
+    build:
+      context: ./outlet-backend
+    image: fnb/outlet-backend:local
+    command: ["node", "dist/database/migrate.js", "run"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${OUTLET_A_POSTGRES_USER:-fnb_outlet_a}:${OUTLET_A_POSTGRES_PASSWORD:-fnb_outlet_a_dev_password}@outlet-a-db:5432/${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}
+    depends_on:
+      outlet-a-db:
+        condition: service_healthy
+    networks:
+      - outlet-a-internal
+    restart: "no"
+
+  outlet-a-api:
+    build:
+      context: ./outlet-backend
+    image: fnb/outlet-backend:local
+    environment:
+      NODE_ENV: production
+      # Entrypoint profile for env validation (also pinned by the entrypoint
+      # itself): `api` requires the outlet JWT secrets below, never the HQ
+      # machine key.
+      APP_ENTRYPOINT: api
+      PORT: 3000
+      DATABASE_URL: postgresql://${OUTLET_A_POSTGRES_USER:-fnb_outlet_a}:${OUTLET_A_POSTGRES_PASSWORD:-fnb_outlet_a_dev_password}@outlet-a-db:5432/${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}
+      REDIS_URL: redis://outlet-a-redis:6379
+      OUTLET_ID: ${OUTLET_A_ID}
+      OUTLET_CODE: ${OUTLET_A_CODE:-A}
+      OUTLET_JWT_ISSUER: ${OUTLET_JWT_ISSUER:-fnb-outlet}
+      OUTLET_JWT_AUDIENCE: ${OUTLET_JWT_AUDIENCE:-fnb-outlet-api}
+      OUTLET_JWT_PRIVATE_KEY: ${OUTLET_JWT_PRIVATE_KEY:-dev-only-placeholder-key}
+      OUTLET_JWT_PUBLIC_KEY: ${OUTLET_JWT_PUBLIC_KEY:-dev-only-placeholder-key}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OFFLINE_GRACE_HOURS: ${OFFLINE_GRACE_HOURS:-72}
+      # Local dev cluster doubles as the admin-restricted docs environment.
+      SWAGGER_ENABLED: "true"
+    ports:
+      - "${OUTLET_A_API_PORT:-5000}:3000"
+    depends_on:
+      outlet-a-migrate:
+        condition: service_completed_successfully
+      outlet-a-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    networks:
+      - outlet-a-internal
+    restart: unless-stopped
+
+  outlet-a-worker:
+    # Same image as outlet-a-api; sync worker entrypoint. All HQ
+    # synchronization calls are initiated from here over `hq-sync`.
+    build:
+      context: ./outlet-backend
+    image: fnb/outlet-backend:local
+    command: ["node", "dist/worker-main.js"]
+    environment:
+      NODE_ENV: production
+      # Worker profile: validates the sync-worker contract — HQ machine key
+      # required, outlet user JWT secrets not (PRD §3, §9.2).
+      APP_ENTRYPOINT: worker
+      DATABASE_URL: postgresql://${OUTLET_A_POSTGRES_USER:-fnb_outlet_a}:${OUTLET_A_POSTGRES_PASSWORD:-fnb_outlet_a_dev_password}@outlet-a-db:5432/${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}
+      REDIS_URL: redis://outlet-a-redis:6379
+      OUTLET_ID: ${OUTLET_A_ID}
+      OUTLET_CODE: ${OUTLET_A_CODE:-A}
+      HQ_API_BASE_URL: http://hq-api:3000/api/v1
+      HQ_OUTLET_KEY_ID: ${OUTLET_A_HQ_KEY_ID:-dev-outlet-a-key-id}
+      HQ_OUTLET_KEY_SECRET: ${OUTLET_A_HQ_KEY_SECRET:-dev-outlet-a-key-secret}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MENU_PULL_INTERVAL_MS: "30000"
+      OUTBOX_BATCH_SIZE: "100"
+      OUTBOX_SWEEP_INTERVAL_MS: "5000"
+      OFFLINE_GRACE_HOURS: ${OFFLINE_GRACE_HOURS:-72}
+      HEARTBEAT_INTERVAL_MS: "60000"
+    depends_on:
+      outlet-a-db:
+        condition: service_healthy
+      outlet-a-redis:
+        condition: service_healthy
+    networks:
+      - outlet-a-internal
+      - hq-sync
+    restart: unless-stopped
+
+  outlet-a-web:
+    build:
+      context: ./outlet-frontend
+      args:
+        VITE_API_BASE_URL: /api/v1
+    image: fnb/outlet-frontend:local
+    ports:
+      - "${OUTLET_A_WEB_PORT:-8081}:80"
+    depends_on:
+      outlet-a-api:
+        condition: service_healthy
+    networks:
+      - outlet-a-internal
+    restart: unless-stopped
+
+volumes:
+  hq-db-data:
+  hq-redis-data:
+  outlet-a-db-data:
+  outlet-a-redis-data:
+
+networks:
+  # HQ backend internals (API, worker, DB, Redis, web proxy).
+  hq-internal:
+  # Outlet A internals. Deliberately NOT shared with any HQ service.
+  outlet-a-internal:
+  # Outlet-initiated sync path: outlet workers call HQ's sync API.
+  # HQ never opens connections toward an outlet database.
+  hq-sync:
