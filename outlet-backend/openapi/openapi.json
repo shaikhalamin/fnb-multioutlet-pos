@@ -1,0 +1,44 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness/readiness probe (database + Redis)",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "F&B Platform — Outlet API",
+    "description": "Outlet POS API for the locally assigned catalog, inventory, atomic multi-item sales and receipts. Runs at the outlet site against its own PostgreSQL; sales never depend on HQ reachability. All responses use the `ApiSuccess`/`ApiError` envelopes; money is a decimal string of integer minor units.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Current deployment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer-jwt": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Outlet user access token (Phase 2)"
+      }
+    },
+    "schemas": {}
+  }
+}
