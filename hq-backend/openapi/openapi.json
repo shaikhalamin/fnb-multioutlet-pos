@@ -1,0 +1,50 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Liveness/readiness probe (database + Redis)",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "F&B Platform — HQ API",
+    "description": "Headquarters API for master menu governance, outlet assignment, API keys, sync ingestion and cross-outlet reporting. All responses use the `ApiSuccess`/`ApiError` envelopes; money is a decimal string of integer minor units.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Current deployment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer-jwt": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "HQ user access token (Phase 1)"
+      },
+      "outlet-key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Machine sync credentials: `OutletKey <keyId>.<secret>` (Phase 3)"
+      }
+    },
+    "schemas": {}
+  }
+}

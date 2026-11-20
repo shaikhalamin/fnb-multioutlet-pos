@@ -1,0 +1,16 @@
+# Keep build context minimal and secrets out of images.
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+test
+.git
+.gitignore
+*.md
+.prettierignore
+.prettierrc
+.oxlintrc.json
+Dockerfile
+.dockerignore
