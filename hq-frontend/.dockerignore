@@ -1,10 +1,11 @@
-# Keep build context minimal and secrets out of images.
+# Keep build context minimal and secrets out of images. Build-time config
+# (tsconfig, vite.config.ts, tsr.config.json, components.json) and nginx/
+# MUST stay in the context — the Vite build and runtime stage consume them.
 node_modules
 dist
 .tanstack
 .env
 .env.*
-!.env.example
 .git
 .vscode
 *.md
@@ -14,6 +15,5 @@ prettier.config.js
 eslint.config.js
 .cursorrules
 .cta.json
-tsr.config.json
 Dockerfile
 .dockerignore

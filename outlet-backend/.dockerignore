@@ -1,12 +1,22 @@
-# Keep build context minimal and secrets out of images.
+# Keep build context minimal and secrets out of images. The image compiles
+# from source in a multi-stage build, so local build output, dev tooling,
+# and dev-only folders never enter the context. docker/ is host bind-mount
+# material for the local DB containers, not image content.
 node_modules
 dist
 coverage
+*.tsbuildinfo
 .env
 .env.*
-!.env.example
 test
+vitest.config.ts
+vitest.config.e2e.ts
+vitest.setup.ts
+openapi
+scripts
+docker
 .git
+.gitattributes
 .gitignore
 *.md
 .prettierignore
