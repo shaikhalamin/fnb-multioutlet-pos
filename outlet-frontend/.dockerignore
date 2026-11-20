@@ -1,0 +1,19 @@
+# Keep build context minimal and secrets out of images.
+node_modules
+dist
+.tanstack
+.env
+.env.*
+!.env.example
+.git
+.vscode
+*.md
+.gitignore
+.prettierignore
+prettier.config.js
+eslint.config.js
+.cursorrules
+.cta.json
+tsr.config.json
+Dockerfile
+.dockerignore
