@@ -10,33 +10,118 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthDashboardRouteImport } from './routes/_auth/dashboard'
+import { Route as AuthMenuRouteImport } from './routes/_auth/menu'
+import { Route as AuthUsersRouteImport } from './routes/_auth/users'
+import { Route as AuthOutletsIndexRouteImport } from './routes/_auth/outlets.index'
+import { Route as AuthOutletsOutletIdRouteImport } from './routes/_auth/outlets.$outletId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthDashboardRoute = AuthDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthMenuRoute = AuthMenuRouteImport.update({
+  id: '/menu',
+  path: '/menu',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthUsersRoute = AuthUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthOutletsIndexRoute = AuthOutletsIndexRouteImport.update({
+  id: '/outlets/',
+  path: '/outlets/',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthOutletsOutletIdRoute = AuthOutletsOutletIdRouteImport.update({
+  id: '/outlets/$outletId',
+  path: '/outlets/$outletId',
+  getParentRoute: () => AuthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/dashboard': typeof AuthDashboardRoute
+  '/menu': typeof AuthMenuRoute
+  '/users': typeof AuthUsersRoute
+  '/outlets/$outletId': typeof AuthOutletsOutletIdRoute
+  '/outlets/': typeof AuthOutletsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/dashboard': typeof AuthDashboardRoute
+  '/menu': typeof AuthMenuRoute
+  '/users': typeof AuthUsersRoute
+  '/outlets/$outletId': typeof AuthOutletsOutletIdRoute
+  '/outlets': typeof AuthOutletsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/dashboard': typeof AuthDashboardRoute
+  '/_auth/menu': typeof AuthMenuRoute
+  '/_auth/users': typeof AuthUsersRoute
+  '/_auth/outlets/$outletId': typeof AuthOutletsOutletIdRoute
+  '/_auth/outlets/': typeof AuthOutletsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/dashboard'
+    | '/menu'
+    | '/users'
+    | '/outlets/$outletId'
+    | '/outlets/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/login'
+    | '/dashboard'
+    | '/menu'
+    | '/users'
+    | '/outlets/$outletId'
+    | '/outlets'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/dashboard'
+    | '/_auth/menu'
+    | '/_auth/users'
+    | '/_auth/outlets/$outletId'
+    | '/_auth/outlets/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +133,80 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/dashboard': {
+      id: '/_auth/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthDashboardRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/menu': {
+      id: '/_auth/menu'
+      path: '/menu'
+      fullPath: '/menu'
+      preLoaderRoute: typeof AuthMenuRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/users': {
+      id: '/_auth/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthUsersRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/outlets/': {
+      id: '/_auth/outlets/'
+      path: '/outlets'
+      fullPath: '/outlets/'
+      preLoaderRoute: typeof AuthOutletsIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/outlets/$outletId': {
+      id: '/_auth/outlets/$outletId'
+      path: '/outlets/$outletId'
+      fullPath: '/outlets/$outletId'
+      preLoaderRoute: typeof AuthOutletsOutletIdRouteImport
+      parentRoute: typeof AuthRoute
+    }
   }
 }
 
+interface AuthRouteChildren {
+  AuthDashboardRoute: typeof AuthDashboardRoute
+  AuthMenuRoute: typeof AuthMenuRoute
+  AuthUsersRoute: typeof AuthUsersRoute
+  AuthOutletsOutletIdRoute: typeof AuthOutletsOutletIdRoute
+  AuthOutletsIndexRoute: typeof AuthOutletsIndexRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthDashboardRoute: AuthDashboardRoute,
+  AuthMenuRoute: AuthMenuRoute,
+  AuthUsersRoute: AuthUsersRoute,
+  AuthOutletsOutletIdRoute: AuthOutletsOutletIdRoute,
+  AuthOutletsIndexRoute: AuthOutletsIndexRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

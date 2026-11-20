@@ -101,8 +101,9 @@ Worker      → Calls application services. NEVER controllers.
 ### 3.4 Service / repository rules
 
 - Transactions: services own `QueryRunner`/transaction-manager orchestration. Every multi-write operation commits atomically or not at all (PRD §6, §8.6).
-- Row locks (`FOR UPDATE`, `SKIP LOCKED`) and **deterministic item-ID ordering** are the concurrency controls — never a JavaScript mutex (PRD §8.6).
-- Repositories receive the transaction manager when participating in a transaction; they never open their own transactions for writes that are part of a larger unit.
+- **A catalog/menu mutation and its distribution record are ONE transaction.** Never commit a menu change and fan out `outlet_catalog_changes` (or any related-row write: key expiry on rotation, revoke, snapshot updates) in a follow-up transaction — a crash in between strands outlets with stale snapshots or locks principals out (PRD §8.2 rule 5).
+- Row locks (`FOR UPDATE`, `SKIP LOCKED`) and **deterministic item-ID ordering** are the concurrency controls — never a JavaScript mutex (PRD §8.6). Any entity with a `version` column must be read with `FOR UPDATE` inside the mutation transaction before computing `version + 1`; a read-then-write without the lock is a lost-update bug.
+- Repositories receive the transaction manager when participating in a transaction; they never open their own transactions for writes that are part of a larger unit — and they never silently fall back to the pool `DataSource` for such writes. A repository method that updates a row a service transaction depends on MUST take `manager` as its first parameter.
 - Money arithmetic in `bigint` only. Converting to `number` for arithmetic is a bug.
 - Config is read through `ConfigService<Env, true>` with `config.get('KEY', { infer: true })` — never `process.env` directly (PRD §14.1).
 - Cross-module calls go through injected interfaces, not by importing another module's repository.
@@ -112,6 +113,9 @@ Worker      → Calls application services. NEVER controllers.
 - Swagger UI is mounted at `/api/v1/docs` and the machine-readable document at `/api/v1/openapi.json` (dev/admin-restricted) — already wired in `main.ts`.
 - `pnpm openapi:export` regenerates `openapi/openapi.json`. **Any PRD-listed endpoint change MUST update this artifact in the same change**; frontends generate clients from it (§4.1).
 - The OpenAPI document is the contract: if the implementation and the PRD example payloads disagree, fix the implementation and re-export.
+- **The document must tell the truth about what the route emits**: NestJS answers `201` to `POST` handlers unless `@HttpCode` overrides it — declare `@ApiCreatedResponse` for 201 routes and `@ApiOkResponse` only where the status is really 200. A documented status the route never emits poisons generated clients' error handling.
+- Every guarded route (including logout-style routes on otherwise-`@Public()` controllers) carries `@ApiSecurity('bearer-jwt')` / `@ApiSecurity('outlet-key')` so the exported document marks it protected.
+- **Nullable DTO properties MUST declare an explicit `type`** (`@ApiProperty({ type: String, nullable: true })`). `nullable: true` alone exports `type: "object"`, and Kubb then generates `object | null` fields — a contract bug that surfaces as TypeScript errors in the frontend.
 
 ---
 
@@ -129,11 +133,11 @@ Worker      → Calls application services. NEVER controllers.
 - TanStack Query is the only server-state mechanism: queries for reads (feature-scoped key factories, e.g. `menuKeys.list()`), mutations for writes. No ad-hoc `useEffect` fetching, no server data duplicated into component state.
 - TanStack Router validates all query/search params with Zod (`validateSearch`); forms validate with Zod schemas in `src/schemas/`.
 - **Frontend validation is UX, not a security control** (PRD §5, §9.3). The backend re-validates everything; route/permission hiding in the UI is cosmetic.
-- Parse high-risk API responses (money-bearing payloads) with the generated Zod schemas before use.
+- Parse high-risk API responses (money-bearing payloads) with the generated Zod schemas before use — concretely, the `queryFn` awaits the generated client and returns `<op>Status200Schema.parse(...)`; the parsed value is what feeds render. Auth-session payloads are parsed too, narrowing permission strings to the typed catalog.
 
 ### 4.3 Money, auth, and errors
 
-- Money stays a string end-to-end. Never `Number(totalMinor)`; format for display only, at the render boundary, with an explicit minor-unit formatter in `lib/utils`.
+- Money stays a string end-to-end. Never `Number(totalMinor)` — not even "just for display": the minor-unit formatter in `lib/utils` must do pure string/integer math (slice/group digits), because `Number(minor) / 100` silently corrupts values beyond 2^53 minor units.
 - Access token lives in memory; refresh token in the `HttpOnly` cookie set by the backend. The axios layer attaches `Authorization: Bearer` and performs a single refresh-and-retry on `401` before logging out (PRD §9.1). Never store tokens in `localStorage`.
 - All API failures surface as the shared `ApiError` (`code`, `requestId`, `details`). UI renders `error.message` and stable codes — never raw Axios errors.
 
@@ -158,6 +162,7 @@ Worker      → Calls application services. NEVER controllers.
 
 - **pnpm only** (pinned via `packageManager`); never commit `node_modules`; never mix lockfiles.
 - Backends: `pnpm lint` (oxlint), `pnpm test` (Vitest), `pnpm test:e2e`, `pnpm migration:run|revert|show`, `pnpm openapi:export`. Frontends: `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm check` (format).
+- **Frontend `pnpm build` MUST type-check before bundling** (`tsc --noEmit && vite build`). A build script that only bundles lets type errors ship — Vite does not type-check. `tsc --noEmit` must be clean before any frontend change is considered done. (Unused-code detection runs in ESLint, not `tsc`, because generated output cannot satisfy `noUnusedLocals` — see each app's `AGENTS.md`.)
 - Concurrency/transaction tests run against **real PostgreSQL + Redis** containers — SQLite is insufficient for row-lock behavior (PRD §17).
 - Acceptance scenarios AT-01…AT-22 (PRD §17) are the definition of done; new features cite the scenarios they satisfy.
 - Structured JSON logs carry `requestId`, `outletId`, `eventId`, `saleId`, `receiptNo`, `revision` as applicable — and never secrets, keys, or password hashes (PRD §13, §15).

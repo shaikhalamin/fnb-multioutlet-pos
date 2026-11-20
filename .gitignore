@@ -17,3 +17,4 @@ coverage/
 # Local-only overrides and IDE state
 docker-compose.override.yml
 .idea/
+.zcode/

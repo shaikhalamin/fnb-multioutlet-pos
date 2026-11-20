@@ -16,8 +16,8 @@ process.env.DATABASE_URL ??= 'postgresql://openapi-export:unused@localhost:5432/
 process.env.REDIS_URL ??= 'redis://localhost:6379';
 process.env.HQ_JWT_ISSUER ??= 'openapi-export';
 process.env.HQ_JWT_AUDIENCE ??= 'openapi-export';
-process.env.HQ_JWT_PRIVATE_KEY ??= 'openapi-export';
-process.env.HQ_JWT_PUBLIC_KEY ??= 'openapi-export';
+process.env.JWT_ACCESS_SECRET ??= 'openapi-export-access-secret-0123456789abcdef';
+process.env.JWT_REFRESH_SECRET ??= 'openapi-export-refresh-secret-0123456789abcdef';
 process.env.OUTLET_KEY_PEPPER ??= 'openapi-export';
 
 try {

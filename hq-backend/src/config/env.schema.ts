@@ -32,6 +32,13 @@ const redisUrl = z
   .url()
   .refine((value) => value.startsWith('redis'), { message: 'must be a redis:// or rediss:// URL' });
 
+/**
+ * HS256 signing secrets (PRD §9.1): one for access tokens, one for refresh
+ * tokens, so compromising either never forges the other kind. 32+ chars is
+ * the floor for a symmetric secret used with HS256.
+ */
+const jwtSecret = z.string().min(32);
+
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: port.default(3000),
@@ -43,13 +50,25 @@ export const envSchema = z.object({
   // API profile: human JWT issuance + outlet key hashing (Phase 1).
   HQ_JWT_ISSUER: z.string().min(1).optional(),
   HQ_JWT_AUDIENCE: z.string().min(1).optional(),
-  HQ_JWT_PRIVATE_KEY: z.string().min(1).optional(),
-  HQ_JWT_PUBLIC_KEY: z.string().min(1).optional(),
+  JWT_ACCESS_SECRET: jwtSecret.optional(),
+  JWT_REFRESH_SECRET: jwtSecret.optional(),
   OUTLET_KEY_PEPPER: z.string().min(1).optional(),
 
   ACCESS_TOKEN_TTL: positiveInt.default(900),
   REFRESH_TOKEN_TTL: positiveInt.default(1_209_600),
   SYNC_MAX_BODY_BYTES: positiveInt.default(1_048_576),
+
+  /** Rotation overlap window for outlet API keys in hours (PRD §9.2). */
+  KEY_ROTATION_GRACE_HOURS: positiveInt.default(24),
+
+  /**
+   * Explicit override for the refresh cookie `Secure` flag. The local dev
+   * cluster terminates plain HTTP inside Compose, so it sets `false`;
+   * default is `true` only in production (PRD §9.1).
+   */
+  REFRESH_COOKIE_SECURE: z.enum(['true', 'false']).optional().transform((value) =>
+    value === undefined ? undefined : value === 'true',
+  ),
 
   CORS_ORIGINS: z
     .string()
@@ -73,8 +92,8 @@ type WithRequired<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: NonNullable
 const API_REQUIRED = [
   'HQ_JWT_ISSUER',
   'HQ_JWT_AUDIENCE',
-  'HQ_JWT_PRIVATE_KEY',
-  'HQ_JWT_PUBLIC_KEY',
+  'JWT_ACCESS_SECRET',
+  'JWT_REFRESH_SECRET',
   'OUTLET_KEY_PEPPER',
 ] as const satisfies ReadonlyArray<keyof Env>;
 
@@ -172,6 +191,9 @@ function loadEnvFileGaps(): void {
     loadDotEnvFile(path);
   }
 }
+
+/** Test/tooling hook: apply the same env-file precedence before placeholders. */
+export { loadEnvFileGaps };
 
 // ---------------------------------------------------------------------------
 // Entry points

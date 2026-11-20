@@ -1,3 +1,8 @@
 package-lock.json
 pnpm-lock.yaml
 yarn.lock
+
+# Kubb build output (AGENTS.md §4.1): generated, never reformatted.
+src/api/generated
+# Contract artifact: byte-identical to the backend export, never reformatted.
+src/api/contracts

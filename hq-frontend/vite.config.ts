@@ -8,6 +8,15 @@ import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  server: {
+    // Local dev: proxy API calls to the compose-published hq-api (PRD §11).
+    proxy: {
+      '/api': {
+        target: process.env.HQ_API_PROXY_TARGET ?? 'http://localhost:4000',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     devtools(),
     tailwindcss(),

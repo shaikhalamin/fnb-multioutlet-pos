@@ -1,14 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { ApiError, apiGet } from '#/api/axios'
-import type { HealthReport } from '#/types/api'
+import { ApiError } from '#/api/axios'
+import { healthControllerGetHealth } from '#/api/generated/clients/healthControllerGetHealth'
+import { healthControllerGetHealthStatus200Schema } from '#/api/generated/schemas/healthControllerGetHealthSchema'
 
 export const Route = createFileRoute('/')({ component: App })
 
 function useHealth() {
   return useQuery({
     queryKey: ['health'],
-    queryFn: () => apiGet<HealthReport>('/health'),
+    // Parse with the generated Zod schema (AGENTS §4.2) so the payload is
+    // validated at runtime and typed for render.
+    queryFn: async () =>
+      healthControllerGetHealthStatus200Schema.parse(
+        await healthControllerGetHealth(),
+      ),
     refetchInterval: 30_000,
   })
 }
@@ -64,7 +70,7 @@ function HealthPanel() {
     )
   }
 
-  const report = health.data.data
+  const report = health.data
   return (
     <section className="island-shell mt-8 rounded-2xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -107,13 +113,7 @@ function HealthPanel() {
         </div>
       </dl>
       <p className="mt-4 mb-0 text-xs text-[var(--sea-ink-soft)]">
-        Checked at{' '}
-        {new Date(
-          health.data.meta?.timestamp ?? report.timestamp,
-        ).toLocaleTimeString()}
-        {health.data.meta?.requestId
-          ? ` · request ${health.data.meta.requestId.slice(0, 8)}`
-          : ''}
+        Checked at {new Date(report.timestamp).toLocaleTimeString()}
       </p>
     </section>
   )

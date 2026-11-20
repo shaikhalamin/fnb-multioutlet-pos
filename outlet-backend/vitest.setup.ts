@@ -14,5 +14,5 @@ process.env.OUTLET_ID ??= '22222222-2222-4222-8222-222222222222';
 process.env.OUTLET_CODE ??= 'T';
 process.env.OUTLET_JWT_ISSUER ??= 'vitest-placeholder';
 process.env.OUTLET_JWT_AUDIENCE ??= 'vitest-placeholder';
-process.env.OUTLET_JWT_PRIVATE_KEY ??= 'vitest-placeholder-key';
-process.env.OUTLET_JWT_PUBLIC_KEY ??= 'vitest-placeholder-key';
+process.env.OUTLET_JWT_ACCESS_SECRET ??= 'vitest-access-secret-placeholder-0123456789ab';
+process.env.OUTLET_JWT_REFRESH_SECRET ??= 'vitest-refresh-secret-placeholder-0123456789ab';

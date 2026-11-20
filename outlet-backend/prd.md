@@ -44,7 +44,7 @@ The outlet identity is provisioned as immutable local configuration / DB seed an
 |---|---|---|
 | `outlet_identity` | `outlet_id`, `outlet_code`, `company_id`, `timezone`, `currency_code` | Singleton configuration; seeded at provisioning. |
 | `outlet_users`, `outlet_roles`, `outlet_permissions`, `outlet_user_roles`, `outlet_role_permissions` | local identities/permissions | Outlet-only, not HQ tokens. |
-| `outlet_refresh_sessions` | `id`, `user_id`, `family_id`, `token_hash`, `expires_at`, `revoked_at` | Refresh rotation and family invalidation. |
+| `outlet_refresh_sessions` | `id`, `user_id`, `family_id`, `jti`, `expires_at`, `revoked_at` | Refresh-JWT rotation and family invalidation, keyed on `jti`. |
 | `catalog_items` | `menu_item_id`, `assignment_id`, `sku`, `name`, `description`, `category`, `effective_price_minor bigint`, `currency_code`, `active`, `hq_item_version`, `applied_revision` | Upsert by HQ ID; immutable identity, price/status updated by sync. |
 | `menu_sync_state` | `outlet_id`, `last_applied_revision bigint`, `last_sync_at`, `snapshot_id` | Atomic checkpoint applied with menu data. |
 | `inventory_balances` | `menu_item_id`, `quantity_on_hand bigint`, `version int`, `updated_at` | PK(menu_item_id); CHECK(quantity_on_hand >= 0); FK local catalog item. |
@@ -321,7 +321,7 @@ G. Lease expiry returns stalled work to eligible retry; the periodic scanner
 ### 8.1 Human JWT sessions (outlet)
 
 - `OUTLET_JWT_ISSUER`/`OUTLET_JWT_AUDIENCE`; own signing keys/key IDs; access token lifetime target **10–15 minutes**. Claims: `sub`, `iss`, `aud`, `iat`, `exp`, `jti`, `scope`/role IDs, and the outlet ID for outlet tokens. Recheck user active status and permissions against server state or short-lived cache.
-- Refresh token: high-entropy opaque random token, rotated on each refresh, store **only hash** in DB; browser holds it in `HttpOnly`, `Secure`, suitable `SameSite` cookie with CSRF protections; avoid localStorage. `POST /auth/refresh` must serialize rotation or use compare-and-swap on the token hash; a stolen/reused old token invalidates its refresh family.
+- Refresh token: signed refresh JWT (`OUTLET_JWT_REFRESH_SECRET`, distinct `jti` per issuance), rotated on each refresh, with every `jti` tracked server-side in the refresh-session table; browser holds it in an `HttpOnly`, `Secure`, suitable `SameSite` cookie with CSRF protections; avoid localStorage. `POST /auth/refresh` must serialize rotation or use compare-and-swap on the session row's rotation state; a stolen/reused old `jti` invalidates its refresh family.
 - Passwords: Argon2id/bcrypt with strong parameters; login rate limits/lockout; audit log for sign-in, refresh reuse, and permission changes.
 - Guards validate signed JWT **and** `iss`, `aud`, `exp`, `sub`, enabled account status, outlet scope, and permission on every protected route.
 
@@ -399,7 +399,7 @@ No frontend route hiding is sufficient authorization; always enforce backend gua
 
 ## 11. Configuration and deployment
 
-**Outlet backend environment variables (examples):** `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `OUTLET_JWT_PRIVATE_KEY`, `OUTLET_JWT_PUBLIC_KEY`, `OUTLET_JWT_ISSUER`, `OUTLET_JWT_AUDIENCE`, `HQ_API_BASE_URL`, `OUTLET_ID`, `OUTLET_CODE`, `HQ_OUTLET_KEY_ID`, `HQ_OUTLET_KEY_SECRET`, `MENU_PULL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_SWEEP_INTERVAL_MS`, `OFFLINE_GRACE_HOURS`.
+**Outlet backend environment variables (examples):** `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `OUTLET_JWT_ACCESS_SECRET`, `OUTLET_JWT_REFRESH_SECRET`, `OUTLET_JWT_ISSUER`, `OUTLET_JWT_AUDIENCE`, `HQ_API_BASE_URL`, `OUTLET_ID`, `OUTLET_CODE`, `HQ_OUTLET_KEY_ID`, `HQ_OUTLET_KEY_SECRET`, `MENU_PULL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_SWEEP_INTERVAL_MS`, `OFFLINE_GRACE_HOURS`.
 
 Runtime-validated config schema (Zod/Joi) so missing critical values fail startup; secrets from a managed secret store; `.env.example` placeholders only; CORS allows only the outlet UI origin; secure HTTP headers, HTTPS termination, trusted proxy settings. Multi-stage `Dockerfile` with distinct `api` and `worker` commands/targets, non-root, health checks, pinned base-image digest in production; no secrets in build layers. Versioned TypeORM migrations — never share a migration folder or database with HQ. Database migration is a single controlled release job.
 

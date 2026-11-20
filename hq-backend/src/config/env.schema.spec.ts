@@ -8,8 +8,8 @@ const validApiEnv = {
   REDIS_URL: 'redis://localhost:6379',
   HQ_JWT_ISSUER: 'fnb-hq',
   HQ_JWT_AUDIENCE: 'fnb-hq-api',
-  HQ_JWT_PRIVATE_KEY: 'dev-private-key',
-  HQ_JWT_PUBLIC_KEY: 'dev-public-key',
+  JWT_ACCESS_SECRET: 'dev-access-secret-0123456789abcdef0123456789',
+  JWT_REFRESH_SECRET: 'dev-refresh-secret-0123456789abcdef0123456789',
   OUTLET_KEY_PEPPER: 'dev-pepper',
 } satisfies Record<string, string | undefined>;
 
@@ -57,18 +57,18 @@ describe('apiEnvSchema', () => {
   });
 
   it('requires the API auth secrets', () => {
-    const { HQ_JWT_PRIVATE_KEY: _omitted, ...withoutKey } = validApiEnv;
+    const { JWT_ACCESS_SECRET: _omitted, ...withoutKey } = validApiEnv;
     const result = safeParseEnv(apiEnvSchema, withoutKey);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.issues.some((issue) => issue.path === 'HQ_JWT_PRIVATE_KEY')).toBe(true);
+      expect(result.issues.some((issue) => issue.path === 'JWT_ACCESS_SECRET')).toBe(true);
     }
   });
 });
 
 describe('workerEnvSchema', () => {
   it('boots without any API auth secrets (PRD §3 least privilege)', () => {
-    const { HQ_JWT_ISSUER: _a, HQ_JWT_AUDIENCE: _b, HQ_JWT_PRIVATE_KEY: _c, HQ_JWT_PUBLIC_KEY: _d, OUTLET_KEY_PEPPER: _e, ...workerEnv } = validApiEnv;
+    const { HQ_JWT_ISSUER: _a, HQ_JWT_AUDIENCE: _b, JWT_ACCESS_SECRET: _c, JWT_REFRESH_SECRET: _d, OUTLET_KEY_PEPPER: _e, ...workerEnv } = validApiEnv;
     const result = safeParseEnv(workerEnvSchema, workerEnv);
     expect(result.ok).toBe(true);
     if (result.ok) {

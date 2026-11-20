@@ -27,9 +27,12 @@
     /* Linting */
     "skipLibCheck": true,
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
+    /* noUnusedLocals/noUnusedParameters are enforced by ESLint
+       (@typescript-eslint/no-unused-vars, error) instead of tsc: the
+       Kubb-generated src/api/generated output declares helper types tsc would
+       flag, and generated code must never be hand-edited (AGENTS §4.1).
+       ESLint already ignores src/api/generated/**. */
   }
 }

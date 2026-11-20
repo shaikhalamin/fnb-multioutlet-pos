@@ -51,8 +51,8 @@ export const envSchema = z.object({
   // API profile: outlet user JWT issuance (Phase 2).
   OUTLET_JWT_ISSUER: z.string().min(1).optional(),
   OUTLET_JWT_AUDIENCE: z.string().min(1).optional(),
-  OUTLET_JWT_PRIVATE_KEY: z.string().min(1).optional(),
-  OUTLET_JWT_PUBLIC_KEY: z.string().min(1).optional(),
+  OUTLET_JWT_ACCESS_SECRET: z.string().min(32).optional(),
+  OUTLET_JWT_REFRESH_SECRET: z.string().min(32).optional(),
 
   // Offline sales grace period in hours (PRD §8.8, proposed 72h).
   OFFLINE_GRACE_HOURS: positiveInt.default(72),
@@ -88,8 +88,8 @@ type WithRequired<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: NonNullable
 const API_REQUIRED = [
   'OUTLET_JWT_ISSUER',
   'OUTLET_JWT_AUDIENCE',
-  'OUTLET_JWT_PRIVATE_KEY',
-  'OUTLET_JWT_PUBLIC_KEY',
+  'OUTLET_JWT_ACCESS_SECRET',
+  'OUTLET_JWT_REFRESH_SECRET',
 ] as const satisfies ReadonlyArray<keyof Env>;
 
 /** HQ machine credentials the sync worker requires; enforced by `workerEnvSchema`. */

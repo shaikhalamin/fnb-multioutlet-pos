@@ -8,6 +8,10 @@ import { TanStackDevtools } from '@tanstack/react-devtools'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 
+// Side effect: attaches envelope/auth/refresh interceptors to the generated
+// client's axios instance exactly once (AGENTS.md §4.1).
+import '#/api/axios'
+
 import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import appCss from '../styles.css?url'

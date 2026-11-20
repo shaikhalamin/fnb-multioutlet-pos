@@ -290,7 +290,7 @@ Authenticate outlet key → validate schema/version and outlet match → validat
 ### 7.1 Human JWT sessions (HQ)
 
 - `HQ_JWT_ISSUER`/`HQ_JWT_AUDIENCE`; own signing keys/key IDs; access token lifetime target **10–15 minutes**. Claims: `sub`, `iss`, `aud`, `iat`, `exp`, `jti`, `scope`/role IDs. Recheck user active status and high-impact permissions against server state or short-lived cache to enforce revocations promptly.
-- Refresh token: high-entropy opaque random token, rotated on each refresh, store **only hash** in DB; browser holds it in `HttpOnly`, `Secure`, suitable `SameSite` cookie with CSRF protections. `POST /auth/refresh` must serialize rotation or use compare-and-swap on the token hash; a stolen/reused old token invalidates its refresh family; audit sign-in, refresh reuse and permission changes. MFA for HQ admins is strongly recommended.
+- Refresh token: high-entropy opaque random token, rotated on each refresh, store **only hash** in DB; browser holds it in `HttpOnly`, `Secure`, suitable `SameSite` cookie with CSRF protections. `POST /auth/refresh` must serialize rotation or use compare-and-swap on the token hash; a stolen/reused old token invalidates its refresh family; audit sign-in, refresh reuse and permission changes.
 - Passwords: Argon2id/bcrypt with strong parameters; login rate limits/lockout.
 - Guards validate signed JWT **and** `iss`, `aud`, `exp`, `sub`, enabled account status, and permission on every protected route.
 

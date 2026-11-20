@@ -425,7 +425,7 @@ All IDs are UUID unless otherwise specified. Typical audit columns: `created_at 
 | `outlets` | `id`, `company_id`, `code`, `name`, `timezone`, `status`, `created_at` | FK company; UNIQUE(company_id, code); status ACTIVE/SUSPENDED. |
 | `hq_users` | `id`, `company_id`, `email`, `password_hash`, `status` | UNIQUE(company_id, lower(email)); no plaintext secrets. |
 | `hq_roles`, `hq_permissions`, `hq_user_roles`, `hq_role_permissions` | role/permission relationships | Unique composite mapping keys; permissions e.g. `menu.write`, `reports.read`. |
-| `hq_refresh_sessions` | `id`, `user_id`, `family_id`, `token_hash`, `expires_at`, `revoked_at`, `rotated_at` | Indexed user/family; token rotation and reuse response. |
+| `hq_refresh_sessions` | `id`, `user_id`, `family_id`, `jti`, `expires_at`, `revoked_at`, `rotated_at` | Indexed user/family, unique `jti`; refresh-JWT rotation and reuse response. |
 | `menu_categories` | `id`, `company_id`, `name`, `sort_order`, `status` | FK company; UNIQUE(company_id, name). |
 | `master_menu_items` | `id`, `company_id`, `category_id`, `sku`, `name`, `description`, `default_price_minor bigint`, `currency_code`, `status`, `version int` | UNIQUE(company_id, sku); CHECK(price >= 0); FK category; mutable catalog, immutable ID. |
 | `outlet_menu_assignments` | `id`, `outlet_id`, `menu_item_id`, `price_override_minor bigint NULL`, `active boolean`, `version int` | UNIQUE(outlet_id, menu_item_id); CHECK(override >= 0); FKs; never hard-delete history. |
@@ -447,7 +447,7 @@ The outlet identity is provisioned as immutable local configuration / DB seed an
 |---|---|---|
 | `outlet_identity` | `outlet_id`, `outlet_code`, `company_id`, `timezone`, `currency_code` | Singleton configuration; seeded at provisioning. |
 | `outlet_users`, `outlet_roles`, `outlet_permissions`, `outlet_user_roles`, `outlet_role_permissions` | local identities/permissions | Outlet-only, not HQ tokens. |
-| `outlet_refresh_sessions` | `id`, `user_id`, `family_id`, `token_hash`, `expires_at`, `revoked_at` | Refresh rotation and family invalidation. |
+| `outlet_refresh_sessions` | `id`, `user_id`, `family_id`, `jti`, `expires_at`, `revoked_at` | Refresh-JWT rotation and family invalidation, keyed on `jti`. |
 | `catalog_items` | `menu_item_id`, `assignment_id`, `sku`, `name`, `description`, `category`, `effective_price_minor bigint`, `currency_code`, `active`, `hq_item_version`, `applied_revision` | Upsert by HQ ID; immutable identity, price/status updated by sync. |
 | `menu_sync_state` | `outlet_id`, `last_applied_revision bigint`, `last_sync_at`, `snapshot_id` | Atomic checkpoint applied with menu data. |
 | `inventory_balances` | `menu_item_id`, `quantity_on_hand bigint`, `version int`, `updated_at` | PK(menu_item_id); CHECK(quantity_on_hand >= 0); FK local catalog item. |
@@ -851,11 +851,11 @@ G. Lease expiry returns stalled work to eligible retry; periodic scanner recover
 
 ### 9.1 Human JWT session model
 
-- Separate `HQ_JWT_ISSUER/AUDIENCE` and `OUTLET_JWT_ISSUER/AUDIENCE`; ideally separate signing keys/key IDs.
+- Separate `HQ_JWT_ISSUER/AUDIENCE` and `OUTLET_JWT_ISSUER/AUDIENCE`. Each backend signs both token kinds with NestJS Passport/`@nestjs/jwt` using two independent HS256 secrets (`JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` for HQ; `OUTLET_JWT_ACCESS_SECRET`, `OUTLET_JWT_REFRESH_SECRET` for the outlet) so one leaked secret can never forge the other token kind; the access strategy reads the bearer header, the refresh strategy reads the HttpOnly cookie.
 - Access token lifetime target **10–15 minutes**. Claims include `sub`, `iss`, `aud`, `iat`, `exp`, `jti`, `scope`/role IDs and outlet ID for outlet tokens. Recheck user active status and high-impact permissions against server state or short-lived cache to enforce revocations promptly.
-- Refresh token: high-entropy opaque random token (preferred), rotate on each refresh, store **only hash** in DB; browser holds in `HttpOnly`, `Secure`, suitable `SameSite` cookie with CSRF protections. Avoid localStorage for refresh tokens. If implementing refresh as JWT, still track `jti` and revocation server-side.
-- Passwords: Argon2id/bcrypt with strong parameters; login rate limits/lockout; audit log for sign-in, refresh reuse and permission changes. MFA for HQ admins is strongly recommended.
-- `POST /auth/refresh` must serialize rotation or use a compare-and-swap on token hash; a stolen/reused old token invalidates its refresh family; allow only a narrowly designed race grace if necessary.
+- Refresh token: signed refresh JWT (own secret, distinct `jti` per issuance), rotated on each refresh, with every `jti` tracked server-side in the refresh-session table (rotation state, expiry, family, revocation); browser holds it in an `HttpOnly`, `Secure`, suitable `SameSite` cookie with CSRF protections. Avoid localStorage for refresh tokens. Signature checks alone never authorize a refresh — the `jti` must resolve to a live, unrotated, unrevoked row.
+- Passwords: Argon2id/bcrypt with strong parameters; login rate limits/lockout; audit log for sign-in, refresh reuse and permission changes.
+- `POST /auth/refresh` must serialize rotation or use a compare-and-swap on the session row's rotation state; a stolen/reused old `jti` invalidates its refresh family; allow only a narrowly designed race grace if necessary.
 
 **Login response:**
 
@@ -939,7 +939,7 @@ GET /api/v1/reports/revenue-by-outlet?from=2026-11-01T00:00:00Z&to=2026-12-01T00
 
 ## 11. Frontend product scope
 
-**HQ frontend:** login/MFA; dashboard (revenue, lag, outlet health); master categories and menu CRUD; assignment matrix by outlet; override editor with effective-price preview; outlet/key lifecycle administration (show secret one time); reports with date filters and `dataAsOf`; sync-health panel; audit views. Use TanStack Router protected route layouts and Zod-validated query/search params. Generate typed Axios API functions, TypeScript DTOs, Zod validation schemas and TanStack Query helpers from the HQ OpenAPI contract via Kubb; do not manually maintain conflicting API types.
+**HQ frontend:** login; dashboard (revenue, lag, outlet health); master categories and menu CRUD; assignment matrix by outlet; override editor with effective-price preview; outlet/key lifecycle administration (show secret one time); reports with date filters and `dataAsOf`; sync-health panel; audit views. Use TanStack Router protected route layouts and Zod-validated query/search params. Generate typed Axios API functions, TypeScript DTOs, Zod validation schemas and TanStack Query helpers from the HQ OpenAPI contract via Kubb; do not manually maintain conflicting API types.
 
 **Outlet frontend:** local login; responsive POS menu/cart; live stock availability; checkout with stable client idempotency key across retries; receipt detail/reprint; inventory adjustment with audit reason; local sales history; last menu sync / pending upload banner. Use TanStack Router and Query, with optimistic UI only for non-financial actions. Stock/sale confirmation must use authoritative backend response, not a local optimistic decrement. On network failure between browser and *local backend*, retry the same `Idempotency-Key` (never mint a second key for the same attempted sale).
 
@@ -990,7 +990,7 @@ GET /api/v1/reports/revenue-by-outlet?from=2026-11-01T00:00:00Z&to=2026-12-01T00
 | HQ backend | Outlet backend | Frontends |
 |---|---|---|
 | `NODE_ENV`, `PORT`, `DATABASE_URL` | `NODE_ENV`, `PORT`, `DATABASE_URL` | `VITE_API_BASE_URL` |
-| `REDIS_URL`, `HQ_JWT_PRIVATE_KEY`, `HQ_JWT_PUBLIC_KEY` | `REDIS_URL`, `OUTLET_JWT_PRIVATE_KEY`, `OUTLET_JWT_PUBLIC_KEY` | No machine secrets |
+| `REDIS_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | `REDIS_URL`, `OUTLET_JWT_ACCESS_SECRET`, `OUTLET_JWT_REFRESH_SECRET` | No machine secrets |
 | `HQ_JWT_ISSUER`, `HQ_JWT_AUDIENCE` | `OUTLET_JWT_ISSUER`, `OUTLET_JWT_AUDIENCE` | Build-time public config only |
 | `OUTLET_KEY_PEPPER`, `CORS_ORIGINS` | `HQ_API_BASE_URL`, `OUTLET_ID`, `OUTLET_CODE` | Frontend app version |
 | `LOG_LEVEL`, `SYNC_MAX_BODY_BYTES` | `HQ_OUTLET_KEY_ID`, `HQ_OUTLET_KEY_SECRET`, `MENU_PULL_INTERVAL_MS` | — |

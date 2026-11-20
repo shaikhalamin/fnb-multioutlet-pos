@@ -12,9 +12,10 @@ outlet database; all synchronization is outlet-initiated.
 
 | Entry | File | Purpose |
 |---|---|---|
-| API | `src/main.ts` | HTTP API under `/api/v1` (health, docs) |
+| API | `src/main.ts` | HTTP API under `/api/v1` (auth, users, outlets, menu, assignments, keys, health, docs) |
 | Worker | `src/worker-main.ts` | Background processors without HTTP (queues land in Phase 3) |
 | Migrations | `src/database/migrate.ts` | `run` / `revert` / `show` via `scripts/migrate.sh` |
+| Seed | `src/database/seed.ts` | Idempotent bootstrap: company, permissions, roles, super admin, demo catalog |
 
 ## Commands (pnpm via corepack)
 
@@ -25,8 +26,9 @@ pnpm start:dev        # dev server (loads .env if present)
 pnpm build && pnpm start:prod
 pnpm start:worker
 pnpm lint && pnpm test
-pnpm test:e2e         # needs real DATABASE_URL + REDIS_URL
+pnpm test:e2e         # needs real DATABASE_URL + REDIS_URL (loads .env.local gaps)
 pnpm migration:run    # apply migrations (tsx locally; dist in images)
+pnpm seed             # idempotent seed (SEED_HQ_ADMIN_EMAIL / SEED_HQ_ADMIN_PASSWORD)
 pnpm openapi:export   # regenerate openapi/openapi.json after endpoint changes
 ```
 
@@ -35,7 +37,8 @@ pnpm openapi:export   # regenerate openapi/openapi.json after endpoint changes
 Config parse → Zod validation → module → typed access (PRD §14.1):
 
 - `src/config/env.schema.ts` — the Zod schema and `Env` type, plus
-  entrypoint profiles: the **api** profile requires `HQ_JWT_*` and
+  entrypoint profiles: the **api** profile requires `JWT_ACCESS_SECRET`,
+  `JWT_REFRESH_SECRET`, `HQ_JWT_ISSUER`/`HQ_JWT_AUDIENCE` and
   `OUTLET_KEY_PEPPER`; the **worker** profile requires nothing beyond the
   base schema (the worker never issues human JWTs — PRD §3).
 - `src/config/configuration.module.ts` — global `ConfigurationModule`

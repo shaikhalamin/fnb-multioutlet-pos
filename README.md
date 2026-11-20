@@ -39,6 +39,40 @@ Two one-shot services run to completion **before** the APIs start:
 `hq-migrate` and `outlet-a-migrate` apply the TypeORM migrations as a single
 controlled job per database (PRD §14.2) — never concurrently on API replicas.
 
+## Phase 1 — HQ security & catalog (implemented)
+
+Sign in to the HQ console at http://localhost:8080 with the seeded admin
+(`admin@fnb.local` / `Admin123!` — override via `SEED_HQ_ADMIN_*` before
+seeding). Phase 1 delivers (PRD §18):
+
+- **HQ JWT auth with rotating refresh** — Passport strategies (bearer access,
+  cookie refresh JWT) with two independent HS256 secrets, refresh tokens in an
+  HttpOnly cookie scoped to `/api/v1/auth`, server-side `jti` tracking, CAS
+  rotation, family revocation on reuse (AT-18), login rate limiting.
+- **RBAC** — 11 permissions, 3 seeded roles; every route guarded
+  server-side (`@RequirePermissions` + global `JwtAuthGuard`).
+- **Users management** — `/api/v1/users`, `/api/v1/roles` + console UI.
+- **Master menu** — `/api/v1/categories`, `/api/v1/menu-items` CRUD with
+  archive tombstones; item edits fan out per-outlet `UPSERT`/`REMOVE`
+  catalog changes atomically in the same transaction (PRD §8.2).
+- **Outlets + assignments** — provision outlets (revision-0 row included),
+  assign/unassign with price overrides; effective price = override ??
+  default (FR-02/AT-02); no-op saves never burn a revision.
+- **Outlet sync keys** — issue/rotate/revoke; 256-bit secret revealed
+  exactly once, stored as a peppered HMAC (verified against `OUTLET_KEY_PEPPER`).
+
+Seed (idempotent; also creates demo outlets A/B/C + items for AT-01/AT-02):
+
+```bash
+cd hq-backend && pnpm seed
+```
+
+Verification used in Phase 1: backend `pnpm test` (31 unit) and
+`pnpm test:e2e` (18 e2e against real PostgreSQL/Redis — auth lifecycle,
+AT-01 assignment fan-out, AT-02 override, RBAC denial, key lifecycle),
+browser walkthrough of the console, and direct SQL checks of revisions,
+change payloads, key hashes and audit rows.
+
 Swagger UI (local dev cluster only): http://localhost:4000/api/v1/docs (HQ)
 and http://localhost:5000/api/v1/docs (Outlet A); machine-readable documents
 at `/openapi.json`. The committed artifacts in

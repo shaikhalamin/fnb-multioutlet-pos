@@ -18,8 +18,8 @@ process.env.OUTLET_ID ??= '00000000-0000-4000-8000-000000000000';
 process.env.OUTLET_CODE ??= 'EXPORT';
 process.env.OUTLET_JWT_ISSUER ??= 'openapi-export';
 process.env.OUTLET_JWT_AUDIENCE ??= 'openapi-export';
-process.env.OUTLET_JWT_PRIVATE_KEY ??= 'openapi-export';
-process.env.OUTLET_JWT_PUBLIC_KEY ??= 'openapi-export';
+process.env.OUTLET_JWT_ACCESS_SECRET ??= 'openapi-export-access-secret-0123456789abcdef';
+process.env.OUTLET_JWT_REFRESH_SECRET ??= 'openapi-export-refresh-secret-0123456789abcdef';
 
 try {
   const { NestFactory } = await import('@nestjs/core');

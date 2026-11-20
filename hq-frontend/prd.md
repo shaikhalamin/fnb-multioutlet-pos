@@ -29,7 +29,7 @@ Client-side permission gating (`lib/permissions.ts`) mirrors backend permissions
 
 ## 3. Product scope (screens and features)
 
-1. **Login** — email/password sign-in; MFA support for HQ admins is strongly recommended. Handles access-token refresh transparently (cookie-based rotation); logout revokes the session.
+1. **Login** — email/password sign-in. Handles access-token refresh transparently (cookie-based rotation); logout revokes the session.
 2. **Dashboard** — revenue overview, replication lag, outlet health.
 3. **Master menu management** — categories and menu item CRUD (create/update/archive/list), including SKU, description, category, default price, currency, status. Archived items shown via status, never hard-deleted.
 4. **Assignment matrix by outlet** — assign/unassign items per outlet; effective-price preview (override or master default) before saving.
@@ -148,7 +148,7 @@ hq-frontend/                         # Independent HQ React application
 ## 11. Roadmap phases (hq-frontend scope)
 
 - **Phase 0 – Foundation:** app shell, strict TS, lint/format, env validation, CI, Dockerfile, compose (`hq-web`), Kubb pipeline scaffold.
-- **Phase 1 – Security / HQ catalog UI:** login (+MFA recommended), protected routes, master menu CRUD, assignment matrix, override editor with effective-price preview, outlet/key lifecycle admin (one-time secret reveal).
+- **Phase 1 – Security / HQ catalog UI:** login, protected routes, master menu CRUD, assignment matrix, override editor with effective-price preview, outlet/key lifecycle admin (one-time secret reveal).
 - **Phase 3 – Sync visibility:** sync-health panel fed by `/outlets/:id/sync-status`.
 - **Phase 4 – Reporting UI:** revenue/top-items reports with date filters, `dataAsOf`/staleness indicators, audit views, dashboard hardening.
 

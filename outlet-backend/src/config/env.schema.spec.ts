@@ -10,8 +10,8 @@ const validApiEnv = {
   OUTLET_CODE: 'A',
   OUTLET_JWT_ISSUER: 'fnb-outlet',
   OUTLET_JWT_AUDIENCE: 'fnb-outlet-api',
-  OUTLET_JWT_PRIVATE_KEY: 'dev-private-key',
-  OUTLET_JWT_PUBLIC_KEY: 'dev-public-key',
+  OUTLET_JWT_ACCESS_SECRET: 'dev-access-secret-0123456789abcdef0123456789',
+  OUTLET_JWT_REFRESH_SECRET: 'dev-refresh-secret-0123456789abcdef0123456789',
 } satisfies Record<string, string | undefined>;
 
 const validWorkerEnv = {
@@ -82,8 +82,8 @@ describe('workerEnvSchema', () => {
     const {
       OUTLET_JWT_ISSUER: _a,
       OUTLET_JWT_AUDIENCE: _b,
-      OUTLET_JWT_PRIVATE_KEY: _c,
-      OUTLET_JWT_PUBLIC_KEY: _d,
+      OUTLET_JWT_ACCESS_SECRET: _c,
+      OUTLET_JWT_REFRESH_SECRET: _d,
       ...workerEnv
     } = validWorkerEnv;
     const result = safeParseEnv(workerEnvSchema, workerEnv);
