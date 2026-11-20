@@ -1,0 +1,15 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies & build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Tooling caches
+.tanstack/
+*.log
+.DS_Store
