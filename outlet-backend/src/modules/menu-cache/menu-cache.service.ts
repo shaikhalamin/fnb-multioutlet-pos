@@ -17,7 +17,7 @@ export class MenuCacheService {
   async getMenu(): Promise<{
     items: OutletMenuItemResponse[];
     catalogRevision: string;
-    lastCatalogSyncAt: string;
+    lastCatalogSyncAt: string | null;
   }> {
     const [items, syncState] = await Promise.all([
       this.menuCache.findActiveItemsWithStock(),
@@ -25,11 +25,11 @@ export class MenuCacheService {
     ]);
     // Without a checkpoint the outlet has never completed a menu sync: the
     // sale path blocks with SYNC_TEMPORARILY_UNAVAILABLE; the menu read
-    // reports revision 0 with no sync timestamp rather than inventing one.
+    // reports revision 0 with a null sync timestamp rather than inventing one.
     return {
       items: items.map(toMenuItemResponse),
       catalogRevision: syncState?.lastAppliedRevision ?? '0',
-      lastCatalogSyncAt: (syncState?.lastSyncAt ?? new Date(0)).toISOString(),
+      lastCatalogSyncAt: syncState?.lastSyncAt?.toISOString() ?? null,
     };
   }
 }
