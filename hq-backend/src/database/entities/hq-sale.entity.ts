@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 /**
  * Immutable accepted-sale projection (PRD §6.1, §8.1): written in the same HQ
@@ -8,8 +8,9 @@ import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 
 @Entity({ name: 'hq_sales' })
 // `uq_hq_sale_source`/`uq_hq_receipt` (plain unique indexes) and the partial
 // reporting index `idx_hq_sales_reporting (outlet_id, sold_at) WHERE status =
-// 'COMPLETED'` are migration-owned.
-@Index('idx_hq_sales_ingested', ['outletId', 'ingestedAt'])
+// 'COMPLETED'` are migration-owned. Any additional index (e.g. on
+// `ingested_at` for Phase 4 reporting) must be added as a real migration —
+// decorator-only indexes are inert metadata under `synchronize: false`.
 export class HqSaleEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

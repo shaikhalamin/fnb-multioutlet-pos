@@ -45,7 +45,10 @@ export class SyncCheckpointRepository {
    * Advances the highest contiguous sequence after a successful event insert:
    * walks accepted sequences upward from the current watermark until the
    * first gap (out-of-order events ingest fine; only filled gaps advance —
-   * AT-21). Caller holds the checkpoint row lock.
+   * AT-21). The walk is chunked: each scan is bounded, stops at the first
+   * gap (rows above a permanently stuck sequence are never fetched), and
+   * continues only while contiguous rows remain. Caller holds the checkpoint
+   * row lock.
    */
   async advanceContiguous(manager: EntityManager, outletId: string, now: Date): Promise<string> {
     const rows = await manager.query<Array<{ highest: string }>>(
@@ -53,16 +56,24 @@ export class SyncCheckpointRepository {
       [outletId],
     );
     let expected = BigInt(rows[0]?.highest ?? '0') + 1n;
-    const sequences = await manager.query<Array<{ seq: string }>>(
-      'SELECT sequence_no::text AS seq FROM sync_inbox_events WHERE outlet_id = $1 AND sequence_no >= $2 ORDER BY sequence_no',
-      [outletId, expected.toString()],
-    );
-    for (const row of sequences) {
-      if (BigInt(row.seq) === expected) {
-        expected += 1n;
-      } else {
-        break;
+    const CHUNK_SIZE = 1000;
+    for (;;) {
+      const sequences = await manager.query<Array<{ seq: string }>>(
+        'SELECT sequence_no::text AS seq FROM sync_inbox_events WHERE outlet_id = $1 AND sequence_no >= $2 ORDER BY sequence_no LIMIT $3',
+        [outletId, expected.toString(), CHUNK_SIZE],
+      );
+      let cursor = expected;
+      let hitGap = false;
+      for (const row of sequences) {
+        if (BigInt(row.seq) === cursor) {
+          cursor += 1n;
+        } else {
+          hitGap = true;
+          break;
+        }
       }
+      expected = cursor;
+      if (hitGap || sequences.length < CHUNK_SIZE) break;
     }
     const next = (expected - 1n).toString();
     await manager.query(

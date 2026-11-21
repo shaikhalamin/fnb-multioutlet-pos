@@ -3,6 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { ApiException } from '../exceptions/api.exception.js';
+import { JsonLogger } from '../logging/logger.service.js';
 import { outletKeySecretMatches, type OutletKeyScope } from '../utils/outlet-key.js';
 import type { Env } from '../../config/env.schema.js';
 import { AuditService } from '../../modules/audit/audit.service.js';
@@ -38,6 +39,8 @@ function parseOutletKeyHeader(header: string): { keyId: string; secret: string }
  */
 @Injectable()
 export class OutletKeyGuard implements CanActivate {
+  private readonly logger = new JsonLogger('OutletKeyGuard');
+
   constructor(
     private readonly reflector: Reflector,
     private readonly keys: ApiKeysRepository,
@@ -96,11 +99,23 @@ export class OutletKeyGuard implements CanActivate {
   }
 
   private async auditAuthFailure(reason: string, keyId: string | null, extra?: Record<string, unknown>): Promise<void> {
-    await this.audit.record({
-      actorType: 'OUTLET_KEY',
-      actorId: null,
-      action: 'outlet_key.auth_failed',
-      metadata: { reason, keyId, ...extra },
-    });
+    // Best-effort, like `touchLastUsed`: an audit-store failure must never
+    // mask the auth rejection the guard is about to throw — the 401/403 is
+    // the security signal the caller needs (a DB hiccup would otherwise
+    // surface as 500 INTERNAL_ERROR instead).
+    try {
+      await this.audit.record({
+        actorType: 'OUTLET_KEY',
+        actorId: null,
+        action: 'outlet_key.auth_failed',
+        metadata: { reason, keyId, ...extra },
+      });
+    } catch (error) {
+      this.logger.error(
+        'outlet_key_audit_failed',
+        error instanceof Error ? error.message : String(error),
+        { reason, keyId },
+      );
+    }
   }
 }

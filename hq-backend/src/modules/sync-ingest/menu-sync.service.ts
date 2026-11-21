@@ -27,58 +27,70 @@ export class MenuSyncService {
   ) {}
 
   async getChanges(outletId: string, afterRevision: string, limit: number): Promise<CatalogChangesResponse> {
-    const headRevision = await this.menuPull.headRevision(outletId);
+    // One REPEATABLE READ transaction pins head/min/rows to a single stable
+    // view (mirrors getSnapshot): a catalog admin commit landing mid-pull can
+    // never produce a self-inconsistent response such as
+    // `nextRevision > headRevision`.
+    return this.dataSource.transaction('REPEATABLE READ', async (manager) => {
+      const headRevision = await this.menuPull.headRevision(outletId, manager);
 
-    // Gap/truncation detection (AT-14): if the log no longer retains the row
-    // right after the outlet's checkpoint, deltas cannot be served — the
-    // client must rebuild from a snapshot instead of guessing.
-    const minAvailable = await this.menuPull.minAvailableRevision(outletId);
-    if (minAvailable !== null && BigInt(minAvailable) > BigInt(afterRevision) + 1n) {
+      // Gap/truncation detection (AT-14): if the log no longer retains the row
+      // right after the outlet's checkpoint, deltas cannot be served — the
+      // client must rebuild from a snapshot instead of guessing. A fully
+      // compacted log (no retained rows at all, head beyond the checkpoint) is
+      // the same condition: deltas are unservable, the snapshot is the answer.
+      const minAvailable = await this.menuPull.minAvailableRevision(outletId, manager);
+      const truncated =
+        minAvailable === null
+          ? BigInt(headRevision) > BigInt(afterRevision)
+          : BigInt(minAvailable) > BigInt(afterRevision) + 1n;
+      if (truncated) {
+        return {
+          outletId,
+          fromRevision: afterRevision,
+          nextRevision: afterRevision,
+          headRevision,
+          hasMore: false,
+          snapshotRequired: true,
+          changes: [],
+        };
+      }
+
+      const rows = await this.menuPull.listChangesAfter(outletId, afterRevision, limit + 1, manager);
+      const hasMore = rows.length > limit;
+      const page = hasMore ? rows.slice(0, limit) : rows;
+
+      // The returned page must be contiguous from the checkpoint (§8.3 pull
+      // algorithm); a middle gap is likewise snapshot territory.
+      const contiguous =
+        page.length === 0 ||
+        (BigInt(page[0].revision) === BigInt(afterRevision) + 1n &&
+          page.every(
+            (row, index) => index === 0 || BigInt(row.revision) === BigInt(page[index - 1].revision) + 1n,
+          ));
+      if (!contiguous) {
+        return {
+          outletId,
+          fromRevision: afterRevision,
+          nextRevision: afterRevision,
+          headRevision,
+          hasMore: false,
+          snapshotRequired: true,
+          changes: [],
+        };
+      }
+
+      const lastRevision = page.at(-1)?.revision ?? afterRevision;
       return {
         outletId,
         fromRevision: afterRevision,
-        nextRevision: afterRevision,
+        nextRevision: lastRevision,
         headRevision,
-        hasMore: false,
-        snapshotRequired: true,
-        changes: [],
+        hasMore,
+        snapshotRequired: false,
+        changes: page.map((row) => toChangeEntry(row)),
       };
-    }
-
-    const rows = await this.menuPull.listChangesAfter(outletId, afterRevision, limit + 1);
-    const hasMore = rows.length > limit;
-    const page = hasMore ? rows.slice(0, limit) : rows;
-
-    // The returned page must be contiguous from the checkpoint (§8.3 pull
-    // algorithm); a middle gap is likewise snapshot territory.
-    const contiguous =
-      page.length === 0 ||
-      (BigInt(page[0].revision) === BigInt(afterRevision) + 1n &&
-        page.every(
-          (row, index) => index === 0 || BigInt(row.revision) === BigInt(page[index - 1].revision) + 1n,
-        ));
-    if (!contiguous) {
-      return {
-        outletId,
-        fromRevision: afterRevision,
-        nextRevision: afterRevision,
-        headRevision,
-        hasMore: false,
-        snapshotRequired: true,
-        changes: [],
-      };
-    }
-
-    const lastRevision = page.at(-1)?.revision ?? afterRevision;
-    return {
-      outletId,
-      fromRevision: afterRevision,
-      nextRevision: lastRevision,
-      headRevision,
-      hasMore,
-      snapshotRequired: false,
-      changes: page.map((row) => toChangeEntry(row)),
-    };
+    });
   }
 
   /**

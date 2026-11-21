@@ -101,10 +101,35 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
 
+    const expressStatus = expressErrorStatus(exception);
+    if (expressStatus !== undefined) {
+      return {
+        status: expressStatus,
+        code: STATUS_CODES[expressStatus] ?? (expressStatus >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR'),
+        message: exception instanceof Error ? exception.message : 'Request error.',
+      };
+    }
+
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       code: 'INTERNAL_ERROR',
       message: 'Internal server error.',
     };
   }
+}
+
+/**
+ * Express-style errors — body-parser rejections (e.g. the JSON size limit's
+ * `entity.too.large`) and `http-errors` — are plain `Error`s carrying a
+ * numeric `statusCode`/`status`, not `HttpException`s. Without this branch a
+ * body over `SYNC_MAX_BODY_BYTES` would surface as 500 `INTERNAL_ERROR`
+ * instead of the contractual 413 (PRD §8.5).
+ */
+function expressErrorStatus(exception: unknown): number | undefined {
+  if (!(exception instanceof Error) || exception instanceof HttpException) return undefined;
+  const candidate =
+    (exception as { statusCode?: unknown }).statusCode ?? (exception as { status?: unknown }).status;
+  return typeof candidate === 'number' && Number.isInteger(candidate) && candidate >= 400 && candidate <= 599
+    ? candidate
+    : undefined;
 }

@@ -67,7 +67,7 @@ describe('MenuSyncService.getChanges', () => {
       snapshotRequired: false,
     });
     expect(response.changes.map((change) => change.revision)).toEqual(['11', '12']);
-    expect(menuPull.listChangesAfter).toHaveBeenCalledWith(OUTLET_A, '10', 501);
+    expect(menuPull.listChangesAfter).toHaveBeenCalledWith(OUTLET_A, '10', 501, expect.anything());
     // UPSERT carries the full item snapshot; REMOVE is a bare tombstone.
     expect(response.changes[0].item).toMatchObject({ unitPriceMinor: '1200', itemVersion: 3 });
     expect(response.changes[1].item).toBeNull();
@@ -76,7 +76,7 @@ describe('MenuSyncService.getChanges', () => {
   it('serves strictly after the afterRevision boundary only', async () => {
     const { service, menuPull } = makeService([]);
     await service.getChanges(OUTLET_A, '42', 500);
-    expect(menuPull.listChangesAfter).toHaveBeenCalledWith(OUTLET_A, '42', 501);
+    expect(menuPull.listChangesAfter).toHaveBeenCalledWith(OUTLET_A, '42', 501, expect.anything());
   });
 
   it('signals hasMore when the page is truncated by the limit', async () => {
@@ -107,6 +107,20 @@ describe('MenuSyncService.getChanges', () => {
     expect(response.snapshotRequired).toBe(true);
     expect(response.changes).toEqual([]);
     expect(response.nextRevision).toBe('4'); // checkpoint must not advance
+  });
+
+  it('demands a snapshot when the change log was fully compacted (no retained rows, head beyond checkpoint)', async () => {
+    const { service } = makeService([], { min: null, head: '10' });
+    const response = await service.getChanges(OUTLET_A, '4', 500);
+    expect(response.snapshotRequired).toBe(true);
+    expect(response.changes).toEqual([]);
+    expect(response.nextRevision).toBe('4'); // checkpoint must not advance
+  });
+
+  it('stays at head without a snapshot when nothing was ever retained for this outlet', async () => {
+    const { service } = makeService([], { min: null, head: '7' });
+    const response = await service.getChanges(OUTLET_A, '7', 500);
+    expect(response).toMatchObject({ changes: [], hasMore: false, snapshotRequired: false, headRevision: '7' });
   });
 
   it('demands a snapshot on a middle gap in the returned page', async () => {

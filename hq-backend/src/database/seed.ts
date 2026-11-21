@@ -1,13 +1,13 @@
 import bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { buildCliDataSource } from './data-source.js';
 import { DEFAULT_HQ_ROLES, HQ_PERMISSIONS } from '../common/rbac/permissions.js';
-import {
-  generateOutletKeyId,
-  generateOutletKeySecret,
-  hashOutletKeySecret,
-  OUTLET_KEY_SCOPES,
-} from '../common/utils/outlet-key.js';
+import type { Env } from '../config/env.schema.js';
+import { ApiKeysService } from '../modules/api-keys/api-keys.service.js';
+import { ApiKeysRepository } from '../modules/api-keys/api-keys.repository.js';
+import { OutletsRepository } from '../modules/outlets/outlets.repository.js';
+import { AuditService } from '../modules/audit/audit.service.js';
 import { CompanyEntity } from './entities/company.entity.js';
 import { HqPermissionEntity } from './entities/hq-permission.entity.js';
 import { HqRoleEntity } from './entities/hq-role.entity.js';
@@ -16,7 +16,6 @@ import { HqUserEntity } from './entities/hq-user.entity.js';
 import { HqUserRoleEntity } from './entities/hq-user-role.entity.js';
 import { MasterMenuItemEntity } from './entities/master-menu-item.entity.js';
 import { MenuCategoryEntity } from './entities/menu-category.entity.js';
-import { AuditLogEntity } from './entities/audit-log.entity.js';
 import { OutletApiKeyEntity } from './entities/outlet-api-key.entity.js';
 import { OutletCatalogRevisionEntity } from './entities/outlet-catalog-revision.entity.js';
 import { OutletEntity } from './entities/outlet.entity.js';
@@ -245,17 +244,27 @@ async function seedDemoData(dataSource: DataSource, companyId: string): Promise<
  * issues one real scoped machine key per seeded outlet and prints
  * `keyId.secret` ONCE — the seed runs server-side with the pepper from the
  * environment, so the printed pair is the only place the raw secret exists.
- * Idempotent: outlets that already hold an ACTIVE, unexpired key are
- * skipped (rotation stays a deliberate admin action).
+ * Issuance goes through the SAME `ApiKeysService` the admin API uses — one
+ * code path, one audit shape (`entityId` = the key row id). Idempotent:
+ * outlets that already hold an ACTIVE, unexpired key are skipped (rotation
+ * stays a deliberate admin action).
  */
 async function seedOutletKeys(dataSource: DataSource): Promise<void> {
-  const pepper = process.env.OUTLET_KEY_PEPPER;
-  if (!pepper) {
+  // Fail fast with a clear message before any issuance work begins.
+  if (!process.env.OUTLET_KEY_PEPPER) {
     throw new Error('SEED_ISSUE_OUTLET_KEYS=1 requires OUTLET_KEY_PEPPER (must match hq-api)');
   }
+  const apiKeys = new ApiKeysService(
+    dataSource,
+    new ApiKeysRepository(dataSource),
+    new OutletsRepository(dataSource),
+    new AuditService(dataSource),
+    // The seed CLI runs with the API environment; process env is the
+    // validated contract here (pepper + NODE_ENV are the only reads).
+    new ConfigService<Env, true>(process.env as unknown as Env),
+  );
   const outlets = await dataSource.getRepository(OutletEntity).find({ order: { code: 'ASC' } });
   const keysRepo = dataSource.getRepository(OutletApiKeyEntity);
-  const auditRepo = dataSource.getRepository(AuditLogEntity);
 
   for (const outlet of outlets) {
     const existing = await keysRepo.findOne({
@@ -266,37 +275,11 @@ async function seedOutletKeys(dataSource: DataSource): Promise<void> {
       log('seed_outlet_key_skipped', { outletCode: outlet.code, existingKeyId: existing.keyId });
       continue;
     }
-    const keyId = generateOutletKeyId(process.env.NODE_ENV ?? 'development');
-    const secret = generateOutletKeySecret();
-    await dataSource.transaction(async (manager) => {
-      await manager.getRepository(OutletApiKeyEntity).insert(
-        manager.getRepository(OutletApiKeyEntity).create({
-          keyId,
-          outletId: outlet.id,
-          secretHash: hashOutletKeySecret(secret, pepper),
-          scopes: [...OUTLET_KEY_SCOPES],
-          status: 'ACTIVE',
-          expiresAt: null,
-          lastUsedAt: null,
-          rotatedFromId: null,
-        }),
-      );
-      const auditRow = manager.getRepository(AuditLogEntity).create({
-        actorType: 'SYSTEM',
-        actorId: null,
-        action: 'outlet_key.issued',
-        entityType: 'outlet_api_key',
-        entityId: outlet.id,
-        metadata: { outletId: outlet.id, keyId, scopes: [...OUTLET_KEY_SCOPES], via: 'seed' },
-      });
-      // jsonb column typing is a deep-partial mismatch for TypeORM's insert;
-      // the row shape is exact by construction.
-      await manager.getRepository(AuditLogEntity).insert(auditRow as never);
-    });
+    const issued = await apiKeys.issue(outlet.id, {}, { type: 'SYSTEM', id: null, via: 'seed' });
     // One-time reveal — copy into the outlet worker's environment
     // (root .env: OUTLET_<CODE>_HQ_KEY_ID / _SECRET) and keep out of logs.
     process.stdout.write(
-      `${JSON.stringify({ time: new Date().toISOString(), level: 'warn', service: 'hq-backend', msg: 'seed_outlet_key_issued', warning: 'SECRET SHOWN ONCE — store it now', outletCode: outlet.code, keyId, secret })}\n`,
+      `${JSON.stringify({ time: new Date().toISOString(), level: 'warn', service: 'hq-backend', msg: 'seed_outlet_key_issued', warning: 'SECRET SHOWN ONCE — store it now', outletCode: outlet.code, keyId: issued.keyId, secret: issued.secret })}\n`,
     );
   }
 }

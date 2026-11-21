@@ -38,7 +38,7 @@ export class ApiKeysService {
   async issue(
     outletId: string,
     request: { expiresInHours?: number; scopes?: string[] },
-    actorId: string,
+    actor: { type: 'USER' | 'SYSTEM'; id: string | null; via?: string },
   ): Promise<IssueOutletKeyResponse> {
     const companyId = await resolveCompanyId(this.dataSource);
     const outlet = await this.outlets.findById(companyId, outletId);
@@ -62,12 +62,12 @@ export class ApiKeysService {
       });
       await this.audit.record(
         {
-          actorType: 'USER',
-          actorId,
+          actorType: actor.type,
+          actorId: actor.id,
           action: 'outlet_key.issued',
           entityType: 'outlet_api_key',
           entityId: row.id,
-          metadata: { outletId, keyId, scopes },
+          metadata: { outletId, keyId, scopes, ...(actor.via ? { via: actor.via } : {}) },
         },
         manager,
       );

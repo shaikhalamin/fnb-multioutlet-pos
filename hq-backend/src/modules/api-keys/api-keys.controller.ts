@@ -38,7 +38,7 @@ export class ApiKeysController {
     @Body() body: IssueOutletKeyRequest,
     @CurrentUser() actor: AuthenticatedUser,
   ): Promise<IssueOutletKeyResponse> {
-    return this.apiKeysService.issue(outletId, body, actor.id);
+    return this.apiKeysService.issue(outletId, body, { type: 'USER', id: actor.id });
   }
 
   @Get()

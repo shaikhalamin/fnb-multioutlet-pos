@@ -7,6 +7,8 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
 import { DATA_SOURCE } from '../src/database/database.module.js';
+import { loadAppConfig } from '../src/config/app.config.js';
+import { parseApiEnv } from '../src/config/env.schema.js';
 import { configureE2eApp } from './helpers.js';
 
 /**
@@ -332,6 +334,20 @@ describeWithDeps('HQ sync surface (e2e)', () => {
       .send({ batchId: randomUUID(), events: [] })
       .expect(400)
       .expect((res) => expect(res.body.error.code).toBe('VALIDATION_FAILED'));
+  });
+
+  it('413s a body over SYNC_MAX_BODY_BYTES with the stable code, not 500 (§8.5)', async () => {
+    const limit = loadAppConfig(parseApiEnv()).syncMaxBodyBytes;
+    const oversized = 'x'.repeat(limit + 1024);
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/sync/v1/events/batch')
+      .set('Authorization', auth(keyA))
+      .set('Idempotency-Key', randomUUID())
+      .set('Content-Type', 'application/json')
+      .send(oversized)
+      .expect(413);
+    expect(response.body.error.code).toBe('PAYLOAD_TOO_LARGE');
+    expect(response.body.error.requestId).toBeTruthy();
   });
 
   it('rejects the whole batch when any event claims another outlet (AT-16)', async () => {

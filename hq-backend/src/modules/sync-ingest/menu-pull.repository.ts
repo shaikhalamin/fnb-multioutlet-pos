@@ -46,8 +46,8 @@ export class MenuPullRepository {
   }
 
   /** Lowest retained revision for the outlet — detects history truncation. */
-  async minAvailableRevision(outletId: string): Promise<string | null> {
-    const rows = await this.dataSource.query<{ min: string | null }[]>(
+  async minAvailableRevision(outletId: string, manager?: EntityManager): Promise<string | null> {
+    const rows = await (manager ?? this.dataSource).query<{ min: string | null }[]>(
       'SELECT MIN(revision)::text AS min FROM outlet_catalog_changes WHERE outlet_id = $1',
       [outletId],
     );
@@ -58,8 +58,13 @@ export class MenuPullRepository {
     outletId: string,
     afterRevision: string,
     limit: number,
+    manager?: EntityManager,
   ): Promise<CatalogChangeRow[]> {
-    return this.dataSource
+    // `.limit()` (not `.take()`): the raw path with a join never emits LIMIT
+    // for `take` in TypeORM, which made the page bound a no-op and read every
+    // retained change into memory. The join is 1:1 on the assignment id, so a
+    // plain LIMIT cannot truncate mid-change.
+    return (manager ?? this.dataSource)
       .createQueryBuilder()
       .select('c.revision::text', 'revision')
       .addSelect('c.action', 'action')
@@ -71,7 +76,7 @@ export class MenuPullRepository {
       .leftJoin(OutletMenuAssignmentEntity, 'a', "a.id::text = c.payload->>'assignmentId'")
       .where('c.outlet_id = :outletId AND c.revision > :after', { outletId, after: afterRevision })
       .orderBy('c.revision', 'ASC')
-      .take(limit)
+      .limit(limit)
       .getRawMany<CatalogChangeRow>();
   }
 
