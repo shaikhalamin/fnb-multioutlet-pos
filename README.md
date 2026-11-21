@@ -211,6 +211,78 @@ everywhere) and `GET /outlets/:id/sync-status` (human `sync.read`).
 Outlet-side surfaces: `GET /sync/status`, `POST /sync/grace-override`,
 `POST /sync/outbox/:eventId/replay` (manager `sync.override`).
 
+## Phase 4 — Reporting & hardening (implemented)
+
+Cross-outlet reporting, staleness disclosure, audit views and load/security
+depth (PRD §10, §18; backup/recovery and production rollout omitted by
+decision).
+
+### Reports (PRD §10, computed on request from indexed HQ projections)
+
+- `GET /reports/revenue-by-outlet?from=&to=&currency=` (`reports.read`):
+  per-outlet completed revenue/count as decimal-string `bigint` sums. **Every
+  ACTIVE outlet appears** — zero-sale outlets carry `"0"` and a null
+  `lastIngestedAt`, never an omission.
+- `GET /reports/outlets/:id/top-items?from=&to=&limit=5` (`reports.read`):
+  `quantitySold DESC` with `menu_item_id` tie-break; `itemName` joins the
+  current master name and falls back to the sale-time snapshot for items no
+  longer in the master catalog (AT-19).
+- **Staleness contract (AT-20):** every report carries `dataAsOf` = global
+  max `ingested_at` and `isProvisional` = true while any ACTIVE outlet
+  reports an outbox backlog or has never ingested a sale. Windows are UTC
+  (`from` inclusive, `to` exclusive), bounded to 366 days (§15); unlike
+  currencies are never summed.
+- HQ frontend: `/reports` (Zod-validated date filters, top-items outlet
+  picker) and a dashboard revenue card + outlet health grid (menu revision,
+  watermarks, backlog/never-reported/heartbeat-stale states) wired to
+  `GET /outlets/:id/sync-status`.
+
+### Audit (PRD §11 audit views)
+
+- `GET /audit/logs` (`audit.read`, a new HQ_SUPER_ADMIN-only permission —
+  re-run `pnpm --dir hq-backend seed` on existing databases): immutable,
+  newest-first listing with action/actor/entity/occurred_at filters and
+  deterministic `(occurred_at, id)` cursor paging.
+- HQ frontend `/audit`: cursor-paginated table with load-more and filters
+  (the envelope's `meta.nextCursor` is promoted to an `x-page-cursor`
+  response header by the shared axios layer — the one envelope-unwrap point).
+- Retention stays disabled by default (`AUDIT_LOG_RETENTION_DAYS=0`,
+  immutable trail); the HQ worker's hourly timer deletes in ≤1000-row
+  batches only when configured.
+
+### Verification evidence (AT-17, AT-20, §16)
+
+- AT-20 drill (live compose): POS sale at Outlet A with `hq-api` stopped
+  (receipt A-003455, outbox RETRY with backoff) → restart → report showed
+  stale `dataAsOf` + `isProvisional: true` with the sale uncounted → after
+  drain, report totals matched SQL `SUM(total_minor)` exactly (1286700 /
+  3477 for the day) and Outlet B rendered "never reported", never "0 sales".
+- AT-02/AT-19: sale at a 777-minor price override survived the HQ price
+  revert — the HQ projection kept `unit_price_minor = 777` for that receipt.
+- AT-17: forged-token matrix (wrong secret / issuer / audience / expired /
+  disabled user → 401), §9.3 matrix spot-checks (analyst reports OK but no
+  audit/menu-write; menu manager no keys/reports/audit; cashier no
+  adjustments), human/machine credential crossover rejected both ways,
+  machine routes send no CORS headers, and deployed frontend bundles grep
+  clean of secrets.
+- E2e suites: hq-backend 57 specs (incl. `reporting`/`audit`/`security`),
+  outlet-backend 48 specs (incl. forged-token matrix and 503/429+Retry-After
+  delivery failures) against real PostgreSQL/Redis.
+
+### Sale-load baseline (PRD §16 — subject to host hardware)
+
+`pnpm --dir outlet-backend perf:sale` (autocannon; fresh Idempotency-Key +
+X-Request-Id per request; stock pre-restocked through the audited
+adjustments path). Raise the outlet API throttle for the run:
+
+```bash
+OUTLET_A_THROTTLE_LIMIT=1000000 docker compose up -d outlet-a-api
+pnpm --dir outlet-backend perf:sale -- --duration 60 --connections 25
+```
+
+(The recorded baseline and post-run integrity results live in
+`outlet-backend/README.md`.)
+
 ## Local development (without Docker)
 
 Each project is independent — install and run from its own folder with pnpm:

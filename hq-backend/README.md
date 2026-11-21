@@ -94,3 +94,32 @@ Machine-key routes under `/sync/v1/*` (`Authorization: OutletKey
 Identity comes exclusively from the key record; events claiming another
 outlet reject the entire request (AT-16). Dev key provisioning:
 `SEED_ISSUE_OUTLET_KEYS=1 pnpm seed` (see root README §Phase 3).
+
+## Phase 4 — reporting, audit & hardening (PRD §10, §11, §18)
+
+- `GET /reports/revenue-by-outlet?from=&to=&currency=` (`reports.read`) —
+  SQL `bigint` sums over `hq_sales` only (never outlet DBs, FR-08);
+  **every ACTIVE outlet appears** with zero rows as `"0"` + null
+  `lastIngestedAt` (a missing contribution is disclosed, never "no sales").
+- `GET /reports/outlets/:id/top-items?from=&to=&limit≤5` (`reports.read`) —
+  `quantitySold DESC, menu_item_id` tie-break; master-name join with
+  sale-time snapshot fallback (AT-19). Unknown outlet → 404.
+- Staleness contract (AT-20): `dataAsOf` = global max `ingested_at`;
+  `isProvisional` = any ACTIVE outlet with a reported outbox backlog or no
+  ingested sale. Windows are UTC-only, `from` inclusive / `to` exclusive,
+  span ≤ 366 days (§15).
+- `GET /audit/logs` (new **`audit.read`** permission, HQ_SUPER_ADMIN only) —
+  immutable newest-first listing, action/actor/entity/`occurred_at` filters,
+  deterministic `(occurred_at, id)` cursor via `meta.nextCursor`.
+  **Existing databases must re-seed once:** `pnpm seed` (idempotent — adds
+  the permission and its role mapping).
+- Worker (`pnpm start:worker`): BullMQ-free; audit retention is an hourly
+  interval timer over `AUDIT_LOG_RETENTION_DAYS` (default `0` = disabled —
+  the trail is immutable out of the box), deleting ≤1000-row batches with a
+  structured `{deleted, cutoff}` summary.
+- E2e (`pnpm test:e2e`, real PostgreSQL + Redis): `reporting.e2e-spec.ts`
+  (exact decimal-string totals incl. >2^53 fixtures, window boundaries,
+  isProvisional flip on heartbeats, top-items isolation/tie-break),
+  `audit.e2e-spec.ts` (auth-event visibility, filters, cursor walk, analyst
+  403), `security.e2e-spec.ts` (AT-17 forged-token matrix + §9.3 walk +
+  human/machine credential crossover).
