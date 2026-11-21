@@ -277,7 +277,7 @@ adjustments path). Raise the outlet API throttle for the run:
 
 ```bash
 OUTLET_A_THROTTLE_LIMIT=1000000 docker compose up -d outlet-a-api
-pnpm --dir outlet-backend perf:sale -- --duration 60 --connections 25
+pnpm --dir outlet-backend perf:sale --duration 60 --connections 25
 ```
 
 (The recorded baseline and post-run integrity results live in

@@ -153,7 +153,7 @@ must be raised for the run via the env knob, not code):
 
 ```bash
 OUTLET_A_THROTTLE_LIMIT=1000000 docker compose up -d outlet-a-api
-cd outlet-backend && pnpm perf:sale -- --duration 60 --connections 25
+cd outlet-backend && pnpm perf:sale --duration 60 --connections 25
 ```
 
 Flags: `--url` (default `http://127.0.0.1:5000/api/v1`), `--duration` (s,
@@ -163,3 +163,30 @@ default 30), `--connections` (default 10), `--rate` (optional req/s cap),
 
 Post-run integrity checks live in the root README's Phase 4 verification
 notes (duplicate receipts, oversells, outbox completeness, HQ totals).
+
+### Recorded baseline (2026-11-21, Docker Desktop VM on the dev host — §16
+target p95 < 500 ms, subject to hardware)
+
+Flags: `--duration 60 --connections 25` against compose `outlet-a-api`
+(`OUTLET_A_THROTTLE_LIMIT=1000000`), autocannon with per-request fresh
+`Idempotency-Key`/`X-Request-Id` and a rotating 1–2-line item mix; stock
+pre-restocked through the audited adjustments path:
+
+```
+requests:    9,727 (162.1 req/s)   statuses: 201×9727
+p50 / p95 / p99: 142 ms / 246 ms / 351 ms
+errors: 0   timeouts: 0   non-2xx: 0   → PASS (p95 246 ms ≤ 500 ms)
+```
+
+Post-run SQL integrity (§16 durable-delivery rows), scoped to the load
+window (the shared dev DB also carries older e2e fixtures whose outbox rows
+were cleaned by their suites):
+
+- 0 duplicate `receipt_no`; 0 negative balances (0 oversells — no
+  `INSUFFICIENT_STOCK` during the run);
+- 19,865/19,865 run sales with **exactly one** outbox row each; sold units
+  matched stock movements exactly (59,467 = 59,467 for the recording pass);
+- after the worker drained the backlog (~1,200 events/min at the default
+  batch/sweep settings): one `hq_sales` row per outlet sale — 19,865 rows,
+  `SUM(total_minor)` = 55,440,000 on **both** databases, 0 duplicate
+  `(outlet_id, source_sale_id)`.

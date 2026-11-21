@@ -33,7 +33,9 @@ const args = parseArgs({
     rate: { type: 'string' }, // optional overall requests/second cap
     'p95-threshold': { type: 'string', default: '500' },
     'max-quantity': { type: 'string', default: '5' },
-    'restock-target': { type: 'string', default: '5000' },
+    // 0 = auto: size the buffer for the whole run so stock never binds
+    // (up to ~2,400 units/minute per item at the default mix).
+    'restock-target': { type: 'string', default: '0' },
   },
 }).values;
 
@@ -43,7 +45,8 @@ const connections = Number(args.connections);
 const overallRate = args.rate === undefined ? undefined : Number(args.rate);
 const p95ThresholdMs = Number(args['p95-threshold']);
 const maxQuantity = Number(args['max-quantity']);
-const restockTarget = Number(args['restock-target']);
+const restockTarget =
+  Number(args['restock-target']) > 0 ? Number(args['restock-target']) : durationSeconds * 2400;
 
 function assertPositive(name: string, value: number): void {
   if (!Number.isFinite(value) || value <= 0) {
@@ -157,7 +160,6 @@ async function main(): Promise<void> {
     connections,
     duration: durationSeconds,
     ...(overallRate ? { overallRate } : {}),
-    ignoreCoordinatedOmission: overallRate === undefined,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${accessToken}`,
@@ -195,11 +197,14 @@ async function main(): Promise<void> {
   const p99 = percentile(99);
   const non2xx = sorted.length === 0 ? result.non2xx : [...statusCounts.entries()].filter(([status]) => status >= 300).reduce((sum, [, count]) => sum + count, 0);
   const errorCount = result.errors + result.timeouts;
+  // autocannon 8 does not compute a requests rate — derive it from the
+  // observed totals.
+  const rps = result.duration > 0 ? result.requests.total / result.duration : 0;
 
   process.stdout.write(
     [
       `sale-load results`,
-      `  requests:    ${result.requests.total} (${result.requests.rate.toFixed(1)} req/s)`,
+      `  requests:    ${result.requests.total} (${rps.toFixed(1)} req/s)`,
       `  p50 / p95 / p99: ${Math.round(p50)} ms / ${Math.round(p95)} ms / ${Math.round(p99)} ms`,
       `  errors:      ${errorCount}`,
       `  timeouts:    ${result.timeouts}`,
