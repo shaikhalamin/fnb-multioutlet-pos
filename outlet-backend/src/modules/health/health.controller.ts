@@ -2,8 +2,10 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiException } from '../../common/exceptions/api.exception.js';
+import { Public } from '../../common/auth/public.decorator.js';
 import { HealthService, type HealthReport } from './health.service.js';
 
+@Public()
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {

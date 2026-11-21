@@ -4,7 +4,7 @@ import { ApiOkResponse, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '
 import { CurrentUser } from '../../common/auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import { RequirePermissions } from '../../common/rbac/require-permissions.decorator.js';
-import { getRequestId } from '../../common/logging/request-context.js';
+import { requestIdOf } from '../../common/utils/ids.js';
 import {
   AdjustInventoryRequest,
   AdjustInventoryResponse,
@@ -43,7 +43,7 @@ export class InventoryController {
   ): Promise<AdjustInventoryResponse> {
     return this.inventoryService.adjust(body, {
       userId: user.id,
-      requestId: getRequestId() ?? (request.headers['x-request-id'] as string | undefined) ?? null,
+      requestId: requestIdOf(request),
     });
   }
 }

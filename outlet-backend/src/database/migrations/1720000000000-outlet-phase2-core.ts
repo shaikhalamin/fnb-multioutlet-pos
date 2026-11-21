@@ -148,14 +148,17 @@ export class OutletPhase2Core1720000000000 implements MigrationInterface {
     await queryRunner.query('CREATE INDEX idx_sales_sold_at ON sales (sold_at DESC)');
 
     // stock_movements references sales(id) (source_sale_id), so it lands
-    // after the sales table.
+    // after the sales table. The FK is DEFERRABLE: the §8.6 sale transaction
+    // appends movements (step 7) before inserting the sale header (step 9),
+    // and referential integrity is enforced at COMMIT.
     await queryRunner.query(`
       CREATE TABLE stock_movements (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         menu_item_id uuid NOT NULL REFERENCES catalog_items(menu_item_id),
         delta_quantity bigint NOT NULL,
         reason text NOT NULL CHECK (reason IN ('SALE', 'RESTOCK', 'WRITE_OFF', 'RECOUNT')),
-        source_sale_id uuid REFERENCES sales(id),
+        source_sale_id uuid CONSTRAINT stock_movements_source_sale_id_fkey
+          REFERENCES sales(id) DEFERRABLE INITIALLY DEFERRED,
         actor_id uuid REFERENCES outlet_users(id),
         request_id text,
         occurred_at timestamptz NOT NULL DEFAULT now()

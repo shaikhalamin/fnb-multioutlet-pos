@@ -12,7 +12,7 @@ import { CurrentUser } from '../../common/auth/current-user.decorator.js';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import { ApiException } from '../../common/exceptions/api.exception.js';
 import { RequirePermissions } from '../../common/rbac/require-permissions.decorator.js';
-import { getRequestId } from '../../common/logging/request-context.js';
+import { requestIdOf } from '../../common/utils/ids.js';
 import { withCursor } from '../../common/interceptors/envelope.interceptor.js';
 import { CreateSaleRequest, ListSalesQuery, SaleResponse, SaleSummaryResponse } from './dto/sale.dto.js';
 import { SalesService } from './sales.service.js';
@@ -57,7 +57,7 @@ export class SalesController {
     return this.salesService.createSale(body, {
       idempotencyKey,
       user,
-      requestId: getRequestId() ?? (request.headers['x-request-id'] as string | undefined) ?? null,
+      requestId: requestIdOf(request),
     });
   }
 

@@ -103,7 +103,7 @@ export class SalesRepository {
     menuItemId: string,
     quantity: string,
   ): Promise<{ quantityOnHand: string } | null> {
-    const rows = await manager.query<{ quantity_on_hand: string }[]>(
+    const result = await manager.query(
       `UPDATE inventory_balances
          SET quantity_on_hand = quantity_on_hand - $2,
              version = version + 1,
@@ -112,7 +112,13 @@ export class SalesRepository {
        RETURNING quantity_on_hand`,
       [menuItemId, quantity],
     );
-    return rows[0] ? { quantityOnHand: rows[0].quantity_on_hand } : null;
+    // TypeORM's raw `query()` wraps UPDATE..RETURNING as `[rows, affected]`;
+    // unwrap so "no matching row" is a true empty result, never the wrapper.
+    const rows: Array<{ quantity_on_hand: string }> = Array.isArray(result?.[0])
+      ? result[0]
+      : (result ?? []);
+    const row = rows[0];
+    return row ? { quantityOnHand: row.quantity_on_hand } : null;
   }
 
   async currentStock(manager: EntityManager, menuItemId: string): Promise<string> {

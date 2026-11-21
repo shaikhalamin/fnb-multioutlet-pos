@@ -7,5 +7,8 @@ export default defineConfig({
     root: './',
     include: ['**/*.e2e-spec.ts'],
     setupFiles: ['./vitest.setup.ts'],
+    // All e2e files share one real outlet database (PRD §17); running them
+    // sequentially keeps stock/receipt/counter assertions deterministic.
+    fileParallelism: false,
   },
 });

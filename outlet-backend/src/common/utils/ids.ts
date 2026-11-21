@@ -13,3 +13,16 @@ export function sanitizeRequestId(header: unknown): string | undefined {
   const value = header.trim();
   return REQUEST_ID_PATTERN.test(value) ? value : undefined;
 }
+
+/**
+ * The request ID assigned by `RequestIdInterceptor` (stamped on the request
+ * object, echoing the `X-Request-Id` response header) — the same value the
+ * envelope meta and audit rows carry (PRD §7, FR-04).
+ */
+export function requestIdOf(request: { requestId?: string; headers?: Record<string, unknown> }): string {
+  return (
+    request.requestId ??
+    sanitizeRequestId(request.headers?.[REQUEST_ID_HEADER]) ??
+    newRequestId()
+  );
+}

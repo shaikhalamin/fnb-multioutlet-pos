@@ -24,6 +24,10 @@ export class RequestIdInterceptor implements NestInterceptor {
 
     const requestId = sanitizeRequestId(request.headers?.[REQUEST_ID_HEADER]) ?? newRequestId();
     response.setHeader?.(REQUEST_ID_HEADER, requestId);
+    // Also stamp it on the request object: route handlers run after the
+    // guard stage and read it deterministically (the ALS store below covers
+    // logs/envelope inside the subscription chain).
+    (request as { requestId?: string }).requestId = requestId;
 
     const source = next.handle();
     // Re-enter the ALS store on subscription so handler execution (which
