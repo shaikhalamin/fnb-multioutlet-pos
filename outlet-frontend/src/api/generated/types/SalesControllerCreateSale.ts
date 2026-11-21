@@ -6,6 +6,14 @@
 import type { CreateSaleRequest } from './CreateSaleRequest'
 import type { SaleResponse } from './SaleResponse'
 
+export type SalesControllerCreateSaleHeaders = {
+  /**
+   * @description Client-minted key, stable across retries of the same sale attempt (8-128 chars).
+   * @type string
+   */
+  'Idempotency-Key': string;
+};
+
 export type SalesControllerCreateSaleStatus201 = SaleResponse;
 
 export type SalesControllerCreateSaleStatus400 = unknown;
@@ -22,7 +30,7 @@ export type SalesControllerCreateSaleOptions = {
   body: SalesControllerCreateSaleBody;
   path?: never;
   query?: never;
-  headers?: never;
+  headers: SalesControllerCreateSaleHeaders;
 };
 
 export type SalesControllerCreateSaleResponses = {

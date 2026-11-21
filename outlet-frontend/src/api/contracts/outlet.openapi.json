@@ -37,7 +37,9 @@
           }
         },
         "summary": "Sign in with email + password (rate limited).",
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/auth/refresh": {
@@ -60,7 +62,9 @@
           }
         },
         "summary": "Rotate the refresh cookie and mint a new access token.",
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/auth/logout": {
@@ -85,7 +89,9 @@
           }
         ],
         "summary": "Revoke the current refresh session family.",
-        "tags": ["Auth"]
+        "tags": [
+          "Auth"
+        ]
       }
     },
     "/users": {
@@ -134,7 +140,9 @@
           }
         ],
         "summary": "List local outlet users (keyset pagination).",
-        "tags": ["Users"]
+        "tags": [
+          "Users"
+        ]
       },
       "post": {
         "operationId": "UsersController_createUser",
@@ -173,7 +181,9 @@
           }
         ],
         "summary": "Create a local outlet user with roles.",
-        "tags": ["Users"]
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/users/{id}": {
@@ -223,7 +233,9 @@
           }
         ],
         "summary": "Update status and/or replace roles.",
-        "tags": ["Users"]
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/roles": {
@@ -251,7 +263,9 @@
           }
         ],
         "summary": "List local roles with their permission sets.",
-        "tags": ["Users"]
+        "tags": [
+          "Users"
+        ]
       }
     },
     "/menu": {
@@ -279,7 +293,9 @@
           }
         ],
         "summary": "Active local menu with effective prices and stock.",
-        "tags": ["Menu"]
+        "tags": [
+          "Menu"
+        ]
       }
     },
     "/inventory": {
@@ -307,7 +323,9 @@
           }
         ],
         "summary": "Local stock balances joined with catalog identity.",
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/inventory/adjustments": {
@@ -345,13 +363,25 @@
           }
         ],
         "summary": "Audited stock adjustment (RESTOCK / WRITE_OFF / RECOUNT).",
-        "tags": ["Inventory"]
+        "tags": [
+          "Inventory"
+        ]
       }
     },
     "/sales": {
       "post": {
         "operationId": "SalesController_createSale",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-minted key, stable across retries of the same sale attempt (8-128 chars).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -392,7 +422,9 @@
           }
         ],
         "summary": "Create an atomic multi-item sale (requires an Idempotency-Key header).",
-        "tags": ["Sales"]
+        "tags": [
+          "Sales"
+        ]
       },
       "get": {
         "operationId": "SalesController_listSales",
@@ -459,7 +491,9 @@
           }
         ],
         "summary": "Local sale history (keyset pagination, optional from/to).",
-        "tags": ["Sales"]
+        "tags": [
+          "Sales"
+        ]
       }
     },
     "/sales/{id}": {
@@ -496,7 +530,9 @@
           }
         ],
         "summary": "Receipt detail with immutable line snapshots and sync status.",
-        "tags": ["Sales"]
+        "tags": [
+          "Sales"
+        ]
       }
     },
     "/sync/status": {
@@ -521,7 +557,9 @@
           }
         ],
         "summary": "Local menu-sync checkpoint and outbox backlog.",
-        "tags": ["Sync"]
+        "tags": [
+          "Sync"
+        ]
       }
     },
     "/health": {
@@ -541,7 +579,9 @@
           }
         },
         "summary": "Liveness/readiness probe (database + Redis)",
-        "tags": ["Health"]
+        "tags": [
+          "Health"
+        ]
       }
     }
   },
@@ -583,7 +623,10 @@
             "minLength": 8
           }
         },
-        "required": ["email", "password"]
+        "required": [
+          "email",
+          "password"
+        ]
       },
       "AuthUserResponse": {
         "type": "object",
@@ -597,14 +640,20 @@
             "example": "cashier@outlet-a.local"
           },
           "roleCodes": {
-            "example": ["OUTLET_CASHIER"],
+            "example": [
+              "OUTLET_CASHIER"
+            ],
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "permissions": {
-            "example": ["menu.read", "sales.create", "sales.read"],
+            "example": [
+              "menu.read",
+              "sales.create",
+              "sales.read"
+            ],
             "type": "array",
             "items": {
               "type": "string"
@@ -616,7 +665,13 @@
             "description": "Provisioned outlet this account belongs to."
           }
         },
-        "required": ["id", "email", "roleCodes", "permissions", "outletId"]
+        "required": [
+          "id",
+          "email",
+          "roleCodes",
+          "permissions",
+          "outletId"
+        ]
       },
       "AuthResponse": {
         "type": "object",
@@ -639,7 +694,12 @@
             "$ref": "#/components/schemas/AuthUserResponse"
           }
         },
-        "required": ["accessToken", "tokenType", "expiresInSeconds", "user"]
+        "required": [
+          "accessToken",
+          "tokenType",
+          "expiresInSeconds",
+          "user"
+        ]
       },
       "LogoutResponse": {
         "type": "object",
@@ -649,7 +709,9 @@
             "example": true
           }
         },
-        "required": ["success"]
+        "required": [
+          "success"
+        ]
       },
       "UserResponse": {
         "type": "object",
@@ -665,10 +727,15 @@
           "status": {
             "type": "string",
             "example": "ACTIVE",
-            "enum": ["ACTIVE", "DISABLED"]
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
           },
           "roleCodes": {
-            "example": ["OUTLET_CASHIER"],
+            "example": [
+              "OUTLET_CASHIER"
+            ],
             "type": "array",
             "items": {
               "type": "string"
@@ -707,7 +774,9 @@
             "maxLength": 128
           },
           "roleCodes": {
-            "example": ["OUTLET_CASHIER"],
+            "example": [
+              "OUTLET_CASHIER"
+            ],
             "description": "Local role codes to assign.",
             "type": "array",
             "items": {
@@ -715,7 +784,11 @@
             }
           }
         },
-        "required": ["email", "password", "roleCodes"]
+        "required": [
+          "email",
+          "password",
+          "roleCodes"
+        ]
       },
       "UpdateUserRequest": {
         "type": "object",
@@ -723,10 +796,15 @@
           "status": {
             "type": "string",
             "example": "DISABLED",
-            "enum": ["ACTIVE", "DISABLED"]
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
           },
           "roleCodes": {
-            "example": ["OUTLET_CASHIER"],
+            "example": [
+              "OUTLET_CASHIER"
+            ],
             "description": "Replaces the role set when present.",
             "type": "array",
             "items": {
@@ -751,14 +829,23 @@
             "example": "Outlet Cashier"
           },
           "permissions": {
-            "example": ["menu.read", "sales.create", "sales.read"],
+            "example": [
+              "menu.read",
+              "sales.create",
+              "sales.read"
+            ],
             "type": "array",
             "items": {
               "type": "string"
             }
           }
         },
-        "required": ["id", "code", "name", "permissions"]
+        "required": [
+          "id",
+          "code",
+          "name",
+          "permissions"
+        ]
       },
       "OutletMenuItemResponse": {
         "type": "object",
@@ -865,10 +952,18 @@
           "reason": {
             "type": "string",
             "example": "RESTOCK",
-            "enum": ["RESTOCK", "WRITE_OFF", "RECOUNT"]
+            "enum": [
+              "RESTOCK",
+              "WRITE_OFF",
+              "RECOUNT"
+            ]
           }
         },
-        "required": ["menuItemId", "deltaQuantity", "reason"]
+        "required": [
+          "menuItemId",
+          "deltaQuantity",
+          "reason"
+        ]
       },
       "AdjustInventoryResponse": {
         "type": "object",
@@ -891,7 +986,12 @@
             "example": "2026-11-20T04:00:00.000Z"
           }
         },
-        "required": ["menuItemId", "quantityOnHand", "version", "updatedAt"]
+        "required": [
+          "menuItemId",
+          "quantityOnHand",
+          "version",
+          "updatedAt"
+        ]
       },
       "CreateSaleRequestLine": {
         "type": "object",
@@ -909,7 +1009,10 @@
             "description": "Line quantity; duplicates are merged by menuItemId server-side."
           }
         },
-        "required": ["menuItemId", "quantity"]
+        "required": [
+          "menuItemId",
+          "quantity"
+        ]
       },
       "CreateSaleRequest": {
         "type": "object",
@@ -922,7 +1025,9 @@
             }
           }
         },
-        "required": ["items"]
+        "required": [
+          "items"
+        ]
       },
       "SaleItemResponse": {
         "type": "object",
@@ -989,7 +1094,9 @@
           "status": {
             "type": "string",
             "example": "COMPLETED",
-            "enum": ["COMPLETED"]
+            "enum": [
+              "COMPLETED"
+            ]
           },
           "currencyCode": {
             "type": "string",
@@ -1018,7 +1125,12 @@
           "syncStatus": {
             "type": "string",
             "example": "PENDING",
-            "enum": ["PENDING", "RETRY", "DELIVERED", "QUARANTINED"],
+            "enum": [
+              "PENDING",
+              "RETRY",
+              "DELIVERED",
+              "QUARANTINED"
+            ],
             "description": "Resolved from the outbox row; separate from sale status (PRD §8.7)."
           }
         },
@@ -1058,7 +1170,9 @@
           "status": {
             "type": "string",
             "example": "COMPLETED",
-            "enum": ["COMPLETED"]
+            "enum": [
+              "COMPLETED"
+            ]
           },
           "soldAt": {
             "type": "string",
@@ -1099,7 +1213,11 @@
             "description": "True once the grace window has lapsed; new sales are blocked."
           }
         },
-        "required": ["hours", "expiresAt", "expired"]
+        "required": [
+          "hours",
+          "expiresAt",
+          "expired"
+        ]
       },
       "SyncOutboxStatus": {
         "type": "object",
@@ -1178,7 +1296,10 @@
           "status": {
             "type": "string",
             "example": "up",
-            "enum": ["up", "down"]
+            "enum": [
+              "up",
+              "down"
+            ]
           },
           "reason": {
             "type": "string",
@@ -1187,7 +1308,9 @@
             "description": "Failure reason when the check is down."
           }
         },
-        "required": ["status"]
+        "required": [
+          "status"
+        ]
       },
       "HealthChecksResponse": {
         "type": "object",
@@ -1199,7 +1322,10 @@
             "$ref": "#/components/schemas/DependencyStatusResponse"
           }
         },
-        "required": ["database", "redis"]
+        "required": [
+          "database",
+          "redis"
+        ]
       },
       "HealthResponse": {
         "type": "object",
@@ -1207,7 +1333,10 @@
           "status": {
             "type": "string",
             "example": "ok",
-            "enum": ["ok", "down"]
+            "enum": [
+              "ok",
+              "down"
+            ]
           },
           "service": {
             "type": "string",

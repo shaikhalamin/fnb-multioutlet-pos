@@ -371,7 +371,17 @@
     "/sales": {
       "post": {
         "operationId": "SalesController_createSale",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Client-minted key, stable across retries of the same sale attempt (8-128 chars).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, HttpCode, Param, Post, Query, Req } fro
 import type { Request } from 'express';
 import {
   ApiCreatedResponse,
+  ApiHeader,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -34,6 +35,11 @@ export class SalesController {
   @RequirePermissions('sales.create')
   @ApiOperation({
     summary: 'Create an atomic multi-item sale (requires an Idempotency-Key header).',
+  })
+  @ApiHeader({
+    name: 'Idempotency-Key',
+    required: true,
+    description: 'Client-minted key, stable across retries of the same sale attempt (8-128 chars).',
   })
   @ApiCreatedResponse({ type: SaleResponse })
   @ApiResponse({ status: 400, description: 'VALIDATION_FAILED — missing/invalid Idempotency-Key or body' })

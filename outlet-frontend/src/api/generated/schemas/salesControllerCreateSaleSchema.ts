@@ -7,6 +7,11 @@ import * as z from 'zod'
 import { createSaleRequestSchema } from './createSaleRequestSchema'
 import { saleResponseSchema } from './saleResponseSchema'
 
+/**
+ * Client-minted key, stable across retries of the same sale attempt (8-128 chars).
+ */
+export const salesControllerCreateSaleHeaderIdempotencyKeySchema = z.string().describe('Client-minted key, stable across retries of the same sale attempt (8-128 chars).')
+
 export const salesControllerCreateSaleStatus201Schema = saleResponseSchema
 
 export const salesControllerCreateSaleStatus400Schema = z.unknown()
@@ -22,3 +27,7 @@ export const salesControllerCreateSaleResponseSchema = salesControllerCreateSale
 export const salesControllerCreateSaleErrorSchema = z.union([salesControllerCreateSaleStatus400Schema, salesControllerCreateSaleStatus409Schema, salesControllerCreateSaleStatus422Schema, salesControllerCreateSaleStatus503Schema])
 
 export const salesControllerCreateSaleBodySchema = createSaleRequestSchema
+
+export const salesControllerCreateSaleHeadersSchema = z.object({
+  'Idempotency-Key': salesControllerCreateSaleHeaderIdempotencyKeySchema,
+})

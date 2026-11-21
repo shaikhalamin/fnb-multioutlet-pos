@@ -14,8 +14,8 @@ export function salesControllerCreateSaleMutationOptions<TContext = unknown>(con
   const mutationKey = salesControllerCreateSaleMutationKey()
   return mutationOptions<SalesControllerCreateSaleStatus201, ResponseErrorConfig<SalesControllerCreateSaleStatus400 | SalesControllerCreateSaleStatus409 | SalesControllerCreateSaleStatus422 | SalesControllerCreateSaleStatus503>, SalesControllerCreateSaleOptions, TContext>({
     mutationKey,
-    mutationFn: async({ body }) => {
-      return salesControllerCreateSale({ ...config, body, throwOnError: true })
+    mutationFn: async({ body, headers }) => {
+      return salesControllerCreateSale({ ...config, body, headers, throwOnError: true })
     },
   })
 }
