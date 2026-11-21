@@ -12,11 +12,12 @@ declare module 'autocannon' {
       request: AutocannonRequestSpec,
       context: Record<string, unknown>,
     ) => AutocannonRequestSpec;
+    /** autocannon@8 emits `(client, statusCode, resBytes, responseTime)`. */
     onResponse?: (
-      status: number,
-      body: string,
-      context: Record<string, unknown>,
-      headers: Record<string, string>,
+      client: unknown,
+      statusCode: number,
+      resBytes: number,
+      responseTime: number,
     ) => void;
   }
 

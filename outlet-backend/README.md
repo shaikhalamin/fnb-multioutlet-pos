@@ -159,7 +159,8 @@ cd outlet-backend && pnpm perf:sale --duration 60 --connections 25
 Flags: `--url` (default `http://127.0.0.1:5000/api/v1`), `--duration` (s,
 default 30), `--connections` (default 10), `--rate` (optional req/s cap),
 `--p95-threshold` (ms, default 500), `--max-quantity` (default 5),
-`--restock-target` (default 5000).
+`--restock-target` (default 0 = auto: sized to `duration × 2400` units per
+item so stock never binds mid-run).
 
 Post-run integrity checks live in the root README's Phase 4 verification
 notes (duplicate receipts, oversells, outbox completeness, HQ totals).
