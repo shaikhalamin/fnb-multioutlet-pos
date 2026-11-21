@@ -24,6 +24,7 @@
     "migration:run": "tsx src/database/migrate.ts run",
     "migration:revert": "tsx src/database/migrate.ts revert",
     "migration:show": "tsx src/database/migrate.ts show",
+    "seed": "tsx src/database/seed.ts",
     "openapi:export": "pnpm build && node scripts/export-openapi.mjs"
   },
   "dependencies": {

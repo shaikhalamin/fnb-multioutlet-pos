@@ -205,6 +205,9 @@ function loadEnvFileGaps(): void {
   }
 }
 
+/** Fill env gaps from `.env.local`/`.env` (used by the seed CLI too). */
+export { loadEnvFileGaps };
+
 // ---------------------------------------------------------------------------
 // Entry points
 // ---------------------------------------------------------------------------

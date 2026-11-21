@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Seed runner (Phase 0 placeholder).
+# Seed runner (PRD §6.2 outlet bootstrap).
 #
-# Outlet seed data (local bootstrap users, PRD §6.2) lands with the Phase 2
-# auth/RBAC implementation.
+# Locally runs the TypeScript seed via tsx; inside the production image (which
+# ships only dist/ + production dependencies) runs the compiled JS. The seed
+# is idempotent — natural keys make re-runs no-ops.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-echo "No seeds defined yet (Phase 0 placeholder)." >&2
+if [ "${NODE_ENV:-}" = "production" ] && [ -f "dist/database/seed.js" ]; then
+  exec node "dist/database/seed.js"
+fi
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  corepack enable
+fi
+exec pnpm exec tsx src/database/seed.ts
