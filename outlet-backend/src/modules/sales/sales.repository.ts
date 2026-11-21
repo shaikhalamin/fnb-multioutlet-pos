@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { DataSource, EntityManager } from 'typeorm';
+import { ApiException } from '../../common/exceptions/api.exception.js';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { CatalogItemEntity } from '../../database/entities/catalog-item.entity.js';
 import { MenuSyncStateEntity } from '../../database/entities/menu-sync-state.entity.js';
@@ -263,11 +264,16 @@ export class SalesRepository {
 
 export function decodeSaleCursor(raw: string | undefined): SaleCursor | undefined {
   if (!raw) return undefined;
+  // A present-but-undecodable cursor is a client bug: reject it loudly
+  // instead of silently restarting at page 1 (duplicate rows for the user).
   try {
     const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as SaleCursor;
-    if (typeof parsed.soldAt !== 'string' || typeof parsed.id !== 'string') return undefined;
+    if (typeof parsed.soldAt !== 'string' || typeof parsed.id !== 'string') {
+      throw new ApiException('VALIDATION_FAILED', 'Malformed pagination cursor.', 400);
+    }
     return parsed;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof ApiException) throw error;
+    throw new ApiException('VALIDATION_FAILED', 'Malformed pagination cursor.', 400);
   }
 }

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import type { Env } from '../../config/env.schema.js';
 import { hashRequest, mergeLines, SalesService } from './sales.service.js';
-import type { SalesRepository } from './sales.repository.js';
+import { decodeSaleCursor, type SalesRepository } from './sales.repository.js';
 import type { ReceiptCounterRepository } from '../receipts/receipt-counter.repository.js';
 import type { OutboxRepository } from '../outbox/outbox.repository.js';
 
@@ -18,7 +18,10 @@ const USER: AuthenticatedUser = {
 
 const NOW = new Date('2026-11-20T04:02:03Z');
 
-function catalogItem(menuItemId: string, overrides: Partial<{ effectivePriceMinor: string; active: boolean }> = {}) {
+function catalogItem(
+  menuItemId: string,
+  overrides: Partial<{ effectivePriceMinor: string; active: boolean; currencyCode: string }> = {},
+) {
   return {
     menuItemId,
     assignmentId: 'a-' + menuItemId,
@@ -27,7 +30,7 @@ function catalogItem(menuItemId: string, overrides: Partial<{ effectivePriceMino
     description: '',
     category: 'Cat',
     effectivePriceMinor: overrides.effectivePriceMinor ?? '1200',
-    currencyCode: 'USD',
+    currencyCode: overrides.currencyCode ?? 'USD',
     active: overrides.active ?? true,
     hqItemVersion: 1,
     appliedRevision: '1',
@@ -172,6 +175,7 @@ describe('SalesService.createSale', () => {
         requestSha256: hashRequest(ACTOR.idempotencyKey, [
           { menuItemId: '97000000-0000-4000-8000-000000000001', quantity: 1 },
         ]),
+        saleId: 'sale-existing',
         responseJson: stored,
       })),
     });
@@ -186,6 +190,33 @@ describe('SalesService.createSale', () => {
     expect(salesRepo.decrementStock).not.toHaveBeenCalled();
     expect(receiptCounters.allocate).not.toHaveBeenCalled();
     expect(outbox.insertSaleCompletedEvent).not.toHaveBeenCalled();
+  });
+
+  it('refreshes syncStatus from the outbox on replay instead of freezing PENDING', async () => {
+    const stored = {
+      id: 'sale-existing',
+      receiptNo: 'A-000009',
+      totalMinor: '1200',
+      syncStatus: 'PENDING',
+    };
+    const { service, outbox } = makeService({
+      findIdempotencyKey: vi.fn(async () => ({
+        requestSha256: hashRequest(ACTOR.idempotencyKey, [
+          { menuItemId: '97000000-0000-4000-8000-000000000001', quantity: 1 },
+        ]),
+        saleId: 'sale-existing',
+        responseJson: stored,
+      })),
+    });
+    // The stored response froze PENDING; the outbox has since published it.
+    outbox.findStatusBySaleId = vi.fn(async () => 'DELIVERED');
+
+    const result = await service.createSale(
+      { items: [{ menuItemId: '97000000-0000-4000-8000-000000000001', quantity: 1 }] } as never,
+      ACTOR,
+    );
+
+    expect(result).toMatchObject({ id: 'sale-existing', receiptNo: 'A-000009', syncStatus: 'DELIVERED' });
   });
 
   it('rejects the same key with a different payload with 409 IDEMPOTENCY_KEY_REUSED (AT-08)', async () => {
@@ -303,5 +334,47 @@ describe('SalesService.createSale', () => {
         ACTOR,
       ),
     ).rejects.toMatchObject({ status: 422, code: 'VALIDATION_FAILED' });
+  });
+
+  it('rejects mixed-currency lines with 422 — minor units are never summed across currencies', async () => {
+    const { service } = makeService({
+      loadCatalogItems: vi.fn(async (_m: unknown, ids: string[]) =>
+        ids.map((id, index) => catalogItem(id, { currencyCode: index === 0 ? 'USD' : 'EUR' })),
+      ),
+    });
+
+    await expect(
+      service.createSale(
+        { items: [
+          { menuItemId: '97000000-0000-4000-8000-000000000001', quantity: 1 },
+          { menuItemId: '97000000-0000-4000-8000-000000000002', quantity: 1 },
+        ] } as never,
+        ACTOR,
+      ),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: 'UNPROCESSABLE_ENTITY',
+      details: { currencies: ['USD', 'EUR'] },
+    });
+  });
+});
+
+describe('decodeSaleCursor (malformed input)', () => {
+  it('rejects garbage cursors with 400 VALIDATION_FAILED instead of restarting at page 1', () => {
+    expect(() => decodeSaleCursor('not-a-cursor')).toThrowError(
+      expect.objectContaining({ status: 400, code: 'VALIDATION_FAILED' }),
+    );
+  });
+
+  it('accepts absent cursors (first page) and valid encoded cursors', () => {
+    expect(decodeSaleCursor(undefined)).toBeUndefined();
+    const encoded = Buffer.from(
+      JSON.stringify({ soldAt: NOW.toISOString(), id: '00000000-0000-4000-8000-000000000001' }),
+      'utf8',
+    ).toString('base64url');
+    expect(decodeSaleCursor(encoded)).toEqual({
+      soldAt: NOW.toISOString(),
+      id: '00000000-0000-4000-8000-000000000001',
+    });
   });
 });

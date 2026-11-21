@@ -96,9 +96,17 @@ export class SalesService {
             { idempotencyKey: actor.idempotencyKey },
           );
         }
-        // Successful prior result: replay the stored response verbatim —
-        // no second deduction, no second event.
-        return existing.responseJson as unknown as SaleResponse;
+        // Successful prior result: replay the stored response — no second
+        // deduction, no second event. `syncStatus` is a live projection, so
+        // it is refreshed from the outbox rather than replaying a frozen
+        // PENDING after the event has since been published.
+        const replayed = existing.responseJson as unknown as SaleResponse;
+        const liveSyncStatus =
+          (await this.outbox.findStatusBySaleId(existing.saleId)) ?? replayed.syncStatus;
+        return {
+          ...(replayed as unknown as Record<string, unknown>),
+          syncStatus: liveSyncStatus,
+        } as SaleResponse;
       }
 
       // (4) Offline grace policy (PRD §8.8): a stale menu sync blocks new
@@ -124,6 +132,7 @@ export class SalesService {
         merged.map((line) => line.menuItemId),
       );
       const byId = new Map(catalogItems.map((item) => [item.menuItemId, item]));
+      const currencies = new Set<string>();
       for (const line of merged) {
         const item = byId.get(line.menuItemId);
         if (!item) {
@@ -136,6 +145,18 @@ export class SalesService {
             menuItemId: line.menuItemId,
           });
         }
+        currencies.add(item.currencyCode);
+      }
+      // Single-currency invariant (PRD §7): minor units of different
+      // currencies must never be summed into one `totalMinor`.
+      const currencyCode = [...currencies][0] ?? 'USD';
+      if (currencies.size > 1) {
+        throw new ApiException(
+          'UNPROCESSABLE_ENTITY',
+          'Sale lines mix currency codes; a sale must be single-currency.',
+          422,
+          { currencies: [...currencies] },
+        );
       }
 
       // (6) Atomic conditional stock updates in sorted menuItemId order —
@@ -180,7 +201,6 @@ export class SalesService {
       const allocation = await this.receiptCounters.allocate(manager, this.outletId);
 
       // (9) Insert the sale + immutable snapshot lines; all math in BigInt.
-      const currencyCode = byId.get(merged[0].menuItemId)?.currencyCode ?? 'USD';
       const lineRows = merged.map((line) => {
         const item = byId.get(line.menuItemId);
         if (!item) throw new Error(`catalog item vanished mid-transaction: ${line.menuItemId}`);
