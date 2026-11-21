@@ -268,6 +268,36 @@
         ]
       }
     },
+    "/menu": {
+      "get": {
+        "operationId": "MenuCacheController_getMenu",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutletMenuItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Active local menu with effective prices and stock.",
+        "tags": [
+          "Menu"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -544,6 +574,56 @@
           "code",
           "name",
           "permissions"
+        ]
+      },
+      "OutletMenuItemResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+            "description": "HQ master-menu-item UUID (local catalog key)."
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "category": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Effective outlet price, integer minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "availableQuantity": {
+            "type": "number",
+            "example": 30,
+            "description": "On-hand quantity; 0 when no balance row exists."
+          }
+        },
+        "required": [
+          "menuItemId",
+          "sku",
+          "name",
+          "description",
+          "category",
+          "unitPriceMinor",
+          "currencyCode",
+          "availableQuantity"
         ]
       }
     }

@@ -19,6 +19,9 @@ export const SkipEnvelope: CustomDecorator<string> = SetMetadata(SKIP_ENVELOPE_K
 /** Symbol-keyed cursor a handler attaches via `withCursor` (invisible to JSON). */
 export const PAGE_CURSOR: unique symbol = Symbol('fnb:pageCursor');
 
+/** Symbol-keyed extra meta a handler attaches via `withMeta` (invisible to JSON). */
+export const EXTRA_META: unique symbol = Symbol('fnb:extraMeta');
+
 /**
  * Attaches a pagination cursor to a response payload; the envelope
  * interceptor hoists it into `meta.nextCursor` (PRD §7.1).
@@ -26,6 +29,18 @@ export const PAGE_CURSOR: unique symbol = Symbol('fnb:pageCursor');
 export function withCursor<T>(data: T, nextCursor: string | undefined): T {
   if (nextCursor === undefined || (data !== null && typeof data !== 'object')) return data;
   (data as Record<symbol, unknown>)[PAGE_CURSOR] = nextCursor;
+  return data;
+}
+
+/**
+ * Attaches extra envelope metadata to a response payload; the interceptor
+ * hoists it into `meta` (e.g. `catalogRevision`/`lastCatalogSyncAt` on
+ * `GET /menu`, PRD §7.3). Keys collide with the standard `requestId`/
+ * `timestamp`/`nextCursor` at the caller's peril.
+ */
+export function withMeta<T>(data: T, extra: Record<string, unknown>): T {
+  if (data !== null && typeof data !== 'object') return data;
+  (data as Record<symbol, unknown>)[EXTRA_META] = extra;
   return data;
 }
 
@@ -55,12 +70,17 @@ export class EnvelopeInterceptor implements NestInterceptor {
           data && typeof data === 'object' && PAGE_CURSOR in data
             ? String((data as Record<symbol, unknown>)[PAGE_CURSOR])
             : undefined;
+        const extra =
+          data && typeof data === 'object' && EXTRA_META in data
+            ? ((data as Record<symbol, unknown>)[EXTRA_META] as Record<string, unknown>)
+            : undefined;
         return {
           data: data ?? null,
           meta: {
             requestId: getRequestId() ?? this.responseRequestId(context),
             timestamp: new Date().toISOString(),
             ...(nextCursor !== undefined ? { nextCursor } : {}),
+            ...extra,
           },
         };
       }),

@@ -11,6 +11,7 @@ import { ConfigurationModule } from './config/configuration.module.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { MenuCacheModule } from './modules/menu-cache/menu-cache.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
@@ -23,6 +24,7 @@ import { UsersModule } from './modules/users/users.module.js';
     DatabaseModule,
     AuthModule,
     UsersModule,
+    MenuCacheModule,
     HealthModule,
   ],
   providers: [
