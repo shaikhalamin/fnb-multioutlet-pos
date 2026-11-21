@@ -46,12 +46,18 @@ export class MenuPullService {
     }
 
     // Redelivered pages are pure no-ops: revisions at or below the local
-    // checkpoint never re-apply (§8.3). Contiguity is then only required of
-    // the remaining (new) entries — a gap routes to the snapshot protocol
-    // instead of guessing (AT-14).
+    // checkpoint never re-apply (§8.3). Contiguity is then required of EVERY
+    // consecutive pair in the remaining (new) entries — the first revision
+    // must follow the checkpoint and no internal gap may exist. A gap routes
+    // to the snapshot protocol instead of guessing (AT-14).
     const applicable = changes.changes.filter((change) => BigInt(change.revision) > BigInt(lastRevision));
     const first = applicable[0];
-    const contiguous = first === undefined || BigInt(first.revision) === BigInt(lastRevision) + 1n;
+    const contiguous =
+      first === undefined ||
+      (BigInt(first.revision) === BigInt(lastRevision) + 1n &&
+        applicable.every(
+          (change, index) => index === 0 || BigInt(change.revision) === BigInt(applicable[index - 1].revision) + 1n,
+        ));
     if (changes.snapshotRequired || !contiguous) {
       this.logger.warn('menu_pull_gap_detected', {
         lastAppliedRevision: lastRevision,

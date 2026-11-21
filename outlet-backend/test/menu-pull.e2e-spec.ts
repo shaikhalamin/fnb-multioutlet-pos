@@ -217,7 +217,9 @@ describeWithDeps('MenuPullService (real PostgreSQL)', () => {
     const drop = randomUUID();
     cleanupIds.push(keep, add, drop);
 
-    await makeService(page([upsert(base + 1, keep), upsert(base + 1, drop)])).pullAndApply();
+    // Distinct consecutive revisions — §8.3 revisions are strictly unique;
+    // a duplicate-revision page is malformed and routes to the snapshot.
+    await makeService(page([upsert(base + 1, keep), upsert(base + 2, drop)])).pullAndApply();
 
     const snapshotItems = [
       { ...upsert(base + 10, keep, { unitPriceMinor: '777' }).item, menuItemId: keep },
@@ -254,5 +256,28 @@ describeWithDeps('MenuPullService (real PostgreSQL)', () => {
     const reply = { ...page([upsert(base + 1, randomUUID())]), outletId: randomUUID() };
     await expect(makeService(reply).pullAndApply()).rejects.toThrow(/does not match local identity/);
     expect(await revision()).toBe(base);
+  });
+
+  it('routes a page with an internal revision gap to the snapshot protocol (§8.3)', async () => {
+    const base = await revision();
+    const item = randomUUID();
+    cleanupIds.push(item);
+
+    // The page starts contiguously (base+1) but skips base+2. HQ's own rule
+    // answers snapshotRequired for this shape; the outlet verifies every
+    // consecutive pair itself — defense in depth, never guessing across a gap.
+    const snapshot = {
+      snapshotId: randomUUID(),
+      snapshotRevision: String(base + 5),
+      items: [{ ...upsert(base + 5, item).item, menuItemId: item }],
+    } as unknown as MenuSnapshotResponse;
+    const result = await makeService(
+      page([upsert(base + 1, randomUUID()), upsert(base + 3, randomUUID())], base + 3),
+      snapshot,
+    ).pullAndApply();
+
+    expect(result.snapshotApplied).toBe(true);
+    expect(result.nextRevision).toBe(String(base + 5));
+    expect(await revision()).toBe(base + 5);
   });
 });

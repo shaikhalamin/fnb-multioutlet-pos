@@ -130,32 +130,39 @@ export class SyncService {
 
   /**
    * Manual repair/replay for a quarantined event (PRD §8.5): re-arms the row
-   * to PENDING after operator review, audited.
+   * to PENDING after operator review. The re-arm and its audit row commit in
+   * ONE transaction — a crash between them can never leave a privileged
+   * replay un-audited (same atomicity as the grace override).
    */
   async replayQuarantinedEvent(
     eventId: string,
     actor: { id: string },
   ): Promise<ReplayOutboxEventResponse> {
-    const replayed = await this.outbox.replayQuarantined(eventId);
-    if (!replayed) {
-      const existing = await this.dataSource.query<Array<{ status: string }>>(
-        'SELECT status FROM outbox_events WHERE id = $1',
-        [eventId],
-      );
-      if (existing.length === 0) {
-        throw new ApiException('NOT_FOUND', 'Outbox event not found.', 404);
+    await this.dataSource.transaction(async (manager) => {
+      const replayed = await this.outbox.replayQuarantined(manager, eventId);
+      if (!replayed) {
+        const existing = await manager.query<Array<{ status: string }>>(
+          'SELECT status FROM outbox_events WHERE id = $1',
+          [eventId],
+        );
+        if (existing.length === 0) {
+          throw new ApiException('NOT_FOUND', 'Outbox event not found.', 404);
+        }
+        throw new ApiException('CONFLICT', `Only QUARANTINED events can be replayed (status: ${existing[0].status}).`, 409, {
+          eventId,
+          status: existing[0].status,
+        });
       }
-      throw new ApiException('CONFLICT', `Only QUARANTINED events can be replayed (status: ${existing[0].status}).`, 409, {
-        eventId,
-        status: existing[0].status,
-      });
-    }
-    await this.audit.record({
-      actorType: 'USER',
-      actorId: actor.id,
-      action: 'sync.quarantine_replayed',
-      entityId: eventId,
-      metadata: {},
+      await this.audit.record(
+        {
+          actorType: 'USER',
+          actorId: actor.id,
+          action: 'sync.quarantine_replayed',
+          entityId: eventId,
+          metadata: {},
+        },
+        manager,
+      );
     });
     return { eventId, status: 'PENDING' };
   }

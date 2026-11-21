@@ -56,9 +56,13 @@ describe('computeBackoffDelayMs (PRD §8.7)', () => {
     expect(high).toBe(6_000);
   });
 
-  it('honors Retry-After when it exceeds the computed backoff', () => {
+  it('honors Retry-After exactly: never shortened by jitter, never capped below it', () => {
     expect(computeBackoffDelayMs(1, 30, () => 0.5)).toBe(30_000);
-    // Smaller than the exponential value → ignored.
+    // Downward jitter must not shave a server-provided Retry-After.
+    expect(computeBackoffDelayMs(1, 30, () => 0)).toBe(30_000);
+    // Beyond the exponential ceiling: the server floor wins over the cap.
+    expect(computeBackoffDelayMs(1, 900, () => 1)).toBe(900_000);
+    // Smaller than the exponential value → the computed backoff wins.
     expect(computeBackoffDelayMs(3, 1, () => 0.5)).toBe(20_000);
   });
 });

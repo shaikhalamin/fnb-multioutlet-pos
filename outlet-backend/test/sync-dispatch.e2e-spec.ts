@@ -197,8 +197,9 @@ describeWithDeps('Outlet sync dispatch (e2e)', () => {
       );
       expect(audit[0].count).toBe(1);
 
-      // Manual replay re-arms the row (§8.5) — exercised at the repository level.
-      const replayed = await outbox.replayQuarantined(eventId);
+      // Manual replay re-arms the row (§8.5) — exercised at the repository
+      // level, on a transaction manager as the service does.
+      const replayed = await appDataSource.transaction((manager) => outbox.replayQuarantined(manager, eventId));
       expect(replayed).toBe(true);
     } finally {
       await closeServer(server.server);

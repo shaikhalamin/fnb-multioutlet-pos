@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JsonLogger } from '../../../common/logging/logger.service.js';
@@ -15,6 +15,24 @@ import type { SyncEventV1 } from '../clients/generated/types/SyncEventV1.js';
 const MAX_BATCH_BYTES = 1_048_576;
 
 export type DeliveryOutcome = { delivered: number; retried: number; quarantined: number };
+
+/**
+ * Deterministic `Idempotency-Key` for a logical batch (§8.5): derived from
+ * the sorted event IDs, so a BullMQ job retry of the same rows reuses the
+ * exact key a transport-level retry would — same bytes in, same key out. A
+ * different row set (e.g. after partial per-event acks) is a different
+ * logical batch and derives a different key.
+ */
+function batchIdempotencyKey(eventIds: string[]): string {
+  const hash = createHash('sha256').update([...eventIds].sort().join('\n')).digest('hex');
+  return [
+    hash.slice(0, 8),
+    hash.slice(8, 12),
+    `4${hash.slice(13, 16)}`,
+    `8${hash.slice(17, 20)}`,
+    hash.slice(20, 32),
+  ].join('-');
+}
 
 /**
  * Sync delivery (PRD §8.5–§8.6 C–F): loads durable rows by event ID, splits
@@ -40,7 +58,13 @@ export class SyncDeliveryProcessor {
 
   async deliver(eventIds: string[], now = new Date()): Promise<DeliveryOutcome> {
     const rows = (await this.outbox.findByIds(eventIds)).filter(
-      (row) => row.status === 'PENDING' || row.status === 'RETRY',
+      (row) =>
+        (row.status === 'PENDING' || row.status === 'RETRY') &&
+        // BullMQ's own job retries (2s exponential) can fire long before a
+        // previously computed backoff elapses (e.g. 429 + Retry-After 60s):
+        // rows not yet due are left for the sweeper, which re-leases them
+        // when next_attempt_at passes.
+        (row.nextAttemptAt === null || row.nextAttemptAt.getTime() <= now.getTime()),
     );
     if (rows.length === 0) return { delivered: 0, retried: 0, quarantined: 0 };
 
@@ -76,9 +100,9 @@ export class SyncDeliveryProcessor {
   private async deliverBatch(batch: OutboxEventEntity[], now: Date): Promise<DeliveryOutcome> {
     const startedAt = Date.now();
     const events = batch.map((row) => row.payload as unknown as SyncEventV1);
-    // One key per logical batch attempt: a network retry of the same bytes
-    // reuses it (§8.5) — this call IS that attempt.
-    const idempotencyKey = randomUUID();
+    // One key per logical batch: derived from the sorted event IDs so both a
+    // transport retry and a BullMQ job retry of the same rows reuse it (§8.5).
+    const idempotencyKey = batchIdempotencyKey(batch.map((row) => row.id));
 
     try {
       const response = await this.hq.pushEventBatch(events, idempotencyKey);

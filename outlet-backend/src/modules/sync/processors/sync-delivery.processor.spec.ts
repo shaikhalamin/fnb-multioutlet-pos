@@ -132,7 +132,8 @@ describe('SyncDeliveryProcessor', () => {
     const [ids, error, delay] = outbox.markRetry.mock.calls[0];
     expect(ids).toEqual([rows[0].id]);
     expect(error).toContain('service unavailable');
-    expect(delay).toBeGreaterThanOrEqual(30_000 * 0.8);
+    // Retry-After is a floor honored exactly: 30s means 30s, no jitter shave.
+    expect(delay).toBe(30_000);
     expect(outbox.markQuarantined).not.toHaveBeenCalled();
   });
 
@@ -169,6 +170,31 @@ describe('SyncDeliveryProcessor', () => {
     outbox.findByIds.mockResolvedValue([eventRow({ status: 'DELIVERED' }), eventRow({ status: 'QUARANTINED' })]);
 
     const outcome = await processor.deliver(['a', 'b']);
+    expect(outcome).toEqual({ delivered: 0, retried: 0, quarantined: 0 });
+    expect(hq.pushEventBatch).not.toHaveBeenCalled();
+  });
+
+  it('reuses the same Idempotency-Key across job retries of the same rows (§8.5)', async () => {
+    const rows = [eventRow(), eventRow()];
+    const { processor, outbox, hq } = makeDelivery(async (events) => ({
+      results: (events as Array<{ eventId: string }>).map((event) => ({ eventId: event.eventId, status: 'ACCEPTED' })),
+    }));
+    // Rows still eligible on the second deliver() — e.g. a BullMQ job retry
+    // racing the outcome write, or a reconciliation re-lease.
+    outbox.findByIds.mockResolvedValue(rows.map((row) => ({ ...row, status: 'RETRY', nextAttemptAt: null })));
+
+    await processor.deliver(rows.map((row) => row.id));
+    await processor.deliver(rows.map((row) => row.id));
+    expect(hq.pushEventBatch).toHaveBeenCalledTimes(2);
+    expect(hq.pushEventBatch.mock.calls[1][1]).toBe(hq.pushEventBatch.mock.calls[0][1]);
+  });
+
+  it('leaves rows whose computed backoff has not elapsed to the sweeper', async () => {
+    const rows = [eventRow({ status: 'RETRY', nextAttemptAt: new Date(Date.now() + 60_000) })];
+    const { processor, outbox, hq } = makeDelivery(async () => ({ results: [] }));
+    outbox.findByIds.mockResolvedValue(rows);
+
+    const outcome = await processor.deliver(rows.map((row) => row.id));
     expect(outcome).toEqual({ delivered: 0, retried: 0, quarantined: 0 });
     expect(hq.pushEventBatch).not.toHaveBeenCalled();
   });

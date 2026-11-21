@@ -316,9 +316,14 @@ export class OutboxRepository {
     return result.affected ?? 0;
   }
 
-  /** Re-arms a quarantined row for delivery after operator review (§8.5). */
-  async replayQuarantined(id: string): Promise<boolean> {
-    const result = await this.dataSource
+  /**
+   * Re-arms a quarantined row for delivery after operator review (§8.5).
+   * Runs on the caller's transaction manager so the re-arm and its audit row
+   * commit atomically — a privileged action is never left un-audited by a
+   * crash between the two writes.
+   */
+  async replayQuarantined(manager: EntityManager, id: string): Promise<boolean> {
+    const result = await manager
       .getRepository(OutboxEventEntity)
       .createQueryBuilder()
       .update(OutboxEventEntity)
@@ -364,15 +369,18 @@ const RETRY_MAX_DELAY_MS = 10 * 60_000;
 const RETRY_JITTER_RATIO = 0.2;
 
 /**
- * Capped exponential backoff with ±20% jitter, honoring a server
- * `Retry-After` (seconds) when present (§8.7). Pure and deterministic under
- * a seeded random for tests.
+ * Capped exponential backoff with ±20% jitter. A server `Retry-After`
+ * (seconds) is a floor honored exactly (§8.7): the wait is never shortened
+ * by jitter and never capped below it — only a larger computed backoff can
+ * extend it. Pure and deterministic under a seeded random for tests.
  */
 export function computeBackoffDelayMs(attempts: number, retryAfterSeconds?: number | null, random = Math.random): number {
   const exponential = Math.min(RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempts - 1), RETRY_MAX_DELAY_MS);
-  const base = retryAfterSeconds && retryAfterSeconds > 0 ? Math.max(exponential, retryAfterSeconds * 1000) : exponential;
+  if (retryAfterSeconds && retryAfterSeconds > 0) {
+    return Math.max(Math.round(retryAfterSeconds * 1000), exponential);
+  }
   const jitter = 1 + (random() * 2 - 1) * RETRY_JITTER_RATIO;
-  return Math.min(Math.round(base * jitter), RETRY_MAX_DELAY_MS);
+  return Math.min(Math.round(exponential * jitter), RETRY_MAX_DELAY_MS);
 }
 
 /** PRD §8.4 integrity invariants, enforced before any outbox write. */

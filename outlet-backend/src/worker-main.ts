@@ -57,11 +57,17 @@ async function bootstrap(): Promise<void> {
   // processors reload durable rows. Redis/BullMQ unavailability is logged and
   // retried — it never touches the sale path (AT-10); sales commit to the
   // outbox regardless and the sweeper picks the backlog up on recovery.
+  // Queues are created ONCE, before any retry loop: re-entering the
+  // scheduler registration must never construct new Queue instances, or a
+  // Redis outage leaks a reconnecting connection per retry round.
   const connection: ConnectionOptions = { url: env.REDIS_URL };
   const deliveryQueue = new Queue(QUEUES.syncDelivery, { connection });
+  const dispatchQueue = new Queue(QUEUES.outboxDispatch, { connection });
+  const menuPullQueue = new Queue(QUEUES.menuPull, { connection });
+  const reconcileQueue = new Queue(QUEUES.syncReconcile, { connection });
 
   const workers: Worker[] = [];
-  const queues: Queue[] = [deliveryQueue];
+  const queues: Queue[] = [deliveryQueue, dispatchQueue, menuPullQueue, reconcileQueue];
 
   const sweepWorker = new Worker(
     QUEUES.outboxDispatch,
@@ -111,12 +117,9 @@ async function bootstrap(): Promise<void> {
 
   // Repeatable schedulers with fixed jobIds: replicas collapse onto one
   // schedule entry per outlet site (distributed singleton, PRD §13). Adding
-  // the repeatable is idempotent; a Redis outage retries via the loop below.
+  // the repeatable is idempotent; a Redis outage retries via the loop below
+  // against the SAME queue instances — no new connections are opened.
   const schedule = async (): Promise<void> => {
-    const dispatchQueue = new Queue(QUEUES.outboxDispatch, { connection });
-    const menuPullQueue = new Queue(QUEUES.menuPull, { connection });
-    const reconcileQueue = new Queue(QUEUES.syncReconcile, { connection });
-    queues.push(dispatchQueue, menuPullQueue, reconcileQueue);
     await dispatchQueue.upsertJobScheduler(
       REPEAT_JOB_IDS.sweep,
       { every: sync.outboxSweepIntervalMs },

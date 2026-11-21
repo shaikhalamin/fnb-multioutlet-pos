@@ -43,6 +43,9 @@ function makeService(overrides: {
             update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn(() => ({ execute: vi.fn().mockResolvedValue({ affected: 1 }) })) })) })),
           })),
         })),
+        // The transaction manager delegates raw queries to the same mock the
+        // specs program (e.g. the not-quarantined 409 lookup).
+        query: (...args: unknown[]) => dataSource.query(...args),
       }),
     ),
   };
@@ -116,14 +119,17 @@ describe('SyncService.extendGrace', () => {
 });
 
 describe('SyncService.replayQuarantinedEvent', () => {
-  it('re-arms a quarantined event and audits the replay (§8.5)', async () => {
+  it('re-arms a quarantined event and audits the replay in one transaction (§8.5)', async () => {
     const { service, outbox, audit } = makeService({});
     outbox.replayQuarantined.mockResolvedValue(true);
 
     const response = await service.replayQuarantinedEvent('3feeb5c0-53fa-476e-a758-3040a3529041', { id: 'manager-1' });
     expect(response).toEqual({ eventId: '3feeb5c0-53fa-476e-a758-3040a3529041', status: 'PENDING' });
+    // The re-arm and the audit row share ONE transaction manager.
+    expect(outbox.replayQuarantined).toHaveBeenCalledWith(expect.anything(), '3feeb5c0-53fa-476e-a758-3040a3529041');
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'sync.quarantine_replayed' }),
+      expect.anything(),
     );
   });
 
