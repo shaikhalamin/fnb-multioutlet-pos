@@ -525,6 +525,33 @@
         ]
       }
     },
+    "/sync/status": {
+      "get": {
+        "operationId": "SyncController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Local menu-sync checkpoint and outbox backlog.",
+        "tags": [
+          "Sync"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -1148,6 +1175,102 @@
           "status",
           "soldAt",
           "lineCount"
+        ]
+      },
+      "SyncGraceStatus": {
+        "type": "object",
+        "properties": {
+          "hours": {
+            "type": "number",
+            "example": 72,
+            "description": "Configured offline grace window in hours (PRD §8.8)."
+          },
+          "expiresAt": {
+            "type": "object",
+            "example": "2026-11-23T04:00:00.000Z",
+            "description": "When the grace window expires; null when never synced."
+          },
+          "expired": {
+            "type": "boolean",
+            "example": false,
+            "description": "True once the grace window has lapsed; new sales are blocked."
+          }
+        },
+        "required": [
+          "hours",
+          "expiresAt",
+          "expired"
+        ]
+      },
+      "SyncOutboxStatus": {
+        "type": "object",
+        "properties": {
+          "pendingCount": {
+            "type": "number",
+            "example": 1,
+            "description": "Events awaiting delivery (PENDING)."
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Events parked for manual repair (QUARANTINED)."
+          },
+          "oldestPendingAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z",
+            "nullable": true,
+            "description": "Oldest undelivered event timestamp; null when the outbox is drained."
+          },
+          "lastPublishedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true,
+            "description": "Most recent successful delivery; null when nothing has been delivered yet."
+          }
+        },
+        "required": [
+          "pendingCount",
+          "quarantinedCount",
+          "oldestPendingAt",
+          "lastPublishedAt"
+        ]
+      },
+      "SyncStatusResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "11111111-1111-4111-8111-111111111111"
+          },
+          "outletCode": {
+            "type": "string",
+            "example": "A"
+          },
+          "lastAppliedRevision": {
+            "type": "string",
+            "example": "1",
+            "description": "Last applied HQ catalog revision, decimal string."
+          },
+          "lastMenuSyncAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z",
+            "nullable": true,
+            "description": "Last successful menu sync; null when never synced."
+          },
+          "grace": {
+            "$ref": "#/components/schemas/SyncGraceStatus"
+          },
+          "outbox": {
+            "$ref": "#/components/schemas/SyncOutboxStatus"
+          }
+        },
+        "required": [
+          "outletId",
+          "outletCode",
+          "lastAppliedRevision",
+          "lastMenuSyncAt",
+          "grace",
+          "outbox"
         ]
       }
     }
