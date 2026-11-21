@@ -1096,6 +1096,94 @@
         ]
       }
     },
+    "/sync/v1/menu/changes": {
+      "get": {
+        "operationId": "MenuPullController_getChanges",
+        "parameters": [
+          {
+            "name": "afterRevision",
+            "required": false,
+            "in": "query",
+            "description": "Last revision the outlet applied; changes after it are returned. Decimal string.",
+            "schema": {
+              "example": "41",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "default": 500,
+              "example": 500,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogChangesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the menu.pull scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Revisioned catalog deltas for the authenticated outlet (ascending).",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/sync/v1/menu/snapshot": {
+      "get": {
+        "operationId": "MenuPullController_getSnapshot",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuSnapshotResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the menu.pull scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Consistent full catalog snapshot for bootstrap/gap recovery.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -1986,6 +2074,230 @@
             "description": "Overlap window for the predecessor key, hours."
           }
         }
+      },
+      "CatalogChangeItem": {
+        "type": "object",
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "category": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Effective outlet price — minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          },
+          "itemVersion": {
+            "type": "number",
+            "example": 3,
+            "description": "HQ item `version` at change-record time."
+          }
+        },
+        "required": [
+          "assignmentId",
+          "sku",
+          "name",
+          "description",
+          "category",
+          "unitPriceMinor",
+          "currencyCode",
+          "active",
+          "itemVersion"
+        ]
+      },
+      "CatalogChangeEntry": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "example": "42",
+            "description": "Per-outlet catalog revision — decimal string."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "UPSERT",
+              "REMOVE"
+            ]
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "item": {
+            "nullable": true,
+            "description": "Full effective item snapshot for UPSERT; null for REMOVE tombstones.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogChangeItem"
+              }
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "type",
+          "menuItemId",
+          "item"
+        ]
+      },
+      "CatalogChangesResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "fromRevision": {
+            "type": "string",
+            "example": "41",
+            "description": "The afterRevision this page starts from — decimal string."
+          },
+          "nextRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Revision after applying this page (checkpoint target) — decimal string."
+          },
+          "headRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Outlet's current head revision — decimal string."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "example": false,
+            "description": "True when more changes exist beyond this page."
+          },
+          "snapshotRequired": {
+            "type": "boolean",
+            "example": false,
+            "description": "True when contiguous history is unavailable; the outlet must take a snapshot."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogChangeEntry"
+            }
+          }
+        },
+        "required": [
+          "outletId",
+          "fromRevision",
+          "nextRevision",
+          "headRevision",
+          "hasMore",
+          "snapshotRequired",
+          "changes"
+        ]
+      },
+      "MenuSnapshotItem": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "category": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Effective outlet price — minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "active": {
+            "type": "boolean",
+            "example": true,
+            "description": "False marks the tombstone: the outlet deactivates the item locally."
+          },
+          "itemVersion": {
+            "type": "number",
+            "example": 3
+          }
+        },
+        "required": [
+          "menuItemId",
+          "assignmentId",
+          "sku",
+          "name",
+          "description",
+          "category",
+          "unitPriceMinor",
+          "currencyCode",
+          "active",
+          "itemVersion"
+        ]
+      },
+      "MenuSnapshotResponse": {
+        "type": "object",
+        "properties": {
+          "snapshotId": {
+            "type": "string",
+            "example": "6f1a2c34-1b2c-4d3e-9a7b-3c4d5e6f7a8b"
+          },
+          "snapshotRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Revision of the snapshot view — decimal string."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MenuSnapshotItem"
+            }
+          }
+        },
+        "required": [
+          "snapshotId",
+          "snapshotRevision",
+          "items"
+        ]
       },
       "DependencyStatusResponse": {
         "type": "object",

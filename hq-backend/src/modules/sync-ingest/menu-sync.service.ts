@@ -9,7 +9,8 @@ import type {
   MenuSnapshotItem,
   MenuSnapshotResponse,
 } from './dto/menu-sync.dto.js';
-import type { CatalogChangeRow, MenuPullRepository } from './menu-pull.repository.js';
+// Value import (not `import type`): the class is an injection token.
+import { MenuPullRepository, type CatalogChangeRow } from './menu-pull.repository.js';
 
 /**
  * Menu pull surface (PRD §8.3): revisioned deltas for the authenticated
