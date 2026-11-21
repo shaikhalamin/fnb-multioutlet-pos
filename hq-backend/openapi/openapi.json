@@ -1,6 +1,106 @@
 {
   "openapi": "3.0.0",
   "paths": {
+    "/audit/logs": {
+      "get": {
+        "operationId": "AuditController_listLogs",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Exact action filter.",
+            "schema": {
+              "example": "auth.login_failed",
+              "type": "string"
+            }
+          },
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "entityId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "occurred_at lower bound (inclusive), ISO 8601 UTC.",
+            "schema": {
+              "example": "2026-11-01T00:00:00Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "occurred_at upper bound (exclusive), ISO 8601 UTC.",
+            "schema": {
+              "example": "2026-12-01T00:00:00Z",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditLogResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List audit log entries (newest first, keyset pagination).",
+        "tags": [
+          "Audit"
+        ]
+      }
+    },
     "/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -1549,6 +1649,64 @@
       }
     },
     "schemas": {
+      "AuditLogResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0b6a8fd0-0468-4f7a-9e94-6c1e4f0e2a11"
+          },
+          "actorType": {
+            "type": "string",
+            "example": "USER",
+            "enum": [
+              "USER",
+              "OUTLET_KEY",
+              "SYSTEM"
+            ]
+          },
+          "actorId": {
+            "type": "string",
+            "example": "3f7a4d60-1a08-4f0e-9e94-6c1e4f0e2a11",
+            "nullable": true
+          },
+          "action": {
+            "type": "string",
+            "example": "auth.login_failed"
+          },
+          "entityType": {
+            "type": "string",
+            "example": "api_key",
+            "nullable": true
+          },
+          "entityId": {
+            "type": "string",
+            "example": "0b6a8fd0-0468-4f7a-9e94-6c1e4f0e2a11",
+            "nullable": true
+          },
+          "metadata": {
+            "type": "object",
+            "example": {
+              "reason": "bad_credentials"
+            },
+            "description": "Immutable structured context captured at write time."
+          },
+          "occurredAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "actorType",
+          "actorId",
+          "action",
+          "entityType",
+          "entityId",
+          "metadata",
+          "occurredAt"
+        ]
+      },
       "LoginRequest": {
         "type": "object",
         "properties": {
