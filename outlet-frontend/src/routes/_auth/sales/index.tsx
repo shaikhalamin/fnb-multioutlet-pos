@@ -16,7 +16,7 @@ const searchSchema = z.object({
   to: z.string().datetime({ offset: true }).optional(),
 })
 
-export const Route = createFileRoute('/_auth/sales')({
+export const Route = createFileRoute('/_auth/sales/')({
   validateSearch: (search) => {
     const parsed = searchSchema.safeParse({
       from: typeof search.from === 'string' ? search.from : undefined,

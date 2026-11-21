@@ -14,8 +14,8 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthInventoryRouteImport } from './routes/_auth/inventory'
 import { Route as AuthPosRouteImport } from './routes/_auth/pos'
-import { Route as AuthSalesRouteImport } from './routes/_auth/sales'
 import { Route as AuthUsersRouteImport } from './routes/_auth/users'
+import { Route as AuthSalesIndexRouteImport } from './routes/_auth/sales/index'
 import { Route as AuthSalesSaleIdRouteImport } from './routes/_auth/sales.$saleId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -42,20 +42,20 @@ const AuthPosRoute = AuthPosRouteImport.update({
   path: '/pos',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthSalesRoute = AuthSalesRouteImport.update({
-  id: '/sales',
-  path: '/sales',
-  getParentRoute: () => AuthRoute,
-} as any)
 const AuthUsersRoute = AuthUsersRouteImport.update({
   id: '/users',
   path: '/users',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthSalesIndexRoute = AuthSalesIndexRouteImport.update({
+  id: '/sales/',
+  path: '/sales/',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthSalesSaleIdRoute = AuthSalesSaleIdRouteImport.update({
-  id: '/$saleId',
-  path: '/$saleId',
-  getParentRoute: () => AuthSalesRoute,
+  id: '/sales/$saleId',
+  path: '/sales/$saleId',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -63,18 +63,18 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/inventory': typeof AuthInventoryRoute
   '/pos': typeof AuthPosRoute
-  '/sales': typeof AuthSalesRouteWithChildren
   '/users': typeof AuthUsersRoute
   '/sales/$saleId': typeof AuthSalesSaleIdRoute
+  '/sales/': typeof AuthSalesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/inventory': typeof AuthInventoryRoute
   '/pos': typeof AuthPosRoute
-  '/sales': typeof AuthSalesRouteWithChildren
   '/users': typeof AuthUsersRoute
   '/sales/$saleId': typeof AuthSalesSaleIdRoute
+  '/sales': typeof AuthSalesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -83,9 +83,9 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_auth/inventory': typeof AuthInventoryRoute
   '/_auth/pos': typeof AuthPosRoute
-  '/_auth/sales': typeof AuthSalesRouteWithChildren
   '/_auth/users': typeof AuthUsersRoute
   '/_auth/sales/$saleId': typeof AuthSalesSaleIdRoute
+  '/_auth/sales/': typeof AuthSalesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -94,18 +94,18 @@ export interface FileRouteTypes {
     | '/login'
     | '/inventory'
     | '/pos'
-    | '/sales'
     | '/users'
     | '/sales/$saleId'
+    | '/sales/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/inventory'
     | '/pos'
-    | '/sales'
     | '/users'
     | '/sales/$saleId'
+    | '/sales'
   id:
     | '__root__'
     | '/'
@@ -113,9 +113,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/_auth/inventory'
     | '/_auth/pos'
-    | '/_auth/sales'
     | '/_auth/users'
     | '/_auth/sales/$saleId'
+    | '/_auth/sales/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -161,13 +161,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthPosRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/sales': {
-      id: '/_auth/sales'
-      path: '/sales'
-      fullPath: '/sales'
-      preLoaderRoute: typeof AuthSalesRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/users': {
       id: '/_auth/users'
       path: '/users'
@@ -175,40 +168,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthUsersRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/sales/': {
+      id: '/_auth/sales/'
+      path: '/sales'
+      fullPath: '/sales/'
+      preLoaderRoute: typeof AuthSalesIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/sales/$saleId': {
       id: '/_auth/sales/$saleId'
-      path: '/$saleId'
+      path: '/sales/$saleId'
       fullPath: '/sales/$saleId'
       preLoaderRoute: typeof AuthSalesSaleIdRouteImport
-      parentRoute: typeof AuthSalesRoute
+      parentRoute: typeof AuthRoute
     }
   }
 }
 
-interface AuthSalesRouteChildren {
-  AuthSalesSaleIdRoute: typeof AuthSalesSaleIdRoute
-}
-
-const AuthSalesRouteChildren: AuthSalesRouteChildren = {
-  AuthSalesSaleIdRoute: AuthSalesSaleIdRoute,
-}
-
-const AuthSalesRouteWithChildren = AuthSalesRoute._addFileChildren(
-  AuthSalesRouteChildren,
-)
-
 interface AuthRouteChildren {
   AuthInventoryRoute: typeof AuthInventoryRoute
   AuthPosRoute: typeof AuthPosRoute
-  AuthSalesRoute: typeof AuthSalesRouteWithChildren
   AuthUsersRoute: typeof AuthUsersRoute
+  AuthSalesSaleIdRoute: typeof AuthSalesSaleIdRoute
+  AuthSalesIndexRoute: typeof AuthSalesIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthInventoryRoute: AuthInventoryRoute,
   AuthPosRoute: AuthPosRoute,
-  AuthSalesRoute: AuthSalesRouteWithChildren,
   AuthUsersRoute: AuthUsersRoute,
+  AuthSalesSaleIdRoute: AuthSalesSaleIdRoute,
+  AuthSalesIndexRoute: AuthSalesIndexRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
