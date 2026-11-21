@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import bcrypt from 'bcrypt';
 import { UsersService } from './users.service.js';
-import type { UsersRepository } from './users.repository.js';
+import { decodeCursor, type UsersRepository } from './users.repository.js';
 
 function makeRepo(overrides: Partial<UsersRepository> = {}) {
   return {
@@ -96,5 +96,69 @@ describe('UsersService.create', () => {
     const user = await service.create(request);
 
     expect(user.email).toBe('new@outlet-a.local');
+  });
+
+  it('maps a concurrent unique-email violation (23505) to the same 409 CONFLICT', async () => {
+    // The pre-check passed for both racers; the DB unique index decides.
+    const repo = makeRepo({
+      insertUser: vi.fn(async () => {
+        throw Object.assign(new Error('duplicate key value violates unique constraint'), {
+          code: '23505',
+          constraint: 'uq_outlet_users_email',
+        });
+      }),
+    });
+    const service = makeService(repo, makeDataSource());
+
+    await expect(service.create(request)).rejects.toMatchObject({
+      status: 409,
+      code: 'CONFLICT',
+      details: { email: 'new@outlet-a.local' },
+    });
+  });
+});
+
+describe('UsersService.update', () => {
+  const base = {
+    id: 'user-1',
+    email: 'cashier@outlet-a.local',
+    passwordHash: 'hash',
+    status: 'ACTIVE' as const,
+    createdAt: new Date('2026-11-20T04:00:00Z'),
+    updatedAt: new Date('2026-11-20T04:00:00Z'),
+    roleCodes: ['OUTLET_CASHIER'],
+  };
+
+  it('returns the post-update row so updatedAt reflects the writes', async () => {
+    const fresh = {
+      ...base,
+      status: 'DISABLED' as const,
+      updatedAt: new Date('2026-11-21T09:00:00Z'),
+      roleCodes: ['OUTLET_CLERK'],
+    };
+    const repo = makeRepo({ findById: vi.fn(async () => fresh) });
+    const service = makeService(repo, makeDataSource());
+
+    const user = await service.update(
+      'user-1',
+      { status: 'DISABLED', roleCodes: ['OUTLET_CLERK'] },
+      'actor-2',
+    );
+
+    expect(user.status).toBe('DISABLED');
+    expect(user.roleCodes).toEqual(['OUTLET_CLERK']);
+    expect(user.updatedAt).toBe('2026-11-21T09:00:00.000Z');
+  });
+});
+
+describe('decodeCursor (malformed input)', () => {
+  it('rejects garbage cursors with 400 VALIDATION_FAILED instead of restarting at page 1', () => {
+    expect(() => decodeCursor('not-a-cursor')).toThrowError(
+      expect.objectContaining({ status: 400, code: 'VALIDATION_FAILED' }),
+    );
+  });
+
+  it('treats an absent cursor as the first page', () => {
+    expect(decodeCursor(undefined)).toBeUndefined();
   });
 });

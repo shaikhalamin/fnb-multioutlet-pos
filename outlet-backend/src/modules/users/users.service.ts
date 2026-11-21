@@ -44,6 +44,14 @@ export class UsersService {
       });
       await this.users.setUserRoles(manager, user.id, roles.map((role) => role.id));
       return user;
+    }).catch((error: unknown) => {
+      // Two concurrent creates with the same email both pass the read above;
+      // the DB unique index (lower(email)) is the authority — surface its
+      // violation as the same 409 instead of a 500.
+      if (isUniqueEmailViolation(error)) {
+        throw new ApiException('CONFLICT', 'A user with this email already exists.', 409, { email });
+      }
+      throw error;
     });
 
     return toUserResponse({
@@ -79,14 +87,19 @@ export class UsersService {
     });
 
     const roleCodes = roles ? roles.map((role) => role.code) : await this.users.roleCodesOf(user.id);
-    return toUserResponse({
-      id: user.id,
-      email: user.email,
-      status: (request.status ?? user.status) as OutletUserStatus,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt,
-      roleCodes,
-    });
+    // Re-read after the transaction so `updatedAt` reflects the writes above
+    // (the entity read earlier still carries the pre-update timestamp).
+    const updated = await this.users.findById(userId);
+    return toUserResponse(
+      updated ?? {
+        id: user.id,
+        email: user.email,
+        status: (request.status ?? user.status) as OutletUserStatus,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+        roleCodes,
+      },
+    );
   }
 
   async listRoles(): Promise<
@@ -104,6 +117,12 @@ export class UsersService {
     }
     return roles;
   }
+}
+
+/** PostgreSQL unique-violation on the (case-insensitive) email index. */
+function isUniqueEmailViolation(error: unknown): boolean {
+  const candidate = error as { code?: string; constraint?: string } | null;
+  return candidate?.code === '23505' && (candidate.constraint ?? '').includes('email');
 }
 
 function toUserResponse(user: {
