@@ -4,10 +4,12 @@
 */
 
 import * as z from 'zod'
+import { syncOutboxErrorSampleSchema } from './syncOutboxErrorSampleSchema'
 
 export const syncOutboxStatusSchema = z.object({
   pendingCount: z.number().describe('Events awaiting delivery (PENDING).').meta({ examples: [1] }),
   quarantinedCount: z.number().describe('Events parked for manual repair (QUARANTINED).').meta({ examples: [0] }),
   oldestPendingAt: z.string().nullable().describe('Oldest undelivered event timestamp; null when the outbox is drained.').meta({ examples: ['2026-11-20T04:02:03.000Z'] }),
   lastPublishedAt: z.string().nullable().describe('Most recent successful delivery; null when nothing has been delivered yet.').meta({ examples: ['2026-11-20T04:02:10.000Z'] }),
+  lastErrorSample: z.array(syncOutboxErrorSampleSchema).nullish().describe('Quarantined events with their terminal errors, for operator review.'),
 })

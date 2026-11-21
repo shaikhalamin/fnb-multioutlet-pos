@@ -14,6 +14,8 @@ export const OUTLET_PERMISSIONS = [
   'inventory.read',
   'inventory.adjust',
   'sync.read',
+  // Privileged, audited emergency actions (PRD §8.8) — managers only.
+  'sync.override',
   'users.read',
   'users.write',
 ] as const satisfies readonly string[]

@@ -4,9 +4,11 @@
 */
 
 import * as z from 'zod'
+import { syncGraceOverrideStatusSchema } from './syncGraceOverrideStatusSchema'
 
 export const syncGraceStatusSchema = z.object({
   hours: z.number().describe('Configured offline grace window in hours (PRD §8.8).').meta({ examples: [72] }),
-  expiresAt: z.string().nullable().describe('When the grace window expires; null when never synced.').meta({ examples: ['2026-11-23T04:00:00.000Z'] }),
-  expired: z.boolean().describe('True once the grace window has lapsed; new sales are blocked.').meta({ examples: [false] }),
+  expiresAt: z.string().nullable().describe('Effective grace expiry (window or active override); null when never synced.').meta({ examples: ['2026-11-23T04:00:00.000Z'] }),
+  expired: z.boolean().describe('True once the effective grace expiry has lapsed; new sales are blocked.').meta({ examples: [false] }),
+  override: syncGraceOverrideStatusSchema.nullish().describe('The active emergency override, when one is in force (PRD §8.8).'),
 })

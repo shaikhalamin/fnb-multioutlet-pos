@@ -562,6 +562,91 @@
         ]
       }
     },
+    "/sync/grace-override": {
+      "post": {
+        "operationId": "SyncController_extendGrace",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtendGraceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GraceOverrideResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "FORBIDDEN — requires sync.override (AT-17 flavor)"
+          },
+          "404": {
+            "description": "NOT_FOUND — menu sync state missing"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Extend the offline grace window (privileged, audited — PRD §8.8).",
+        "tags": [
+          "Sync"
+        ]
+      }
+    },
+    "/sync/outbox/{eventId}/replay": {
+      "post": {
+        "operationId": "SyncController_replayEvent",
+        "parameters": [
+          {
+            "name": "eventId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayOutboxEventResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND — event does not exist"
+          },
+          "409": {
+            "description": "CONFLICT — event is not QUARANTINED"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Re-arm a quarantined outbox event after operator review (§8.5).",
+        "tags": [
+          "Sync"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -1194,6 +1279,36 @@
           "lineCount"
         ]
       },
+      "SyncGraceOverrideStatus": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "example": true,
+            "description": "True while the override still extends the grace window."
+          },
+          "until": {
+            "type": "string",
+            "example": "2026-11-23T12:00:00.000Z"
+          },
+          "reason": {
+            "type": "string",
+            "example": "Regional network outage — connector replacement scheduled.",
+            "maxLength": 500
+          },
+          "overriddenBy": {
+            "type": "string",
+            "example": "33333333-3333-4333-8333-333333333333",
+            "description": "The manager who applied the override."
+          }
+        },
+        "required": [
+          "active",
+          "until",
+          "reason",
+          "overriddenBy"
+        ]
+      },
       "SyncGraceStatus": {
         "type": "object",
         "properties": {
@@ -1206,18 +1321,54 @@
             "type": "string",
             "example": "2026-11-23T04:00:00.000Z",
             "nullable": true,
-            "description": "When the grace window expires; null when never synced."
+            "description": "Effective grace expiry (window or active override); null when never synced."
           },
           "expired": {
             "type": "boolean",
             "example": false,
-            "description": "True once the grace window has lapsed; new sales are blocked."
+            "description": "True once the effective grace expiry has lapsed; new sales are blocked."
+          },
+          "override": {
+            "nullable": true,
+            "description": "The active emergency override, when one is in force (PRD §8.8).",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/SyncGraceOverrideStatus"
+              }
+            ]
           }
         },
         "required": [
           "hours",
           "expiresAt",
           "expired"
+        ]
+      },
+      "SyncOutboxErrorSample": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "3feeb5c0-53fa-476e-a758-3040a3529041",
+            "description": "The quarantined event ID."
+          },
+          "sequenceNo": {
+            "type": "string",
+            "example": "108",
+            "description": "Per-outlet sequence — decimal string."
+          },
+          "lastError": {
+            "type": "string",
+            "example": "EVENT_ID_CONFLICT",
+            "nullable": true,
+            "description": "The terminal error that parked the event."
+          }
+        },
+        "required": [
+          "eventId",
+          "sequenceNo",
+          "lastError"
         ]
       },
       "SyncOutboxStatus": {
@@ -1244,6 +1395,14 @@
             "example": "2026-11-20T04:02:10.000Z",
             "nullable": true,
             "description": "Most recent successful delivery; null when nothing has been delivered yet."
+          },
+          "lastErrorSample": {
+            "nullable": true,
+            "description": "Quarantined events with their terminal errors, for operator review.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncOutboxErrorSample"
+            }
           }
         },
         "required": [
@@ -1289,6 +1448,64 @@
           "lastMenuSyncAt",
           "grace",
           "outbox"
+        ]
+      },
+      "ExtendGraceRequest": {
+        "type": "object",
+        "properties": {
+          "hours": {
+            "type": "number",
+            "example": 24,
+            "minimum": 1,
+            "maximum": 72,
+            "description": "Hours to extend from now (PRD §8.8)."
+          },
+          "reason": {
+            "type": "string",
+            "example": "Regional network outage; connector replacement scheduled.",
+            "minLength": 10,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "hours",
+          "reason"
+        ]
+      },
+      "GraceOverrideResponse": {
+        "type": "object",
+        "properties": {
+          "until": {
+            "type": "string",
+            "example": "2026-11-23T12:00:00.000Z",
+            "description": "The new effective grace expiry."
+          },
+          "hours": {
+            "type": "number",
+            "example": 24
+          }
+        },
+        "required": [
+          "until",
+          "hours"
+        ]
+      },
+      "ReplayOutboxEventResponse": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "3feeb5c0-53fa-476e-a758-3040a3529041"
+          },
+          "status": {
+            "type": "string",
+            "example": "PENDING",
+            "description": "The re-armed delivery status."
+          }
+        },
+        "required": [
+          "eventId",
+          "status"
         ]
       },
       "DependencyStatusResponse": {

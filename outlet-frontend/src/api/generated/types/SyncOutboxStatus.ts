@@ -3,6 +3,8 @@
 * Do not edit manually.
 */
 
+import type { SyncOutboxErrorSample } from './SyncOutboxErrorSample'
+
 export type SyncOutboxStatus = {
   /**
    * @description Events awaiting delivery (PENDING).
@@ -28,4 +30,9 @@ export type SyncOutboxStatus = {
    * @type string
    */
   lastPublishedAt: string | null;
+  /**
+   * @description Quarantined events with their terminal errors, for operator review.
+   * @type array | undefined
+   */
+  lastErrorSample?: SyncOutboxErrorSample[] | null;
 };

@@ -3,6 +3,8 @@
 * Do not edit manually.
 */
 
+import type { SyncGraceOverrideStatus } from './SyncGraceOverrideStatus'
+
 export type SyncGraceStatus = {
   /**
    * @description Configured offline grace window in hours (PRD §8.8).
@@ -11,15 +13,20 @@ export type SyncGraceStatus = {
    */
   hours: number;
   /**
-   * @description When the grace window expires; null when never synced.
+   * @description Effective grace expiry (window or active override); null when never synced.
    * @example 2026-11-23T04:00:00.000Z
    * @type string
    */
   expiresAt: string | null;
   /**
-   * @description True once the grace window has lapsed; new sales are blocked.
+   * @description True once the effective grace expiry has lapsed; new sales are blocked.
    * @example false
    * @type boolean
    */
   expired: boolean;
+  /**
+   * @description The active emergency override, when one is in force (PRD §8.8).
+   * @type object | undefined
+   */
+  override?: SyncGraceOverrideStatus | null;
 };
