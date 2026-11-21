@@ -1,0 +1,1243 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED"
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "429": {
+            "description": "RATE_LIMITED"
+          }
+        },
+        "summary": "Sign in with email + password (rate limited).",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          }
+        },
+        "summary": "Rotate the refresh cookie and mint a new access token.",
+        "tags": ["Auth"]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Revoke the current refresh session family.",
+        "tags": ["Auth"]
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "UsersController_listUsers",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List local outlet users (keyset pagination).",
+        "tags": ["Users"]
+      },
+      "post": {
+        "operationId": "UsersController_createUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — email already exists"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY — unknown role code"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create a local outlet user with roles.",
+        "tags": ["Users"]
+      }
+    },
+    "/users/{id}": {
+      "patch": {
+        "operationId": "UsersController_updateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Update status and/or replace roles.",
+        "tags": ["Users"]
+      }
+    },
+    "/roles": {
+      "get": {
+        "operationId": "UsersController_listRoles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List local roles with their permission sets.",
+        "tags": ["Users"]
+      }
+    },
+    "/menu": {
+      "get": {
+        "operationId": "MenuCacheController_getMenu",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutletMenuItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Active local menu with effective prices and stock.",
+        "tags": ["Menu"]
+      }
+    },
+    "/inventory": {
+      "get": {
+        "operationId": "InventoryController_listBalances",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InventoryBalanceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Local stock balances joined with catalog identity.",
+        "tags": ["Inventory"]
+      }
+    },
+    "/inventory/adjustments": {
+      "post": {
+        "operationId": "InventoryController_adjust",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustInventoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjustInventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY / ITEM_NOT_ASSIGNED / INSUFFICIENT_STOCK"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Audited stock adjustment (RESTOCK / WRITE_OFF / RECOUNT).",
+        "tags": ["Inventory"]
+      }
+    },
+    "/sales": {
+      "post": {
+        "operationId": "SalesController_createSale",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSaleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED — missing/invalid Idempotency-Key or body"
+          },
+          "409": {
+            "description": "INSUFFICIENT_STOCK / IDEMPOTENCY_KEY_REUSED"
+          },
+          "422": {
+            "description": "ITEM_NOT_ASSIGNED / ITEM_INACTIVE"
+          },
+          "503": {
+            "description": "SYNC_TEMPORARILY_UNAVAILABLE — offline grace expired"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create an atomic multi-item sale (requires an Idempotency-Key header).",
+        "tags": ["Sales"]
+      },
+      "get": {
+        "operationId": "SalesController_listSales",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound on soldAt (ISO 8601 UTC).",
+            "schema": {
+              "example": "2026-11-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive upper bound on soldAt (ISO 8601 UTC).",
+            "schema": {
+              "example": "2026-11-30T23:59:59.999Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SaleSummaryResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Local sale history (keyset pagination, optional from/to).",
+        "tags": ["Sales"]
+      }
+    },
+    "/sales/{id}": {
+      "get": {
+        "operationId": "SalesController_getSale",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Receipt detail with immutable line snapshots and sync status.",
+        "tags": ["Sales"]
+      }
+    },
+    "/sync/status": {
+      "get": {
+        "operationId": "SyncController_getStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncStatusResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Local menu-sync checkpoint and outbox backlog.",
+        "tags": ["Sync"]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Liveness/readiness probe (database + Redis)",
+        "tags": ["Health"]
+      }
+    }
+  },
+  "info": {
+    "title": "F&B Platform — Outlet API",
+    "description": "Outlet POS API for the locally assigned catalog, inventory, atomic multi-item sales and receipts. Runs at the outlet site against its own PostgreSQL; sales never depend on HQ reachability. All responses use the `ApiSuccess`/`ApiError` envelopes; money is a decimal string of integer minor units.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Current deployment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer-jwt": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "Outlet user access token (Phase 2)"
+      }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cashier@outlet-a.local",
+            "description": "Outlet user email."
+          },
+          "password": {
+            "type": "string",
+            "example": "Cashier123!",
+            "description": "Outlet user password.",
+            "minLength": 8
+          }
+        },
+        "required": ["email", "password"]
+      },
+      "AuthUserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "f5df2a66-119c-45e5-b797-fd31cfd93aa8"
+          },
+          "email": {
+            "type": "string",
+            "example": "cashier@outlet-a.local"
+          },
+          "roleCodes": {
+            "example": ["OUTLET_CASHIER"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permissions": {
+            "example": ["menu.read", "sales.create", "sales.read"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420",
+            "description": "Provisioned outlet this account belongs to."
+          }
+        },
+        "required": ["id", "email", "roleCodes", "permissions", "outletId"]
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs…",
+            "description": "Short-lived HS256 access JWT."
+          },
+          "tokenType": {
+            "type": "string",
+            "example": "Bearer"
+          },
+          "expiresInSeconds": {
+            "type": "number",
+            "example": 900,
+            "description": "Access token lifetime in seconds."
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserResponse"
+          }
+        },
+        "required": ["accessToken", "tokenType", "expiresInSeconds", "user"]
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": ["success"]
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "f5df2a66-119c-45e5-b797-fd31cfd93aa8"
+          },
+          "email": {
+            "type": "string",
+            "example": "cashier@outlet-a.local"
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": ["ACTIVE", "DISABLED"]
+          },
+          "roleCodes": {
+            "example": ["OUTLET_CASHIER"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "status",
+          "roleCodes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cashier@outlet-a.local",
+            "description": "Work email; unique at this outlet."
+          },
+          "password": {
+            "type": "string",
+            "example": "StrongPass123!",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "roleCodes": {
+            "example": ["OUTLET_CASHIER"],
+            "description": "Local role codes to assign.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["email", "password", "roleCodes"]
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "DISABLED",
+            "enum": ["ACTIVE", "DISABLED"]
+          },
+          "roleCodes": {
+            "example": ["OUTLET_CASHIER"],
+            "description": "Replaces the role set when present.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RoleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0c9d0f0e-2fa2-4f71-a111-6e2f83d94d02"
+          },
+          "code": {
+            "type": "string",
+            "example": "OUTLET_CASHIER"
+          },
+          "name": {
+            "type": "string",
+            "example": "Outlet Cashier"
+          },
+          "permissions": {
+            "example": ["menu.read", "sales.create", "sales.read"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["id", "code", "name", "permissions"]
+      },
+      "OutletMenuItemResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+            "description": "HQ master-menu-item UUID (local catalog key)."
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "category": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Effective outlet price, integer minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "availableQuantity": {
+            "type": "number",
+            "example": 30,
+            "description": "On-hand quantity; 0 when no balance row exists."
+          }
+        },
+        "required": [
+          "menuItemId",
+          "sku",
+          "name",
+          "description",
+          "category",
+          "unitPriceMinor",
+          "currencyCode",
+          "availableQuantity"
+        ]
+      },
+      "InventoryBalanceResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "quantityOnHand": {
+            "type": "number",
+            "example": 30,
+            "description": "On-hand quantity (integer)."
+          },
+          "version": {
+            "type": "number",
+            "example": 4,
+            "description": "Balance row version; bumps on every mutation."
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "menuItemId",
+          "name",
+          "sku",
+          "quantityOnHand",
+          "version",
+          "updatedAt"
+        ]
+      },
+      "AdjustInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+            "description": "Local catalog item to adjust."
+          },
+          "deltaQuantity": {
+            "type": "number",
+            "example": 50,
+            "description": "Signed quantity delta applied to on-hand stock (±1,000,000)."
+          },
+          "reason": {
+            "type": "string",
+            "example": "RESTOCK",
+            "enum": ["RESTOCK", "WRITE_OFF", "RECOUNT"]
+          }
+        },
+        "required": ["menuItemId", "deltaQuantity", "reason"]
+      },
+      "AdjustInventoryResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "quantityOnHand": {
+            "type": "number",
+            "example": 80,
+            "description": "On-hand quantity after the adjustment."
+          },
+          "version": {
+            "type": "number",
+            "example": 5
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": ["menuItemId", "quantityOnHand", "version", "updatedAt"]
+      },
+      "CreateSaleRequestLine": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+            "description": "Local catalog item UUID."
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2,
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Line quantity; duplicates are merged by menuItemId server-side."
+          }
+        },
+        "required": ["menuItemId", "quantity"]
+      },
+      "CreateSaleRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "1..100 distinct lines; duplicate menuItemIds are merged before validation.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateSaleRequestLine"
+            }
+          }
+        },
+        "required": ["items"]
+      },
+      "SaleItemResponse": {
+        "type": "object",
+        "properties": {
+          "saleItemId": {
+            "type": "string",
+            "example": "64750166-32a4-46f8-9285-f536f5b03213"
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger",
+            "description": "Immutable name snapshot captured at sale time (FR-02)."
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01",
+            "description": "Immutable SKU snapshot captured at sale time."
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Snapshot unit price, integer minor units, decimal string."
+          },
+          "subtotalMinor": {
+            "type": "string",
+            "example": "2400",
+            "description": "Line subtotal, integer minor units, decimal string."
+          }
+        },
+        "required": [
+          "saleItemId",
+          "menuItemId",
+          "name",
+          "sku",
+          "quantity",
+          "unitPriceMinor",
+          "subtotalMinor"
+        ]
+      },
+      "SaleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0a44e56a-628e-492a-81e0-83f4a4d68f76"
+          },
+          "receiptNo": {
+            "type": "string",
+            "example": "A-000001",
+            "description": "Outlet-scoped display receipt."
+          },
+          "outletId": {
+            "type": "string",
+            "example": "11111111-1111-4111-8111-111111111111"
+          },
+          "status": {
+            "type": "string",
+            "example": "COMPLETED",
+            "enum": ["COMPLETED"]
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SaleItemResponse"
+            }
+          },
+          "totalMinor": {
+            "type": "string",
+            "example": "3900",
+            "description": "Total, integer minor units, decimal string."
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "1",
+            "description": "Local catalog revision the sale was priced against, decimal string."
+          },
+          "soldAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z"
+          },
+          "syncStatus": {
+            "type": "string",
+            "example": "PENDING",
+            "enum": ["PENDING", "RETRY", "DELIVERED", "QUARANTINED"],
+            "description": "Resolved from the outbox row; separate from sale status (PRD §8.7)."
+          }
+        },
+        "required": [
+          "id",
+          "receiptNo",
+          "outletId",
+          "status",
+          "currencyCode",
+          "items",
+          "totalMinor",
+          "catalogRevision",
+          "soldAt",
+          "syncStatus"
+        ]
+      },
+      "SaleSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0a44e56a-628e-492a-81e0-83f4a4d68f76"
+          },
+          "receiptNo": {
+            "type": "string",
+            "example": "A-000001"
+          },
+          "totalMinor": {
+            "type": "string",
+            "example": "3900",
+            "description": "Total, integer minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "status": {
+            "type": "string",
+            "example": "COMPLETED",
+            "enum": ["COMPLETED"]
+          },
+          "soldAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z"
+          },
+          "lineCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Number of merged sale lines."
+          }
+        },
+        "required": [
+          "id",
+          "receiptNo",
+          "totalMinor",
+          "currencyCode",
+          "status",
+          "soldAt",
+          "lineCount"
+        ]
+      },
+      "SyncGraceStatus": {
+        "type": "object",
+        "properties": {
+          "hours": {
+            "type": "number",
+            "example": 72,
+            "description": "Configured offline grace window in hours (PRD §8.8)."
+          },
+          "expiresAt": {
+            "type": "object",
+            "example": "2026-11-23T04:00:00.000Z",
+            "description": "When the grace window expires; null when never synced."
+          },
+          "expired": {
+            "type": "boolean",
+            "example": false,
+            "description": "True once the grace window has lapsed; new sales are blocked."
+          }
+        },
+        "required": ["hours", "expiresAt", "expired"]
+      },
+      "SyncOutboxStatus": {
+        "type": "object",
+        "properties": {
+          "pendingCount": {
+            "type": "number",
+            "example": 1,
+            "description": "Events awaiting delivery (PENDING)."
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Events parked for manual repair (QUARANTINED)."
+          },
+          "oldestPendingAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z",
+            "nullable": true,
+            "description": "Oldest undelivered event timestamp; null when the outbox is drained."
+          },
+          "lastPublishedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true,
+            "description": "Most recent successful delivery; null when nothing has been delivered yet."
+          }
+        },
+        "required": [
+          "pendingCount",
+          "quarantinedCount",
+          "oldestPendingAt",
+          "lastPublishedAt"
+        ]
+      },
+      "SyncStatusResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "11111111-1111-4111-8111-111111111111"
+          },
+          "outletCode": {
+            "type": "string",
+            "example": "A"
+          },
+          "lastAppliedRevision": {
+            "type": "string",
+            "example": "1",
+            "description": "Last applied HQ catalog revision, decimal string."
+          },
+          "lastMenuSyncAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z",
+            "nullable": true,
+            "description": "Last successful menu sync; null when never synced."
+          },
+          "grace": {
+            "$ref": "#/components/schemas/SyncGraceStatus"
+          },
+          "outbox": {
+            "$ref": "#/components/schemas/SyncOutboxStatus"
+          }
+        },
+        "required": [
+          "outletId",
+          "outletCode",
+          "lastAppliedRevision",
+          "lastMenuSyncAt",
+          "grace",
+          "outbox"
+        ]
+      },
+      "DependencyStatusResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "up",
+            "enum": ["up", "down"]
+          },
+          "reason": {
+            "type": "string",
+            "example": "Connection refused",
+            "nullable": true,
+            "description": "Failure reason when the check is down."
+          }
+        },
+        "required": ["status"]
+      },
+      "HealthChecksResponse": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DependencyStatusResponse"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/DependencyStatusResponse"
+          }
+        },
+        "required": ["database", "redis"]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok",
+            "enum": ["ok", "down"]
+          },
+          "service": {
+            "type": "string",
+            "example": "outlet-backend"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "example": 120
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-11-20T19:43:03.720Z"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/HealthChecksResponse"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "uptimeSeconds",
+          "timestamp",
+          "checks"
+        ]
+      }
+    }
+  }
+}

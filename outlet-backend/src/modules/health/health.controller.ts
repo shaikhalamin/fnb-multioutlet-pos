@@ -1,8 +1,9 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiException } from '../../common/exceptions/api.exception.js';
 import { Public } from '../../common/auth/public.decorator.js';
+import { HealthResponse } from './dto/health.response.js';
 import { HealthService, type HealthReport } from './health.service.js';
 
 @Public()
@@ -15,6 +16,7 @@ export class HealthController {
   // Liveness probes must never be throttled (and must not consume budget).
   @SkipThrottle()
   @ApiOperation({ summary: 'Liveness/readiness probe (database + Redis)' })
+  @ApiOkResponse({ type: HealthResponse })
   async getHealth(): Promise<HealthReport> {
     const report = await this.healthService.check();
     if (report.status === 'down') {

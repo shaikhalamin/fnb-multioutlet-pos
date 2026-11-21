@@ -8,6 +8,16 @@ import tailwindcss from '@tailwindcss/vite'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  // Local dev: proxy API calls to the outlet backend container's published
+  // port (the generated clients are same-origin, baseURL /api/v1).
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.OUTLET_API_PROXY_TARGET ?? 'http://localhost:5000',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     devtools(),
     tailwindcss(),

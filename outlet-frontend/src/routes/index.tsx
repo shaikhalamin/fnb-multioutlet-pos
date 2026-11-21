@@ -1,14 +1,20 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { ApiError, apiGet } from '#/api/axios'
-import type { HealthReport } from '#/types/api'
+import { healthControllerGetHealth } from '#/api/generated/clients/healthControllerGetHealth'
+import { healthControllerGetHealthStatus200Schema } from '#/api/generated/schemas/healthControllerGetHealthSchema'
+import { ApiError } from '#/api/axios'
 
 export const Route = createFileRoute('/')({ component: App })
 
 function useHealth() {
   return useQuery({
     queryKey: ['health'],
-    queryFn: () => apiGet<HealthReport>('/health'),
+    // Parse the payload with the generated schema (AGENTS §4.2) so a
+    // malformed report surfaces as an error, not as garbage UI.
+    queryFn: async () =>
+      healthControllerGetHealthStatus200Schema.parse(
+        await healthControllerGetHealth(),
+      ),
     refetchInterval: 30_000,
   })
 }
@@ -64,7 +70,7 @@ function HealthPanel() {
     )
   }
 
-  const report = health.data.data
+  const report = health.data
   return (
     <section className="island-shell mt-8 rounded-2xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -107,13 +113,7 @@ function HealthPanel() {
         </div>
       </dl>
       <p className="mt-4 mb-0 text-xs text-[var(--sea-ink-soft)]">
-        Checked at{' '}
-        {new Date(
-          health.data.meta?.timestamp ?? report.timestamp,
-        ).toLocaleTimeString()}
-        {health.data.meta?.requestId
-          ? ` · request ${health.data.meta.requestId.slice(0, 8)}`
-          : ''}
+        Checked at {new Date(report.timestamp).toLocaleTimeString()}
       </p>
     </section>
   )

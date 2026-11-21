@@ -558,7 +558,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
           }
         },
         "summary": "Liveness/readiness probe (database + Redis)",
@@ -1271,6 +1278,83 @@
           "lastMenuSyncAt",
           "grace",
           "outbox"
+        ]
+      },
+      "DependencyStatusResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "up",
+            "enum": [
+              "up",
+              "down"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "example": "Connection refused",
+            "nullable": true,
+            "description": "Failure reason when the check is down."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "HealthChecksResponse": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DependencyStatusResponse"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/DependencyStatusResponse"
+          }
+        },
+        "required": [
+          "database",
+          "redis"
+        ]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok",
+            "enum": [
+              "ok",
+              "down"
+            ]
+          },
+          "service": {
+            "type": "string",
+            "example": "outlet-backend"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "example": 120
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-11-20T19:43:03.720Z"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/HealthChecksResponse"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "uptimeSeconds",
+          "timestamp",
+          "checks"
         ]
       }
     }
