@@ -1203,8 +1203,9 @@
             "description": "Configured offline grace window in hours (PRD §8.8)."
           },
           "expiresAt": {
-            "type": "object",
+            "type": "string",
             "example": "2026-11-23T04:00:00.000Z",
+            "nullable": true,
             "description": "When the grace window expires; null when never synced."
           },
           "expired": {

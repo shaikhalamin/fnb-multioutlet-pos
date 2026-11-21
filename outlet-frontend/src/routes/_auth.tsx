@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, Navigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { refreshSessionNow } from '#/features/auth/api'
 import { useSession } from '#/features/auth/session'
+import { SyncBanner } from '#/features/sync-status/SyncBanner'
 
 /**
  * Protected layout (PRD §11): every POS page sits behind it. Client-side
@@ -29,7 +30,14 @@ function AuthLayout() {
     }
   }, [session.user])
 
-  if (session.user) return <Outlet />
+  if (session.user) {
+    return (
+      <>
+        <SyncBanner />
+        <Outlet />
+      </>
+    )
+  }
   if (!bootstrapped) {
     return (
       <main

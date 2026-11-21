@@ -1,3 +1,4 @@
+import type { AxiosResponse } from 'axios'
 import { getAxiosInstance } from './generated/.kubb/client'
 import { sessionStore } from '#/features/auth/session'
 import { parseSessionUser } from '#/schemas/auth'
@@ -159,9 +160,13 @@ apiClient.interceptors.response.use(
     // Unwrap the ApiSuccess envelope (PRD §7.1) so generated clients — typed
     // against the bare OpenAPI payloads — resolve the DTO directly. The body
     // is re-serialized because the generated transport builds a web Response
-    // from whatever bytes it finds here.
+    // from whatever bytes it finds here. Envelope `meta` (e.g. the list
+    // routes' `nextCursor`) stays reachable for callers that ask for the
+    // native response (generated `throwOnError: false` results).
     if (body && typeof body === 'object' && 'data' in body) {
       response.data = JSON.stringify(body.data ?? null)
+      ;(response as AxiosResponse & { envelopeMeta?: unknown }).envelopeMeta =
+        body.meta
     }
     return response
   },

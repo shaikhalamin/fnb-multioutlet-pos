@@ -13,9 +13,9 @@ export type SyncGraceStatus = {
   /**
    * @description When the grace window expires; null when never synced.
    * @example 2026-11-23T04:00:00.000Z
-   * @type object
+   * @type string
    */
-  expiresAt: object;
+  expiresAt: string | null;
   /**
    * @description True once the grace window has lapsed; new sales are blocked.
    * @example false

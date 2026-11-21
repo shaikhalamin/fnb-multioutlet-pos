@@ -4,7 +4,12 @@ export class SyncGraceStatus {
   @ApiProperty({ example: 72, description: 'Configured offline grace window in hours (PRD §8.8).' })
   hours!: number;
 
-  @ApiProperty({ example: '2026-11-23T04:00:00.000Z', description: 'When the grace window expires; null when never synced.' })
+  @ApiProperty({
+    example: '2026-11-23T04:00:00.000Z',
+    type: String,
+    nullable: true,
+    description: 'When the grace window expires; null when never synced.',
+  })
   expiresAt!: string | null;
 
   @ApiProperty({ example: false, description: 'True once the grace window has lapsed; new sales are blocked.' })
