@@ -189,7 +189,7 @@ export class OutboxRepository {
    */
   async leaseDueBatch(batchSize: number, leaseMs: number, now = new Date()): Promise<OutboxEventEntity[]> {
     const leaseUntil = new Date(now.getTime() + leaseMs);
-    const rows = await this.dataSource.query<Record<string, unknown>[]>(
+    const result = await this.dataSource.query(
       `WITH due AS (
          SELECT id FROM outbox_events
          WHERE status IN ('PENDING', 'RETRY')
@@ -206,6 +206,8 @@ export class OutboxRepository {
        RETURNING o.*`,
       [now.toISOString(), batchSize, leaseUntil.toISOString()],
     );
+    // TypeORM hands back `[[rows], rowCount]` for a data-modifying CTE.
+    const rows = (Array.isArray(result?.[0]) ? result[0] : result) as Record<string, unknown>[];
     return rows.map(
       (row) =>
         ({
