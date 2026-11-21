@@ -1358,6 +1358,67 @@
         ]
       }
     },
+    "/reports/revenue-by-outlet": {
+      "get": {
+        "operationId": "ReportingController_revenueByOutlet",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "Window start (inclusive), ISO 8601 UTC instant.",
+            "schema": {
+              "example": "2026-11-01T00:00:00Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Window end (exclusive), ISO 8601 UTC instant.",
+            "schema": {
+              "example": "2026-12-01T00:00:00Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "currency",
+            "required": false,
+            "in": "query",
+            "description": "ISO 4217 currency filter; defaults to the company currency. Unlike currencies are never summed.",
+            "schema": {
+              "example": "USD",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RevenueByOutletResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED — malformed or out-of-range report window"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Completed revenue per outlet for a UTC window (PRD §10).",
+        "tags": [
+          "Reports"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -2871,6 +2932,81 @@
           "lastMenuSeenRevision",
           "lastReportedBacklog",
           "quarantinedCount"
+        ]
+      },
+      "OutletRevenueResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "11111111-1111-4111-8111-111111111111"
+          },
+          "outletName": {
+            "type": "string",
+            "example": "Outlet A"
+          },
+          "totalRevenueMinor": {
+            "type": "string",
+            "example": "750000",
+            "description": "Completed revenue in this window, integer minor units, decimal string of bigint."
+          },
+          "completedSaleCount": {
+            "type": "number",
+            "example": 450,
+            "description": "Completed sales in this window."
+          },
+          "lastIngestedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true,
+            "description": "All-time last-ingested watermark (freshness signal independent of the window); null when the outlet never reported a sale."
+          }
+        },
+        "required": [
+          "outletId",
+          "outletName",
+          "totalRevenueMinor",
+          "completedSaleCount",
+          "lastIngestedAt"
+        ]
+      },
+      "RevenueByOutletResponse": {
+        "type": "object",
+        "properties": {
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "outlets": {
+            "description": "Every ACTIVE outlet ordered by code — zero-sale outlets appear with \"0\", never omitted (§10).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutletRevenueResponse"
+            }
+          },
+          "totalRevenueMinor": {
+            "type": "string",
+            "example": "750000",
+            "description": "Sum across outlets, integer minor units, decimal string of bigint."
+          },
+          "dataAsOf": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true,
+            "description": "Max ingested_at across all outlets; null when nothing has ever been ingested."
+          },
+          "isProvisional": {
+            "type": "boolean",
+            "example": true,
+            "description": "True when any ACTIVE outlet last reported a pending-outbox backlog or has never ingested a sale event — stale data must never read as zero sales (AT-20)."
+          }
+        },
+        "required": [
+          "currencyCode",
+          "outlets",
+          "totalRevenueMinor",
+          "dataAsOf",
+          "isProvisional"
         ]
       },
       "DependencyStatusResponse": {
