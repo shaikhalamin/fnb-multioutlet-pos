@@ -1,0 +1,42 @@
+/* Backend-only machine client (PRD §11); never ship to a browser bundle. */
+
+import type { CatalogChangeEntry } from './CatalogChangeEntry.js'
+
+export type CatalogChangesResponse = {
+  /**
+   * @example 61de28db-92ed-46ef-9d90-3a951ac03420
+   * @type string
+   */
+  outletId: string;
+  /**
+   * @description The afterRevision this page starts from — decimal string.
+   * @example 41
+   * @type string
+   */
+  fromRevision: string;
+  /**
+   * @description Revision after applying this page (checkpoint target) — decimal string.
+   * @example 42
+   * @type string
+   */
+  nextRevision: string;
+  /**
+   * @description Outlet's current head revision — decimal string.
+   * @example 42
+   * @type string
+   */
+  headRevision: string;
+  /**
+   * @description True when more changes exist beyond this page.
+   * @example false
+   * @type boolean
+   */
+  hasMore: boolean;
+  /**
+   * @description True when contiguous history is unavailable; the outlet must take a snapshot.
+   * @example false
+   * @type boolean
+   */
+  snapshotRequired: boolean;
+  changes: CatalogChangeEntry[];
+};

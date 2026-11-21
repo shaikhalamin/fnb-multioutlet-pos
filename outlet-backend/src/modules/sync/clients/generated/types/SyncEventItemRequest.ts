@@ -1,0 +1,41 @@
+/* Backend-only machine client (PRD §11); never ship to a browser bundle. */
+
+export type SyncEventItemRequest = {
+  /**
+   * @example 64750166-32a4-46f8-9285-f536f5b03213
+   * @type string
+   */
+  saleItemId: string;
+  /**
+   * @example 9708835e-2e21-465a-87e9-5f8d56cd44ab
+   * @type string
+   */
+  menuItemId: string;
+  /**
+   * @example Chicken Burger
+   * @type string
+   */
+  nameSnapshot: string;
+  /**
+   * @example BURGER-01
+   * @type string
+   */
+  skuSnapshot: string;
+  /**
+   * @example 2
+   * @type number
+   */
+  quantity: number;
+  /**
+   * @description Minor units, canonical decimal string.
+   * @example 1200
+   * @type string
+   */
+  unitPriceMinor: string;
+  /**
+   * @description Minor units, canonical decimal string.
+   * @example 2400
+   * @type string
+   */
+  subtotalMinor: string;
+};

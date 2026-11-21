@@ -1,0 +1,36 @@
+/* Backend-only machine client (PRD §11); never ship to a browser bundle. */
+
+import type { SyncEventDataRequest } from './SyncEventDataRequest.js'
+
+export type SyncEventV1 = {
+  /**
+   * @description Equals the outlet outbox row ID.
+   * @example 3feeb5c0-53fa-476e-a758-3040a3529041
+   * @type string
+   */
+  eventId: string;
+  eventType: 'sale.completed';
+  /**
+   * @description Schema version; HQ supports 1 and rejects others per event.
+   * @example 1
+   * @type number
+   */
+  schemaVersion: number;
+  /**
+   * @example 61de28db-92ed-46ef-9d90-3a951ac03420
+   * @type string
+   */
+  outletId: string;
+  /**
+   * @description Per-outlet contiguous sequence — decimal string.
+   * @example 108
+   * @type string
+   */
+  sequenceNo: string;
+  /**
+   * @example 2026-11-20T04:02:03Z
+   * @type string
+   */
+  occurredAt: string;
+  data: SyncEventDataRequest;
+};

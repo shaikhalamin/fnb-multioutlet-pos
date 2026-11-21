@@ -1,0 +1,2955 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED"
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          },
+          "429": {
+            "description": "RATE_LIMITED"
+          }
+        },
+        "summary": "Sign in with email + password (rate limited).",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED"
+          }
+        },
+        "summary": "Rotate the refresh cookie and mint a new access token.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Revoke the current refresh session family.",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/users": {
+      "get": {
+        "operationId": "UsersController_listUsers",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List HQ users (keyset pagination).",
+        "tags": [
+          "Users"
+        ]
+      },
+      "post": {
+        "operationId": "UsersController_createUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — email already exists"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY — unknown role code"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create an HQ user with roles.",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/users/{id}": {
+      "patch": {
+        "operationId": "UsersController_updateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Update status and/or replace roles.",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/roles": {
+      "get": {
+        "operationId": "UsersController_listRoles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List roles with their permission sets.",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/outlets": {
+      "get": {
+        "operationId": "OutletsController_listOutlets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutletResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List outlets with their current catalog revision.",
+        "tags": [
+          "Outlets"
+        ]
+      },
+      "post": {
+        "operationId": "OutletsController_createOutlet",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOutletRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutletResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — duplicate outlet code"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY — bad timezone"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Provision an outlet (creates its revision-0 catalog row).",
+        "tags": [
+          "Outlets"
+        ]
+      }
+    },
+    "/outlets/{id}": {
+      "patch": {
+        "operationId": "OutletsController_updateOutlet",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOutletRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutletResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Rename or suspend/reactivate an outlet.",
+        "tags": [
+          "Outlets"
+        ]
+      }
+    },
+    "/categories": {
+      "get": {
+        "operationId": "MenuController_listCategories",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List menu categories.",
+        "tags": [
+          "Menu"
+        ]
+      },
+      "post": {
+        "operationId": "MenuController_createCategory",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCategoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — duplicate name"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create a menu category.",
+        "tags": [
+          "Menu"
+        ]
+      }
+    },
+    "/categories/{id}": {
+      "get": {
+        "operationId": "MenuController_getCategory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Read one category.",
+        "tags": [
+          "Menu"
+        ]
+      },
+      "patch": {
+        "operationId": "MenuController_updateCategory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCategoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "409": {
+            "description": "CONFLICT — duplicate name"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY — active items still present"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Rename, reorder, or archive a category.",
+        "tags": [
+          "Menu"
+        ]
+      }
+    },
+    "/menu-items": {
+      "get": {
+        "operationId": "MenuController_listItems",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ACTIVE",
+                "ARCHIVED"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Substring match on name or SKU.",
+            "schema": {
+              "example": "burger",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MenuItemResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List master menu items (keyset pagination).",
+        "tags": [
+          "Menu"
+        ]
+      },
+      "post": {
+        "operationId": "MenuController_createItem",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMenuItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuItemResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — duplicate SKU"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY — bad category/currency/price"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create a master menu item.",
+        "tags": [
+          "Menu"
+        ]
+      }
+    },
+    "/menu-items/{id}": {
+      "get": {
+        "operationId": "MenuController_getItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuItemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Read one master item.",
+        "tags": [
+          "Menu"
+        ]
+      },
+      "patch": {
+        "operationId": "MenuController_updateItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMenuItemRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuItemResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Update and/or archive a master item (fans out catalog changes).",
+        "tags": [
+          "Menu"
+        ]
+      }
+    },
+    "/outlets/{outletId}/menu/{itemId}": {
+      "put": {
+        "operationId": "AssignmentsController_assign",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignMenuRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND — outlet or item"
+          },
+          "422": {
+            "description": "ITEM_INACTIVE — archived item cannot be activated"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Assign/activate an item for an outlet, optionally overriding the price.",
+        "tags": [
+          "Assignments"
+        ]
+      },
+      "delete": {
+        "operationId": "AssignmentsController_unassign",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignmentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Soft-unassign an item and emit its REMOVE revision.",
+        "tags": [
+          "Assignments"
+        ]
+      }
+    },
+    "/outlets/{outletId}/menu": {
+      "get": {
+        "operationId": "AssignmentsController_listOutletMenu",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutletMenuResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Assignment matrix rows for one outlet (HQ view).",
+        "tags": [
+          "Assignments"
+        ]
+      }
+    },
+    "/outlets/{outletId}/api-keys": {
+      "post": {
+        "operationId": "ApiKeysController_issue",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueOutletKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueOutletKeyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Issue an outlet sync key; the secret is revealed once.",
+        "tags": [
+          "Outlet API Keys"
+        ]
+      },
+      "get": {
+        "operationId": "ApiKeysController_list",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutletApiKeyResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List outlet keys (no secret material).",
+        "tags": [
+          "Outlet API Keys"
+        ]
+      }
+    },
+    "/outlets/{outletId}/api-keys/{keyId}/rotate": {
+      "post": {
+        "operationId": "ApiKeysController_rotate",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateOutletKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueOutletKeyResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "409": {
+            "description": "CONFLICT — key not ACTIVE"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Rotate a key; predecessor stays valid for the grace window.",
+        "tags": [
+          "Outlet API Keys"
+        ]
+      }
+    },
+    "/outlets/{outletId}/api-keys/{keyId}": {
+      "delete": {
+        "operationId": "ApiKeysController_revoke",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "keyId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked (idempotent)."
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Revoke a key immediately.",
+        "tags": [
+          "Outlet API Keys"
+        ]
+      }
+    },
+    "/sync/v1/menu/changes": {
+      "get": {
+        "operationId": "MenuPullController_getChanges",
+        "parameters": [
+          {
+            "name": "afterRevision",
+            "required": false,
+            "in": "query",
+            "description": "Last revision the outlet applied; changes after it are returned. Decimal string.",
+            "schema": {
+              "example": "41",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 500,
+              "default": 500,
+              "example": 500,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogChangesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the menu.pull scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Revisioned catalog deltas for the authenticated outlet (ascending).",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/sync/v1/menu/snapshot": {
+      "get": {
+        "operationId": "MenuPullController_getSnapshot",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MenuSnapshotResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the menu.pull scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Consistent full catalog snapshot for bootstrap/gap recovery.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/sync/v1/events/batch": {
+      "post": {
+        "operationId": "SyncEventsController_pushBatch",
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Stable per logical batch attempt; preserved across retries of the same bytes (§8.5).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mixed per-event outcomes (§8.5).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED — missing Idempotency-Key"
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key scope or event outlet mismatch (whole request)"
+          },
+          "413": {
+            "description": "Body exceeds SYNC_MAX_BODY_BYTES"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Push a batch of sync events; per-event acks ride one HTTP 200.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/sync/v1/checkpoint": {
+      "get": {
+        "operationId": "SyncStatusController_getCheckpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncCheckpointResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the events.push scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Highest contiguous accepted sequence + missing ranges.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/sync/v1/heartbeat": {
+      "post": {
+        "operationId": "SyncStatusController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the status.write scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Report local backlog and applied menu revision.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/outlets/{id}/sync-status": {
+      "get": {
+        "operationId": "SyncAdminController_getSyncStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutletSyncStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND — outlet does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Outbox replication status known to HQ (FR-10).",
+        "tags": [
+          "Outlets"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "SERVICE_UNAVAILABLE — a check is down"
+          }
+        },
+        "summary": "Liveness/readiness probe (database + Redis)",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "F&B Platform — HQ API",
+    "description": "Headquarters API for master menu governance, outlet assignment, API keys, sync ingestion and cross-outlet reporting. All responses use the `ApiSuccess`/`ApiError` envelopes; money is a decimal string of integer minor units.",
+    "version": "1.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Current deployment"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearer-jwt": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http",
+        "description": "HQ user access token (Phase 1)"
+      },
+      "outlet-key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Machine sync credentials: `OutletKey <keyId>.<secret>` (Phase 3)"
+      }
+    },
+    "schemas": {
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "admin@fnb.local",
+            "description": "HQ user email."
+          },
+          "password": {
+            "type": "string",
+            "example": "Admin123!",
+            "description": "HQ user password.",
+            "minLength": 8
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "AuthUserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "f5df2a66-119c-45e5-b797-fd31cfd93aa8"
+          },
+          "email": {
+            "type": "string",
+            "example": "admin@fnb.local"
+          },
+          "roleCodes": {
+            "example": [
+              "HQ_SUPER_ADMIN"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permissions": {
+            "example": [
+              "menu.read",
+              "menu.write",
+              "reports.read"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "roleCodes",
+          "permissions"
+        ]
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "example": "eyJhbGciOiJIUzI1NiIs…",
+            "description": "Short-lived HS256 access JWT."
+          },
+          "tokenType": {
+            "type": "string",
+            "example": "Bearer"
+          },
+          "expiresInSeconds": {
+            "type": "number",
+            "example": 900,
+            "description": "Access token lifetime in seconds."
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserResponse"
+          }
+        },
+        "required": [
+          "accessToken",
+          "tokenType",
+          "expiresInSeconds",
+          "user"
+        ]
+      },
+      "LogoutResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "success"
+        ]
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "f5df2a66-119c-45e5-b797-fd31cfd93aa8"
+          },
+          "email": {
+            "type": "string",
+            "example": "manager@fnb.local"
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
+          },
+          "roleCodes": {
+            "example": [
+              "HQ_MENU_MANAGER"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "status",
+          "roleCodes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "manager@fnb.local",
+            "description": "Work email; unique per company."
+          },
+          "password": {
+            "type": "string",
+            "example": "StrongPass123!",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "roleCodes": {
+            "example": [
+              "HQ_MENU_MANAGER"
+            ],
+            "description": "Role codes to assign.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "roleCodes"
+        ]
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "DISABLED",
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
+          },
+          "roleCodes": {
+            "example": [
+              "HQ_ANALYST"
+            ],
+            "description": "Replaces the role set when present.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RoleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0c9d0f0e-2fa2-4f71-a111-6e2f83d94d02"
+          },
+          "code": {
+            "type": "string",
+            "example": "HQ_MENU_MANAGER"
+          },
+          "name": {
+            "type": "string",
+            "example": "HQ Menu Manager"
+          },
+          "permissions": {
+            "example": [
+              "menu.read",
+              "menu.write"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "permissions"
+        ]
+      },
+      "OutletResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "code": {
+            "type": "string",
+            "example": "A"
+          },
+          "name": {
+            "type": "string",
+            "example": "Outlet A"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "UTC"
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Catalog revision, decimal string of bigint."
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "timezone",
+          "status",
+          "catalogRevision",
+          "createdAt"
+        ]
+      },
+      "CreateOutletRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "example": "D",
+            "description": "Short unique site code (1–8 chars).",
+            "minLength": 1,
+            "maxLength": 8
+          },
+          "name": {
+            "type": "string",
+            "example": "Outlet D",
+            "maxLength": 120
+          },
+          "timezone": {
+            "type": "string",
+            "example": "Asia/Dhaka",
+            "description": "IANA time zone."
+          }
+        },
+        "required": [
+          "code",
+          "name",
+          "timezone"
+        ]
+      },
+      "UpdateOutletRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Outlet D (Gulshan)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ]
+          }
+        }
+      },
+      "CategoryResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "d0edcfef-715c-4a3d-a1dc-fcfec4ea8045"
+          },
+          "name": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 0
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "sortOrder",
+          "status",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateCategoryRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Desserts",
+            "maxLength": 80
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 3,
+            "default": 0
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateCategoryRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Sweets",
+            "maxLength": 80
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 5
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ]
+          }
+        }
+      },
+      "MenuItemResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "categoryId": {
+            "type": "string",
+            "example": "d0edcfef-715c-4a3d-a1dc-fcfec4ea8045"
+          },
+          "categoryName": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "defaultPriceMinor": {
+            "type": "string",
+            "example": "1000",
+            "description": "Integer minor units, decimal string of bigint."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ]
+          },
+          "version": {
+            "type": "number",
+            "example": 3,
+            "description": "Bumped on every edit; echoed to outlets."
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "sku",
+          "name",
+          "description",
+          "categoryId",
+          "categoryName",
+          "defaultPriceMinor",
+          "currencyCode",
+          "status",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateMenuItemRequest": {
+        "type": "object",
+        "properties": {
+          "sku": {
+            "type": "string",
+            "example": "BURGER-02",
+            "maxLength": 64,
+            "description": "Immutable; unique per company."
+          },
+          "name": {
+            "type": "string",
+            "example": "Beef Burger",
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "example": "Flame-grilled beef burger",
+            "maxLength": 1000
+          },
+          "categoryId": {
+            "type": "string",
+            "example": "d0edcfef-715c-4a3d-a1dc-fcfec4ea8045"
+          },
+          "defaultPriceMinor": {
+            "type": "string",
+            "example": "1000",
+            "description": "Default price in integer minor units, decimal string of bigint.",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD",
+            "description": "Must match the company currency."
+          }
+        },
+        "required": [
+          "sku",
+          "name",
+          "categoryId",
+          "defaultPriceMinor",
+          "currencyCode"
+        ]
+      },
+      "UpdateMenuItemRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger Deluxe"
+          },
+          "description": {
+            "type": "string",
+            "example": "Now with spicy mayo"
+          },
+          "categoryId": {
+            "type": "string",
+            "example": "d0edcfef-715c-4a3d-a1dc-fcfec4ea8045"
+          },
+          "defaultPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Integer minor units, decimal string of bigint.",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ],
+            "description": "ARCHIVED tombstones the item."
+          }
+        }
+      },
+      "AssignMenuRequest": {
+        "type": "object",
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "example": true,
+            "description": "false soft-unassigns (tombstone)."
+          },
+          "priceOverrideMinor": {
+            "type": "string",
+            "nullable": true,
+            "example": "1200",
+            "description": "Per-outlet price override in integer minor units (decimal string of bigint). Send null to clear and fall back to the master default.",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          }
+        },
+        "required": [
+          "active"
+        ]
+      },
+      "AssignmentResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          },
+          "defaultPriceMinor": {
+            "type": "string",
+            "example": "1000",
+            "description": "Master default price, minor units."
+          },
+          "priceOverrideMinor": {
+            "type": "string",
+            "example": "1200",
+            "nullable": true,
+            "description": "Override price, minor units; null when using the default."
+          },
+          "effectivePriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "override ?? default, minor units."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Catalog revision generated, decimal string of bigint."
+          }
+        },
+        "required": [
+          "outletId",
+          "menuItemId",
+          "assignmentId",
+          "active",
+          "defaultPriceMinor",
+          "priceOverrideMinor",
+          "effectivePriceMinor",
+          "currencyCode",
+          "catalogRevision"
+        ]
+      },
+      "OutletMenuResponse": {
+        "type": "object",
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "categoryName": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "itemStatus": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "ARCHIVED"
+            ]
+          },
+          "active": {
+            "type": "boolean",
+            "example": true,
+            "description": "Assignment active flag (effective only while item ACTIVE)."
+          },
+          "defaultPriceMinor": {
+            "type": "string",
+            "example": "1000",
+            "description": "Master default price, minor units."
+          },
+          "priceOverrideMinor": {
+            "type": "string",
+            "example": "1200",
+            "nullable": true
+          },
+          "effectivePriceMinor": {
+            "type": "string",
+            "example": "1200"
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          }
+        },
+        "required": [
+          "assignmentId",
+          "menuItemId",
+          "sku",
+          "name",
+          "categoryName",
+          "itemStatus",
+          "active",
+          "defaultPriceMinor",
+          "priceOverrideMinor",
+          "effectivePriceMinor",
+          "currencyCode"
+        ]
+      },
+      "IssueOutletKeyRequest": {
+        "type": "object",
+        "properties": {
+          "expiresInHours": {
+            "type": "number",
+            "example": 72,
+            "description": "Optional expiry in hours; omit for a non-expiring key."
+          },
+          "scopes": {
+            "example": [
+              "menu.pull",
+              "events.push",
+              "status.write"
+            ],
+            "description": "Scopes; defaults to all three sync scopes.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "IssueOutletKeyResponse": {
+        "type": "object",
+        "properties": {
+          "keyId": {
+            "type": "string",
+            "example": "ok_dev_1a2b3c4d5e6f7788"
+          },
+          "secret": {
+            "type": "string",
+            "example": "wJalrXUtnFEMI_K7MDENG_bPxN3GYSlKP4UiZQyJ9q0",
+            "description": "Raw 256-bit secret. Shown exactly once; store it securely now."
+          },
+          "scopes": {
+            "example": "menu.pull",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expiresAt": {
+            "type": "string",
+            "example": "2026-11-21T04:00:00.000Z",
+            "nullable": true
+          },
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "rotatedFromKeyId": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+            "nullable": true
+          }
+        },
+        "required": [
+          "keyId",
+          "secret",
+          "scopes",
+          "expiresAt",
+          "outletId",
+          "rotatedFromKeyId"
+        ]
+      },
+      "OutletApiKeyResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d"
+          },
+          "keyId": {
+            "type": "string",
+            "example": "ok_dev_1a2b3c4d5e6f7788"
+          },
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "scopes": {
+            "example": [
+              "menu.pull",
+              "events.push",
+              "status.write"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "REVOKED"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "example": "2026-11-21T04:00:00.000Z",
+            "nullable": true
+          },
+          "lastUsedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true
+          },
+          "rotatedFromKeyId": {
+            "type": "string",
+            "example": "ok_dev_9z8y7x6w5v4u3s2r",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "keyId",
+          "outletId",
+          "scopes",
+          "status",
+          "expiresAt",
+          "lastUsedAt",
+          "rotatedFromKeyId",
+          "createdAt"
+        ]
+      },
+      "RotateOutletKeyRequest": {
+        "type": "object",
+        "properties": {
+          "graceHours": {
+            "type": "number",
+            "example": 24,
+            "description": "Overlap window for the predecessor key, hours."
+          }
+        }
+      },
+      "CatalogChangeItem": {
+        "type": "object",
+        "properties": {
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "category": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Effective outlet price — minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "active": {
+            "type": "boolean",
+            "example": true
+          },
+          "itemVersion": {
+            "type": "number",
+            "example": 3,
+            "description": "HQ item `version` at change-record time."
+          }
+        },
+        "required": [
+          "assignmentId",
+          "sku",
+          "name",
+          "description",
+          "category",
+          "unitPriceMinor",
+          "currencyCode",
+          "active",
+          "itemVersion"
+        ]
+      },
+      "CatalogChangeEntry": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string",
+            "example": "42",
+            "description": "Per-outlet catalog revision — decimal string."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "UPSERT",
+              "REMOVE"
+            ]
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "item": {
+            "nullable": true,
+            "description": "Full effective item snapshot for UPSERT; null for REMOVE tombstones.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CatalogChangeItem"
+              }
+            ]
+          }
+        },
+        "required": [
+          "revision",
+          "type",
+          "menuItemId",
+          "item"
+        ]
+      },
+      "CatalogChangesResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "fromRevision": {
+            "type": "string",
+            "example": "41",
+            "description": "The afterRevision this page starts from — decimal string."
+          },
+          "nextRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Revision after applying this page (checkpoint target) — decimal string."
+          },
+          "headRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Outlet's current head revision — decimal string."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "example": false,
+            "description": "True when more changes exist beyond this page."
+          },
+          "snapshotRequired": {
+            "type": "boolean",
+            "example": false,
+            "description": "True when contiguous history is unavailable; the outlet must take a snapshot."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogChangeEntry"
+            }
+          }
+        },
+        "required": [
+          "outletId",
+          "fromRevision",
+          "nextRevision",
+          "headRevision",
+          "hasMore",
+          "snapshotRequired",
+          "changes"
+        ]
+      },
+      "MenuSnapshotItem": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "description": {
+            "type": "string",
+            "example": "Grilled chicken burger"
+          },
+          "category": {
+            "type": "string",
+            "example": "Burgers"
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Effective outlet price — minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "active": {
+            "type": "boolean",
+            "example": true,
+            "description": "False marks the tombstone: the outlet deactivates the item locally."
+          },
+          "itemVersion": {
+            "type": "number",
+            "example": 3
+          }
+        },
+        "required": [
+          "menuItemId",
+          "assignmentId",
+          "sku",
+          "name",
+          "description",
+          "category",
+          "unitPriceMinor",
+          "currencyCode",
+          "active",
+          "itemVersion"
+        ]
+      },
+      "MenuSnapshotResponse": {
+        "type": "object",
+        "properties": {
+          "snapshotId": {
+            "type": "string",
+            "example": "6f1a2c34-1b2c-4d3e-9a7b-3c4d5e6f7a8b"
+          },
+          "snapshotRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Revision of the snapshot view — decimal string."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MenuSnapshotItem"
+            }
+          }
+        },
+        "required": [
+          "snapshotId",
+          "snapshotRevision",
+          "items"
+        ]
+      },
+      "SyncEventItemRequest": {
+        "type": "object",
+        "properties": {
+          "saleItemId": {
+            "type": "string",
+            "example": "64750166-32a4-46f8-9285-f536f5b03213"
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "nameSnapshot": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "skuSnapshot": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Minor units, canonical decimal string."
+          },
+          "subtotalMinor": {
+            "type": "string",
+            "example": "2400",
+            "description": "Minor units, canonical decimal string."
+          }
+        },
+        "required": [
+          "saleItemId",
+          "menuItemId",
+          "nameSnapshot",
+          "skuSnapshot",
+          "quantity",
+          "unitPriceMinor",
+          "subtotalMinor"
+        ]
+      },
+      "SyncEventDataRequest": {
+        "type": "object",
+        "properties": {
+          "saleId": {
+            "type": "string",
+            "example": "0a44e56a-628e-492a-81e0-83f4a4d68f76"
+          },
+          "receiptNo": {
+            "type": "string",
+            "example": "A-000001"
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Local catalog revision — decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETED"
+            ]
+          },
+          "soldAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03Z"
+          },
+          "totalMinor": {
+            "type": "string",
+            "example": "3900",
+            "description": "Minor units, canonical decimal string."
+          },
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncEventItemRequest"
+            }
+          }
+        },
+        "required": [
+          "saleId",
+          "receiptNo",
+          "catalogRevision",
+          "currencyCode",
+          "status",
+          "soldAt",
+          "totalMinor",
+          "items"
+        ]
+      },
+      "SyncEventV1": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "3feeb5c0-53fa-476e-a758-3040a3529041",
+            "description": "Equals the outlet outbox row ID."
+          },
+          "eventType": {
+            "type": "string",
+            "enum": [
+              "sale.completed"
+            ]
+          },
+          "schemaVersion": {
+            "type": "number",
+            "example": 1,
+            "description": "Schema version; HQ supports 1 and rejects others per event."
+          },
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "sequenceNo": {
+            "type": "string",
+            "example": "108",
+            "description": "Per-outlet contiguous sequence — decimal string."
+          },
+          "occurredAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03Z"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SyncEventDataRequest"
+          }
+        },
+        "required": [
+          "eventId",
+          "eventType",
+          "schemaVersion",
+          "outletId",
+          "sequenceNo",
+          "occurredAt",
+          "data"
+        ]
+      },
+      "EventBatchRequest": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "example": "047bfdb5-727a-47eb-970a-03a038c11b92"
+          },
+          "events": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncEventV1"
+            }
+          }
+        },
+        "required": [
+          "batchId",
+          "events"
+        ]
+      },
+      "EventBatchResult": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "3feeb5c0-53fa-476e-a758-3040a3529041"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "DUPLICATE",
+              "REJECTED_PERMANENT",
+              "RETRYABLE_ERROR"
+            ]
+          },
+          "retryable": {
+            "type": "boolean",
+            "example": false,
+            "description": "True when the outlet should retry this event unchanged."
+          },
+          "acknowledgedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10Z",
+            "nullable": true,
+            "description": "Present for terminal successes (ACCEPTED, DUPLICATE); null otherwise."
+          },
+          "detail": {
+            "type": "string",
+            "example": "UNSUPPORTED_EVENT_VERSION",
+            "nullable": true,
+            "description": "Stable reason code for non-success outcomes (e.g. UNSUPPORTED_EVENT_VERSION, EVENT_ID_CONFLICT)."
+          }
+        },
+        "required": [
+          "eventId",
+          "status",
+          "retryable"
+        ]
+      },
+      "EventBatchResponse": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "example": "047bfdb5-727a-47eb-970a-03a038c11b92"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventBatchResult"
+            }
+          },
+          "highestContiguousSequence": {
+            "type": "string",
+            "example": "108",
+            "description": "Highest contiguous accepted sequence for the outlet — decimal string."
+          }
+        },
+        "required": [
+          "batchId",
+          "results",
+          "highestContiguousSequence"
+        ]
+      },
+      "SequenceRange": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "example": "94",
+            "description": "First missing sequence — decimal string."
+          },
+          "to": {
+            "type": "string",
+            "example": "101",
+            "description": "Last missing sequence — decimal string."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      },
+      "SyncCheckpointResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "highestContiguousSequence": {
+            "type": "string",
+            "example": "108",
+            "description": "Highest contiguous accepted sequence — decimal string."
+          },
+          "missingRanges": {
+            "description": "Sequence ranges accepted above the watermark but not yet contiguous (reconciliation input).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SequenceRange"
+            }
+          }
+        },
+        "required": [
+          "outletId",
+          "highestContiguousSequence",
+          "missingRanges"
+        ]
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "properties": {
+          "appliedMenuRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Menu revision the outlet last applied — decimal string."
+          },
+          "pendingOutboxCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Events awaiting delivery at the outlet."
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Events parked for manual repair at the outlet."
+          },
+          "oldestPendingAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z",
+            "nullable": true,
+            "description": "Oldest undelivered event timestamp, when a backlog exists."
+          }
+        },
+        "required": [
+          "appliedMenuRevision",
+          "pendingOutboxCount",
+          "quarantinedCount"
+        ]
+      },
+      "HeartbeatResponse": {
+        "type": "object",
+        "properties": {
+          "acknowledgedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z"
+          }
+        },
+        "required": [
+          "acknowledgedAt"
+        ]
+      },
+      "OutletSyncBacklog": {
+        "type": "object",
+        "properties": {
+          "pendingOutboxCount": {
+            "type": "number",
+            "example": 3
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0
+          },
+          "oldestPendingAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z",
+            "nullable": true
+          }
+        },
+        "required": [
+          "pendingOutboxCount",
+          "quarantinedCount",
+          "oldestPendingAt"
+        ]
+      },
+      "OutletSyncStatusResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "currentMenuRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Current HQ catalog revision — decimal string."
+          },
+          "highestContiguousSequence": {
+            "type": "string",
+            "example": "108",
+            "description": "Highest contiguous accepted event sequence — decimal string."
+          },
+          "lastEventAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true
+          },
+          "lastHeartbeatAt": {
+            "type": "string",
+            "example": "2026-11-20T04:03:00.000Z",
+            "nullable": true
+          },
+          "lastMenuSeenRevision": {
+            "type": "string",
+            "example": "42",
+            "nullable": true,
+            "description": "Menu revision the outlet last reported applying — decimal string."
+          },
+          "lastReportedBacklog": {
+            "nullable": true,
+            "description": "Backlog as last reported by the outlet heartbeat; null before the first heartbeat.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OutletSyncBacklog"
+              }
+            ]
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Quarantined events at the outlet, as last reported (HQ never sees outlet rows directly)."
+          }
+        },
+        "required": [
+          "outletId",
+          "currentMenuRevision",
+          "highestContiguousSequence",
+          "lastEventAt",
+          "lastHeartbeatAt",
+          "lastMenuSeenRevision",
+          "lastReportedBacklog",
+          "quarantinedCount"
+        ]
+      },
+      "DependencyStatusResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "up",
+            "enum": [
+              "up",
+              "down"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "example": "Connection refused",
+            "nullable": true,
+            "description": "Failure reason when the check is down."
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "HealthChecksResponse": {
+        "type": "object",
+        "properties": {
+          "database": {
+            "$ref": "#/components/schemas/DependencyStatusResponse"
+          },
+          "redis": {
+            "$ref": "#/components/schemas/DependencyStatusResponse"
+          }
+        },
+        "required": [
+          "database",
+          "redis"
+        ]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok",
+            "enum": [
+              "ok",
+              "down"
+            ]
+          },
+          "service": {
+            "type": "string",
+            "example": "hq-backend"
+          },
+          "version": {
+            "type": "string",
+            "example": "0.1.0"
+          },
+          "uptimeSeconds": {
+            "type": "number",
+            "example": 120
+          },
+          "timestamp": {
+            "type": "string",
+            "example": "2026-11-20T19:43:03.720Z"
+          },
+          "checks": {
+            "$ref": "#/components/schemas/HealthChecksResponse"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "uptimeSeconds",
+          "timestamp",
+          "checks"
+        ]
+      }
+    }
+  }
+}

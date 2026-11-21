@@ -1,0 +1,16 @@
+/* Backend-only machine client (PRD §11); never ship to a browser bundle. */
+
+export type SequenceRange = {
+  /**
+   * @description First missing sequence — decimal string.
+   * @example 94
+   * @type string
+   */
+  from: string;
+  /**
+   * @description Last missing sequence — decimal string.
+   * @example 101
+   * @type string
+   */
+  to: string;
+};

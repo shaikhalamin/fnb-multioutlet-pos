@@ -183,32 +183,48 @@ export class OutboxRepository {
    * Leases due rows for delivery with `FOR UPDATE SKIP LOCKED` (§8.6 A):
    * status PENDING/RETRY, backoff elapsed, and no live lease. Leasing bumps
    * `attempts` (an attempt is starting) and stamps `lease_until`; two
-   * concurrent sweepers can never lease the same row.
+   * concurrent sweepers can never lease the same row. One statement keeps the
+   * lock and the lease write a single atomic step (TypeORM's `setLock` has no
+   * SKIP LOCKED variant).
    */
   async leaseDueBatch(batchSize: number, leaseMs: number, now = new Date()): Promise<OutboxEventEntity[]> {
-    return this.dataSource.transaction(async (manager) => {
-      const rows: OutboxEventEntity[] = await manager
-        .getRepository(OutboxEventEntity)
-        .createQueryBuilder('event')
-        .setLock('pessimistic_write_skip_locked')
-        .where(
-          "event.status IN ('PENDING', 'RETRY') AND (event.next_attempt_at IS NULL OR event.next_attempt_at <= :now) AND (event.lease_until IS NULL OR event.lease_until <= :now)",
-          { now },
-        )
-        .orderBy('event.sequence_no', 'ASC')
-        .take(batchSize)
-        .getMany();
-      if (rows.length === 0) return rows;
-      const leaseUntil = new Date(now.getTime() + leaseMs);
-      await manager
-        .getRepository(OutboxEventEntity)
-        .createQueryBuilder()
-        .update(OutboxEventEntity)
-        .set({ leaseUntil, attempts: () => 'attempts + 1' })
-        .whereInIds(rows.map((row) => row.id))
-        .execute();
-      return rows.map((row) => ({ ...row, leaseUntil, attempts: row.attempts + 1 }));
-    });
+    const leaseUntil = new Date(now.getTime() + leaseMs);
+    const rows = await this.dataSource.query<Record<string, unknown>[]>(
+      `WITH due AS (
+         SELECT id FROM outbox_events
+         WHERE status IN ('PENDING', 'RETRY')
+           AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+           AND (lease_until IS NULL OR lease_until <= $1)
+         ORDER BY sequence_no ASC
+         LIMIT $2
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE outbox_events o
+       SET lease_until = $3, attempts = o.attempts + 1
+       FROM due
+       WHERE o.id = due.id
+       RETURNING o.*`,
+      [now.toISOString(), batchSize, leaseUntil.toISOString()],
+    );
+    return rows.map(
+      (row) =>
+        ({
+          id: String(row.id),
+          outletId: String(row.outlet_id),
+          sequenceNo: String(row.sequence_no),
+          eventType: String(row.event_type),
+          schemaVersion: Number(row.schema_version),
+          payload: row.payload as Record<string, unknown>,
+          payloadSha256: String(row.payload_sha256),
+          status: row.status as OutboxStatus,
+          attempts: Number(row.attempts),
+          nextAttemptAt: row.next_attempt_at ? new Date(String(row.next_attempt_at)) : null,
+          leaseUntil,
+          publishedAt: row.published_at ? new Date(String(row.published_at)) : null,
+          lastError: row.last_error === null ? null : String(row.last_error),
+          createdAt: new Date(String(row.created_at)),
+        }) satisfies OutboxEventEntity,
+    );
   }
 
   /** Loads durable rows by ID — BullMQ jobs carry event IDs only (§13). */
@@ -272,14 +288,15 @@ export class OutboxRepository {
     errorCode: string | null;
   }): Promise<void> {
     const repo = this.dataSource.getRepository(SyncAttemptLogEntity);
-    await repo.insert(
-      repo.create({
-        outboxEventId: input.outboxEventId,
-        statusCode: input.statusCode,
-        durationMs: input.durationMs,
-        errorCode: input.errorCode,
-      }),
-    );
+    const row = repo.create({
+      outboxEventId: input.outboxEventId,
+      statusCode: input.statusCode,
+      durationMs: input.durationMs,
+      errorCode: input.errorCode,
+    });
+    // jsonb column typing is a deep-partial mismatch for TypeORM's insert;
+    // the row shape is exact by construction.
+    await repo.insert(row as never);
   }
 }
 

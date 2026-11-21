@@ -1,6 +1,6 @@
 import { Body, Controller, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ApiOkResponse, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiHeader, ApiOkResponse, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { ApiException } from '../../common/exceptions/api.exception.js';
 import { OutletKeyGuard } from '../../common/auth/outlet-key.guard.js';
@@ -35,6 +35,11 @@ export class SyncEventsController {
   @Post('batch')
   @RequireKeyScopes('events.push')
   @HttpCode(200)
+  @ApiHeader({
+    name: 'idempotency-key',
+    required: true,
+    description: 'Stable per logical batch attempt; preserved across retries of the same bytes (§8.5).',
+  })
   @ApiOperation({ summary: 'Push a batch of sync events; per-event acks ride one HTTP 200.' })
   @ApiOkResponse({ type: EventBatchResponse, description: 'Mixed per-event outcomes (§8.5).' })
   @ApiResponse({ status: 400, description: 'VALIDATION_FAILED — missing Idempotency-Key' })

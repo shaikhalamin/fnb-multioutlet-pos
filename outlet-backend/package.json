@@ -25,7 +25,8 @@
     "migration:revert": "tsx src/database/migrate.ts revert",
     "migration:show": "tsx src/database/migrate.ts show",
     "seed": "tsx src/database/seed.ts",
-    "openapi:export": "pnpm build && node scripts/export-openapi.mjs"
+    "openapi:export": "pnpm build && node scripts/export-openapi.mjs",
+    "generate:api": "kubb generate && node scripts/fix-generated-imports.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -36,6 +37,7 @@
     "@nestjs/platform-express": "^12.0.1",
     "@nestjs/swagger": "^12.1.2",
     "@nestjs/throttler": "^6.8.0",
+    "axios": "^1.21.1",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
@@ -50,6 +52,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@kubb/plugin-axios": "6.4.0",
+    "@kubb/plugin-client": "6.4.0",
+    "@kubb/plugin-ts": "5.6.0",
+    "@kubb/plugin-zod": "5.11.0",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/mau": "^0.2.6",
     "@nestjs/schematics": "^12.0.0",
@@ -57,10 +63,11 @@
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
-    "@types/passport-jwt": "^4.0.1",
     "@types/node": "^24.0.0",
+    "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
+    "kubb": "^5.23.1",
     "oxlint": "^1.58.0",
     "oxlint-tsgolint": "^7.0.2001",
     "prettier": "^3.4.2",

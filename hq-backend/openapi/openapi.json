@@ -1187,7 +1187,17 @@
     "/sync/v1/events/batch": {
       "post": {
         "operationId": "SyncEventsController_pushBatch",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "description": "Stable per logical batch attempt; preserved across retries of the same bytes (§8.5).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {

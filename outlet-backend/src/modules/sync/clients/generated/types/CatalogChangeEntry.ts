@@ -1,0 +1,30 @@
+/* Backend-only machine client (PRD §11); never ship to a browser bundle. */
+
+import type { CatalogChangeItem } from './CatalogChangeItem.js'
+
+export const catalogChangeEntryTypeEnum = {
+  UPSERT: 'UPSERT',
+  REMOVE: 'REMOVE',
+} as const;
+
+export type CatalogChangeEntryTypeEnumKey = (typeof catalogChangeEntryTypeEnum)[keyof typeof catalogChangeEntryTypeEnum];
+
+export type CatalogChangeEntry = {
+  /**
+   * @description Per-outlet catalog revision — decimal string.
+   * @example 42
+   * @type string
+   */
+  revision: string;
+  type: CatalogChangeEntryTypeEnumKey;
+  /**
+   * @example 9708835e-2e21-465a-87e9-5f8d56cd44ab
+   * @type string
+   */
+  menuItemId: string;
+  /**
+   * @description Full effective item snapshot for UPSERT; null for REMOVE tombstones.
+   * @type object
+   */
+  item: CatalogChangeItem | null;
+};

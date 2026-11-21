@@ -1,0 +1,51 @@
+/* Backend-only machine client (PRD §11); never ship to a browser bundle. */
+
+export type CatalogChangeItem = {
+  /**
+   * @example 31fe8f6b-02b8-409d-b1fa-6c441f422949
+   * @type string
+   */
+  assignmentId: string;
+  /**
+   * @example BURGER-01
+   * @type string
+   */
+  sku: string;
+  /**
+   * @example Chicken Burger
+   * @type string
+   */
+  name: string;
+  /**
+   * @example Grilled chicken burger
+   * @type string
+   */
+  description: string;
+  /**
+   * @example Burgers
+   * @type string
+   */
+  category: string;
+  /**
+   * @description Effective outlet price — minor units, decimal string.
+   * @example 1200
+   * @type string
+   */
+  unitPriceMinor: string;
+  /**
+   * @example USD
+   * @type string
+   */
+  currencyCode: string;
+  /**
+   * @example true
+   * @type boolean
+   */
+  active: boolean;
+  /**
+   * @description HQ item `version` at change-record time.
+   * @example 3
+   * @type number
+   */
+  itemVersion: number;
+};
