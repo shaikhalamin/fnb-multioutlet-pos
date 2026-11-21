@@ -81,6 +81,13 @@ export const envSchema = z.object({
 
   // Worker profile.
   HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  /**
+   * Audit-trail retention window in days (worker profile). `0` (default)
+   * disables deletion — the trail is immutable out of the box; a positive
+   * value makes the hourly worker timer delete rows older than the cutoff in
+   * bounded batches (FR-10).
+   */
+  AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().min(0).default(0),
 });
 
 export type Env = z.infer<typeof envSchema>;

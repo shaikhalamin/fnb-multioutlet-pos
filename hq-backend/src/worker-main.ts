@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { parseWorkerEnv } from './config/env.schema.js';
 import { JsonLogger } from './common/logging/logger.service.js';
+import { AuditRetentionService } from './modules/audit/audit-retention.service.js';
 
 /** Env log level → NestJS LoggerService level. */
 function toNestLogLevel(level: string): 'fatal' | 'error' | 'warn' | 'log' | 'debug' | 'verbose' {
@@ -9,17 +10,19 @@ function toNestLogLevel(level: string): 'fatal' | 'error' | 'warn' | 'log' | 'de
   return level as 'fatal' | 'error' | 'warn' | 'debug';
 }
 
+/** Retention check cadence: one bounded batch per hour (FR-10). */
+const AUDIT_RETENTION_CHECK_MS = 60 * 60 * 1000;
+
 /**
  * HQ worker entrypoint (PRD §5, §13).
  *
- * Runs the HQ background processors (catalog fan-out, report refresh, audit
- * cleanup) without an HTTP listener. Queue processors register on this
- * application context in later phases; the heartbeat interval keeps the
- * process alive and reports basic liveness until then. The worker never
- * issues human JWTs, so its environment profile omits API auth secrets.
+ * Runs the HQ background processors without an HTTP listener. Deliberately
+ * BullMQ-free (Phase 4 decision): reports are computed on request from the
+ * indexed projections, and audit retention runs as a plain interval timer
+ * here. The heartbeat interval keeps the process alive and reports basic
+ * liveness. The worker never issues human JWTs, so its environment profile
+ * omits API auth secrets.
  */
-const QUEUES = ['catalog-fanout', 'report-refresh', 'audit-cleanup'] as const;
-
 async function bootstrap(): Promise<void> {
   // Parse (and validate) the worker environment and pin the worker profile
   // BEFORE importing AppModule: module-graph evaluation runs
@@ -34,17 +37,39 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   logger.log('hq_worker_started', {
-    queues: QUEUES.join(','),
     heartbeatMs: env.HEARTBEAT_INTERVAL_MS,
+    auditRetentionDays: env.AUDIT_LOG_RETENTION_DAYS,
   });
 
   const heartbeat = setInterval(() => {
     logger.log('worker_heartbeat', { uptimeSeconds: Math.floor(process.uptime()) });
   }, env.HEARTBEAT_INTERVAL_MS);
 
+  // Hourly audit retention sweep: disabled (0 days) performs no deletes; a
+  // failure logs structurally and never kills the worker.
+  const auditRetention = app.get(AuditRetentionService);
+  const retentionTimer = setInterval(() => {
+    void auditRetention
+      .runOnce()
+      .then((result) => {
+        if (result) {
+          logger.log('audit_retention_sweep', {
+            deleted: result.deleted,
+            cutoff: result.cutoff.toISOString(),
+          });
+        }
+      })
+      .catch((error: unknown) => {
+        logger.error('audit_retention_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+  }, AUDIT_RETENTION_CHECK_MS);
+
   const shutdown = async (signal: string): Promise<void> => {
     logger.log('worker_stopping', { signal });
     clearInterval(heartbeat);
+    clearInterval(retentionTimer);
     await app.close();
     process.exit(0);
   };
