@@ -133,13 +133,15 @@ function DashboardPage() {
           </p>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {outlets.data.map((outlet) => (
-              <OutletHealthCard
-                key={outlet.id}
-                outlet={outlet}
-                enabled={canReadSync}
-              />
-            ))}
+            {outlets.data
+              .filter((outlet) => outlet.status === 'ACTIVE')
+              .map((outlet) => (
+                <OutletHealthCard
+                  key={outlet.id}
+                  outlet={outlet}
+                  enabled={canReadSync}
+                />
+              ))}
           </div>
         )}
       </section>
