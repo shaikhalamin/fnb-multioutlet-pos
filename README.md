@@ -23,13 +23,28 @@ runs inside the built images. They are only needed for
 
 ```bash
 git clone <repo-url> && cd fnb-platform
-cp .env.example .env
+cp .env.example .env                                 # required — drives docker compose
+cp hq-backend/.env.example hq-backend/.env           # optional — host-side dev + seed CLI
+cp outlet-backend/.env.example outlet-backend/.env   # optional — host-side dev + seed CLI
+cp hq-frontend/.env.example hq-frontend/.env         # optional — defaults already apply
+cp outlet-frontend/.env.example outlet-frontend/.env # optional — defaults already apply
 ```
 
-The pre-filled values boot the full stack as-is — the placeholder secrets
-already satisfy each backend's runtime Zod validation. Replace the secrets
-before exposing the environment beyond loopback. Every variable referenced by
-`docker-compose.yml` is documented in `.env.example`.
+- The **root `.env` is the only one the Docker flow needs**: Compose injects
+  every container's environment from it, and app-level `.env` files are never
+  read inside the images. Its pre-filled values boot the full stack as-is —
+  the placeholder secrets already satisfy each backend's runtime Zod
+  validation; replace them before exposing the environment beyond loopback.
+  Every variable referenced by `docker-compose.yml` is documented there.
+- The **backend** `.env` files are for running pnpm commands from those
+  folders (`pnpm start:dev`, `pnpm seed`, `pnpm migration:run`,
+  `pnpm test:e2e`). They target the Compose-published datastores
+  (`localhost:15432`/`16379` for HQ, `15433`/`16380` for Outlet A), so start
+  those first: `docker compose up -d hq-db hq-redis outlet-a-db outlet-a-redis`.
+- The **frontend** `.env` files are optional: the apps talk same-origin
+  `/api/v1` everywhere — the Vite dev proxy locally and the Nginx reverse
+  proxy in the container — so `pnpm dev` needs no configuration to reach the
+  Compose-published backends.
 
 ### 2. Build and start
 

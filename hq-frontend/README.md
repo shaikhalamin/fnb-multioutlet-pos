@@ -12,12 +12,19 @@ EB Garamond display + Inter body, self-hosted via Fontsource) — see
 
 ```bash
 corepack enable
+cp .env.example .env # optional — same-origin defaults already apply
 pnpm install
 pnpm dev             # Vite dev server (proxies /api to localhost:4000)
 pnpm build           # SPA build -> dist/client
 pnpm lint && pnpm check
 pnpm generate:api    # Kubb: regenerate src/api/generated from src/api/contracts/hq.openapi.json
 ```
+
+No `.env` is required to develop or build: the app talks same-origin
+`/api/v1` everywhere — `pnpm dev` proxies `/api` to the Compose-published
+`hq-api` (override with `HQ_API_PROXY_TARGET`), and the container image's
+Nginx reverse-proxies to it. The `.env.example` copy is only a place to pin
+public build-time config.
 
 ## Phase 1 — auth + catalog console
 
@@ -43,10 +50,11 @@ pnpm generate:api    # Kubb: regenerate src/api/generated from src/api/contracts
 
 ## Phase 0 foundation
 
-- **Typed API client** — `src/api/axios.ts`: baseURL from Zod-validated
-  `VITE_API_BASE_URL` (`src/lib/env.ts`, build-time public config only),
-  `X-Request-Id` per request, `ApiSuccess`/`ApiError` envelope unwrapping
-  (PRD §7.1) and a stable `ApiError` type.
+- **Typed API client** — `src/api/axios.ts` wraps the generated clients,
+  which are same-origin (`/api/v1`; Vite dev proxy in development, the
+  Nginx reverse proxy in the container), with `X-Request-Id` per request,
+  `ApiSuccess`/`ApiError` envelope unwrapping (PRD §7.1) and a stable
+  `ApiError` type.
 - **Query layer** — `src/lib/query-client.ts` shared QueryClient factory;
   business errors (4xx) are never blind-retried (PRD §11).
 - **Permissions** — `src/lib/permissions.ts` HQ permission helpers; UI-only,

@@ -12,12 +12,20 @@ EB Garamond display + Inter body, self-hosted via Fontsource) — see
 
 ```bash
 corepack enable
+cp .env.example .env # optional — commented defaults only
 pnpm install
 pnpm generate:api     # regenerate src/api/generated from the contract
 pnpm dev              # Vite dev server (proxies /api → OUTLET_API_PROXY_TARGET)
 pnpm build            # tsc --noEmit && vite build (type-check gate first)
 pnpm lint && pnpm check
 ```
+
+No `.env` is required to develop or build: the app talks same-origin
+`/api/v1` everywhere — `pnpm dev` proxies `/api` to the Compose-published
+`outlet-a-api` (default `http://localhost:5000`, override with
+`OUTLET_API_PROXY_TARGET`), and the container image's Nginx reverse-proxies
+to it. The `.env.example` copy exists to pin that proxy target if it
+differs.
 
 ## Phase 0 foundation
 

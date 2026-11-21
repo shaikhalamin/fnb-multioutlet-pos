@@ -21,6 +21,7 @@ only outbound.
 
 ```bash
 corepack enable
+cp .env.example .env   # host-side runs only; Compose injects its own values
 pnpm install
 pnpm start:dev        # dev server (loads .env if present)
 pnpm build && pnpm start:prod
@@ -30,6 +31,16 @@ pnpm test:e2e         # needs DATABASE_URL, REDIS_URL, OUTLET_ID, OUTLET_CODE
 pnpm migration:run    # apply migrations (tsx locally; dist in images)
 pnpm openapi:export   # regenerate openapi/openapi.json after endpoint changes
 ```
+
+`.env` is only read by processes started from this folder; the Docker flow
+never sees it. Its `DATABASE_URL`/`REDIS_URL` target the root Compose
+datastores published on loopback (`localhost:15433` / `16380`), so bring
+those up first from the repo root (`docker compose up -d outlet-a-db
+outlet-a-redis` — see the root README quickstart). The pinned `OUTLET_ID`
+matches the demo Outlet A identity in the root `.env`. Running the sync
+worker host-side additionally needs the HQ machine key pair issued by the
+HQ seed (root README quickstart, steps 3–4); the Docker flow wires it
+through Compose instead.
 
 ## Configuration
 

@@ -21,6 +21,7 @@ outlet database; all synchronization is outlet-initiated.
 
 ```bash
 corepack enable
+cp .env.example .env   # host-side runs only; Compose injects its own values
 pnpm install
 pnpm start:dev        # dev server (loads .env if present)
 pnpm build && pnpm start:prod
@@ -31,6 +32,15 @@ pnpm migration:run    # apply migrations (tsx locally; dist in images)
 pnpm seed             # idempotent seed (SEED_HQ_ADMIN_EMAIL / SEED_HQ_ADMIN_PASSWORD)
 pnpm openapi:export   # regenerate openapi/openapi.json after endpoint changes
 ```
+
+`.env` is only read by processes started from this folder; the Docker flow
+never sees it. Its `DATABASE_URL`/`REDIS_URL` target the root Compose
+datastores published on loopback (`localhost:15432` / `16379`), so bring
+those up first from the repo root (`docker compose up -d hq-db hq-redis` —
+see the root README quickstart). When issuing outlet keys host-side
+(`SEED_ISSUE_OUTLET_KEYS=1 pnpm seed`), `OUTLET_KEY_PEPPER` must equal the
+root `.env` value `hq-api` runs with; the Compose-native seed loop in the
+root README guarantees that match.
 
 ## Configuration
 
