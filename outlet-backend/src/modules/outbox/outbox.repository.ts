@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
+import { In } from 'typeorm';
 import type { DataSource, EntityManager } from 'typeorm';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { OutboxCounterEntity } from '../../database/entities/outbox-counter.entity.js';
 import { OutboxEventEntity, type OutboxStatus } from '../../database/entities/outbox-event.entity.js';
+import { SyncAttemptLogEntity } from '../../database/entities/sync-attempt-log.entity.js';
 import { sha256OfCanonicalJson } from './canonical-json.js';
 
 /** A committed sale ready to become one immutable `sale.completed` event. */
@@ -174,6 +176,129 @@ export class OutboxRepository {
     );
     return rows[0]?.latest ? new Date(rows[0].latest) : null;
   }
+
+  // ---- Phase 3 dispatcher state machine (PRD §8.6 A–G) -----------------------
+
+  /**
+   * Leases due rows for delivery with `FOR UPDATE SKIP LOCKED` (§8.6 A):
+   * status PENDING/RETRY, backoff elapsed, and no live lease. Leasing bumps
+   * `attempts` (an attempt is starting) and stamps `lease_until`; two
+   * concurrent sweepers can never lease the same row.
+   */
+  async leaseDueBatch(batchSize: number, leaseMs: number, now = new Date()): Promise<OutboxEventEntity[]> {
+    return this.dataSource.transaction(async (manager) => {
+      const rows: OutboxEventEntity[] = await manager
+        .getRepository(OutboxEventEntity)
+        .createQueryBuilder('event')
+        .setLock('pessimistic_write_skip_locked')
+        .where(
+          "event.status IN ('PENDING', 'RETRY') AND (event.next_attempt_at IS NULL OR event.next_attempt_at <= :now) AND (event.lease_until IS NULL OR event.lease_until <= :now)",
+          { now },
+        )
+        .orderBy('event.sequence_no', 'ASC')
+        .take(batchSize)
+        .getMany();
+      if (rows.length === 0) return rows;
+      const leaseUntil = new Date(now.getTime() + leaseMs);
+      await manager
+        .getRepository(OutboxEventEntity)
+        .createQueryBuilder()
+        .update(OutboxEventEntity)
+        .set({ leaseUntil, attempts: () => 'attempts + 1' })
+        .whereInIds(rows.map((row) => row.id))
+        .execute();
+      return rows.map((row) => ({ ...row, leaseUntil, attempts: row.attempts + 1 }));
+    });
+  }
+
+  /** Loads durable rows by ID — BullMQ jobs carry event IDs only (§13). */
+  findByIds(ids: string[]): Promise<OutboxEventEntity[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.dataSource.getRepository(OutboxEventEntity).find({
+      where: { id: In(ids) },
+      order: { sequenceNo: 'ASC' },
+    });
+  }
+
+  /**
+   * Terminal success — only after an HQ `ACCEPTED` or hash-identical
+   * `DUPLICATE` ack (§8.6 D: never mark delivered before HQ ack).
+   */
+  async markDelivered(ids: string[], at = new Date()): Promise<void> {
+    if (ids.length === 0) return;
+    await this.dataSource
+      .getRepository(OutboxEventEntity)
+      .update({ id: In(ids) }, { status: 'DELIVERED', publishedAt: at, nextAttemptAt: null, leaseUntil: null, lastError: null });
+  }
+
+  /** Retry with capped exponential backoff + jitter (§8.6 E); honors Retry-After. */
+  async markRetry(ids: string[], lastError: string, delayMs: number, now = new Date()): Promise<void> {
+    if (ids.length === 0) return;
+    await this.dataSource
+      .getRepository(OutboxEventEntity)
+      .update(
+        { id: In(ids) },
+        { status: 'RETRY', nextAttemptAt: new Date(now.getTime() + delayMs), leaseUntil: null, lastError },
+      );
+  }
+
+  /** Terminal parking for permanent conflicts — never deleted (§8.6 F). */
+  async markQuarantined(id: string, lastError: string): Promise<void> {
+    await this.dataSource
+      .getRepository(OutboxEventEntity)
+      .update({ id }, { status: 'QUARANTINED', nextAttemptAt: null, leaseUntil: null, lastError });
+  }
+
+  /**
+   * Returns stalled work to eligibility (§8.6 G): leases that expired
+   * without an outcome revert to pickup by the periodic scanner.
+   */
+  async expireLeases(now = new Date()): Promise<number> {
+    const result = await this.dataSource
+      .getRepository(OutboxEventEntity)
+      .createQueryBuilder()
+      .update(OutboxEventEntity)
+      .set({ leaseUntil: null })
+      .where("lease_until IS NOT NULL AND lease_until <= :now AND status IN ('PENDING', 'RETRY')", { now })
+      .execute();
+    return result.affected ?? 0;
+  }
+
+  /** One append-only attempt row per send — status/duration/error, never secrets. */
+  async appendAttemptLog(input: {
+    outboxEventId: string;
+    statusCode: number | null;
+    durationMs: number;
+    errorCode: string | null;
+  }): Promise<void> {
+    const repo = this.dataSource.getRepository(SyncAttemptLogEntity);
+    await repo.insert(
+      repo.create({
+        outboxEventId: input.outboxEventId,
+        statusCode: input.statusCode,
+        durationMs: input.durationMs,
+        errorCode: input.errorCode,
+      }),
+    );
+  }
+}
+
+// ---- Backoff (PRD §8.7) -----------------------------------------------------
+
+const RETRY_BASE_DELAY_MS = 5_000;
+const RETRY_MAX_DELAY_MS = 10 * 60_000;
+const RETRY_JITTER_RATIO = 0.2;
+
+/**
+ * Capped exponential backoff with ±20% jitter, honoring a server
+ * `Retry-After` (seconds) when present (§8.7). Pure and deterministic under
+ * a seeded random for tests.
+ */
+export function computeBackoffDelayMs(attempts: number, retryAfterSeconds?: number | null, random = Math.random): number {
+  const exponential = Math.min(RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempts - 1), RETRY_MAX_DELAY_MS);
+  const base = retryAfterSeconds && retryAfterSeconds > 0 ? Math.max(exponential, retryAfterSeconds * 1000) : exponential;
+  const jitter = 1 + (random() * 2 - 1) * RETRY_JITTER_RATIO;
+  return Math.min(Math.round(base * jitter), RETRY_MAX_DELAY_MS);
 }
 
 /** PRD §8.4 integrity invariants, enforced before any outbox write. */

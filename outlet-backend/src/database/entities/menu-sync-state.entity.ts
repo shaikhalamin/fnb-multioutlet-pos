@@ -21,4 +21,11 @@ export class MenuSyncStateEntity {
   /** Snapshot the catalog was last rebuilt from, when applicable. */
   @Column({ name: 'snapshot_id', type: 'uuid', nullable: true })
   snapshotId!: string | null;
+
+  /**
+   * Audited emergency extension of the offline grace window (PRD §8.8):
+   * effective expiry = max(last_sync_at + OFFLINE_GRACE_HOURS, this value).
+   */
+  @Column({ name: 'grace_overridden_until', type: 'timestamptz', nullable: true })
+  graceOverriddenUntil!: Date | null;
 }

@@ -18,6 +18,8 @@ export { SaleItemEntity } from './sale-item.entity.js';
 export { SaleIdempotencyKeyEntity } from './sale-idempotency-key.entity.js';
 export { OutboxCounterEntity } from './outbox-counter.entity.js';
 export { OutboxEventEntity, type OutboxStatus } from './outbox-event.entity.js';
+export { SyncAttemptLogEntity } from './sync-attempt-log.entity.js';
+export { OutletAuditLogEntity, type OutletAuditActorType } from './outlet-audit-log.entity.js';
 
 import { OutletIdentityEntity } from './outlet-identity.entity.js';
 import { OutletUserEntity } from './outlet-user.entity.js';
@@ -36,10 +38,12 @@ import { SaleItemEntity } from './sale-item.entity.js';
 import { SaleIdempotencyKeyEntity } from './sale-idempotency-key.entity.js';
 import { OutboxCounterEntity } from './outbox-counter.entity.js';
 import { OutboxEventEntity } from './outbox-event.entity.js';
+import { SyncAttemptLogEntity } from './sync-attempt-log.entity.js';
+import { OutletAuditLogEntity } from './outlet-audit-log.entity.js';
 
 /**
  * Every outlet TypeORM entity, registered on the shared DataSource
- * (PRD §6.2). `sync_attempt_logs` lands with the Phase-3 sync migration.
+ * (PRD §6.2).
  */
 export const outletEntities = [
   OutletIdentityEntity,
@@ -59,4 +63,6 @@ export const outletEntities = [
   SaleIdempotencyKeyEntity,
   OutboxCounterEntity,
   OutboxEventEntity,
+  SyncAttemptLogEntity,
+  OutletAuditLogEntity,
 ];
