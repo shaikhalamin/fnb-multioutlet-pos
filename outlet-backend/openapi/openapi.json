@@ -94,6 +94,180 @@
         ]
       }
     },
+    "/users": {
+      "get": {
+        "operationId": "UsersController_listUsers",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List local outlet users (keyset pagination).",
+        "tags": [
+          "Users"
+        ]
+      },
+      "post": {
+        "operationId": "UsersController_createUser",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "CONFLICT — email already exists"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY — unknown role code"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create a local outlet user with roles.",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/users/{id}": {
+      "patch": {
+        "operationId": "UsersController_updateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Update status and/or replace roles.",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
+    "/roles": {
+      "get": {
+        "operationId": "UsersController_listRoles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RoleResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "List local roles with their permission sets.",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -236,6 +410,140 @@
         },
         "required": [
           "success"
+        ]
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "f5df2a66-119c-45e5-b797-fd31cfd93aa8"
+          },
+          "email": {
+            "type": "string",
+            "example": "cashier@outlet-a.local"
+          },
+          "status": {
+            "type": "string",
+            "example": "ACTIVE",
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
+          },
+          "roleCodes": {
+            "example": [
+              "OUTLET_CASHIER"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "status",
+          "roleCodes",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "cashier@outlet-a.local",
+            "description": "Work email; unique at this outlet."
+          },
+          "password": {
+            "type": "string",
+            "example": "StrongPass123!",
+            "minLength": 8,
+            "maxLength": 128
+          },
+          "roleCodes": {
+            "example": [
+              "OUTLET_CASHIER"
+            ],
+            "description": "Local role codes to assign.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "roleCodes"
+        ]
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "DISABLED",
+            "enum": [
+              "ACTIVE",
+              "DISABLED"
+            ]
+          },
+          "roleCodes": {
+            "example": [
+              "OUTLET_CASHIER"
+            ],
+            "description": "Replaces the role set when present.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RoleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0c9d0f0e-2fa2-4f71-a111-6e2f83d94d02"
+          },
+          "code": {
+            "type": "string",
+            "example": "OUTLET_CASHIER"
+          },
+          "name": {
+            "type": "string",
+            "example": "Outlet Cashier"
+          },
+          "permissions": {
+            "example": [
+              "menu.read",
+              "sales.create",
+              "sales.read"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "name",
+          "permissions"
         ]
       }
     }
