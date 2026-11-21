@@ -9,6 +9,7 @@ import { httpLoggingMiddleware } from './common/logging/http-logging.middleware.
 import { JsonLogger } from './common/logging/logger.service.js';
 import { ConfigurationModule } from './config/configuration.module.js';
 import { DatabaseModule } from './database/database.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
@@ -25,6 +26,7 @@ import { UsersModule } from './modules/users/users.module.js';
     // per-route budgets are set with @Throttle (e.g. outlet login).
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     DatabaseModule,
+    AuditModule,
     AuthModule,
     UsersModule,
     MenuCacheModule,
