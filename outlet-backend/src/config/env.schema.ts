@@ -70,6 +70,14 @@ export const envSchema = z.object({
   OFFLINE_GRACE_HOURS: positiveInt.default(72),
   SYNC_MAX_BODY_BYTES: positiveInt.default(1_048_576),
 
+  /**
+   * Global throttle budget per client IP. The 100/min default protects the
+   * POS surface; perf runs (`pnpm perf:sale`, PRD §16) raise the limit via
+   * environment instead of code changes.
+   */
+  THROTTLE_TTL_MS: z.coerce.number().int().positive().default(60_000),
+  THROTTLE_LIMIT: z.coerce.number().int().positive().default(100),
+
   CORS_ORIGINS: z
     .string()
     .default('')

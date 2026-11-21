@@ -1,5 +1,6 @@
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor.js';
 import { RequestIdInterceptor } from './common/interceptors/request-id.interceptor.js';
@@ -8,6 +9,7 @@ import { JwtAuthGuard } from './common/rbac/jwt-auth.guard.js';
 import { httpLoggingMiddleware } from './common/logging/http-logging.middleware.js';
 import { JsonLogger } from './common/logging/logger.service.js';
 import { ConfigurationModule } from './config/configuration.module.js';
+import type { Env } from './config/env.schema.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
@@ -22,9 +24,18 @@ import { UsersModule } from './modules/users/users.module.js';
   // ConfigurationModule first: every other module reads ConfigService<Env, true>.
   imports: [
     ConfigurationModule,
-    // Global rate limiting: 100 requests/minute per client IP. Tighter
-    // per-route budgets are set with @Throttle (e.g. outlet login).
-    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    // Global rate limiting: 100 requests/minute per client IP by default
+    // (env-tunable for perf runs, PRD §16). Tighter per-route budgets are
+    // set with @Throttle (e.g. outlet login).
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => [
+        {
+          ttl: config.get('THROTTLE_TTL_MS', { infer: true }),
+          limit: config.get('THROTTLE_LIMIT', { infer: true }),
+        },
+      ],
+    }),
     DatabaseModule,
     AuditModule,
     AuthModule,

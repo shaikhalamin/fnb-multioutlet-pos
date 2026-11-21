@@ -237,6 +237,10 @@ services:
       OUTLET_JWT_REFRESH_SECRET: ${OUTLET_JWT_REFRESH_SECRET:-dev-only-outlet-refresh-secret-0123456789}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       OFFLINE_GRACE_HOURS: ${OFFLINE_GRACE_HOURS:-72}
+      # Perf runs (pnpm perf:sale) raise the global throttle budget through
+      # this knob instead of code changes (PRD §16 load testing).
+      THROTTLE_TTL_MS: ${OUTLET_A_THROTTLE_TTL_MS:-60000}
+      THROTTLE_LIMIT: ${OUTLET_A_THROTTLE_LIMIT:-100}
       # Local dev cluster doubles as the admin-restricted docs environment.
       SWAGGER_ENABLED: "true"
     ports:

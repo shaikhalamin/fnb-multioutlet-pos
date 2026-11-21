@@ -26,7 +26,8 @@
     "migration:show": "tsx src/database/migrate.ts show",
     "seed": "tsx src/database/seed.ts",
     "openapi:export": "pnpm build && node scripts/export-openapi.mjs",
-    "generate:api": "kubb generate && node scripts/fix-generated-imports.mjs"
+    "generate:api": "kubb generate && node scripts/fix-generated-imports.mjs",
+    "perf:sale": "tsx scripts/perf/sale-load.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",
@@ -68,6 +69,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
+    "autocannon": "8.0.0",
     "kubb": "^5.23.1",
     "oxlint": "^1.58.0",
     "oxlint-tsgolint": "^7.0.2001",

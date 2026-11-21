@@ -133,3 +133,33 @@ Manager surface (`sync.override`, audited in `outlet_audit_logs`):
 honors `max(last_sync_at + OFFLINE_GRACE_HOURS, grace_overridden_until)`)
 and `POST /sync/outbox/:eventId/replay`; `GET /sync/status` surfaces the
 override, backlog and quarantined-error samples.
+
+## Phase 4 — sale-load harness (PRD §16)
+
+`pnpm perf:sale` (`scripts/perf/sale-load.ts`, tsx + pinned `autocannon`
+devDependency) drives dynamic-body concurrent sales against a running outlet
+API and asserts the local-sale latency target. Every request mints a fresh
+`Idempotency-Key` + `X-Request-Id` and a rotating item/quantity mix (replayed
+bodies would return cached idempotent 201s and fake the numbers); stock is
+pre-restocked through the audited `POST /inventory/adjustments` path
+(`reason: "RESTOCK"`, `perf-` request ids) so balances never bind mid-run.
+Credentials come from `--email/--password` or `PERF_EMAIL/PERF_PASSWORD` and
+are never printed. The process exits non-zero when any request errors,
+any response is non-2xx, or p95 exceeds the threshold (default 500 ms,
+PRD §16 — subject to hardware).
+
+Run against the compose `outlet-a-api` (the API's global 100/min/IP throttle
+must be raised for the run via the env knob, not code):
+
+```bash
+OUTLET_A_THROTTLE_LIMIT=1000000 docker compose up -d outlet-a-api
+cd outlet-backend && pnpm perf:sale -- --duration 60 --connections 25
+```
+
+Flags: `--url` (default `http://127.0.0.1:5000/api/v1`), `--duration` (s,
+default 30), `--connections` (default 10), `--rate` (optional req/s cap),
+`--p95-threshold` (ms, default 500), `--max-quantity` (default 5),
+`--restock-target` (default 5000).
+
+Post-run integrity checks live in the root README's Phase 4 verification
+notes (duplicate receipts, oversells, outbox completeness, HQ totals).
