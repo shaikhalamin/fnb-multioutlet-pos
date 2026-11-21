@@ -20,7 +20,12 @@ function newRequestId(): string {
   return globalThis.crypto.randomUUID()
 }
 
-type EnvelopeBody = { data?: unknown; error?: EnvelopeError; meta?: unknown }
+type EnvelopeBody = {
+  data?: unknown
+  error?: EnvelopeError
+  meta?: EnvelopeMeta
+}
+type EnvelopeMeta = { nextCursor?: unknown }
 type EnvelopeError = {
   code?: string
   message?: string
@@ -158,9 +163,14 @@ apiClient.interceptors.response.use(
     // Unwrap the ApiSuccess envelope (PRD §7.1) so generated clients — typed
     // against the bare OpenAPI payloads — resolve the DTO directly. The body
     // is re-serialized because the generated transport builds a web Response
-    // from whatever bytes it finds here.
+    // from whatever bytes it finds here. A pagination cursor (`meta.nextCursor`,
+    // PRD §3.1) would otherwise be lost in the unwrap, so it is promoted to a
+    // response header — the one envelope-safe channel for it.
     if (body && typeof body === 'object' && 'data' in body) {
       response.data = JSON.stringify(body.data ?? null)
+      if (typeof body.meta?.nextCursor === 'string') {
+        response.headers['x-page-cursor'] = body.meta.nextCursor
+      }
     }
     return response
   },

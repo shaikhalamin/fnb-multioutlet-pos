@@ -18,6 +18,7 @@ export const HQ_PERMISSIONS = [
   'users.write',
   'reports.read',
   'sync.read',
+  'audit.read',
 ] as const satisfies readonly string[]
 
 export type HqPermission = (typeof HQ_PERMISSIONS)[number]

@@ -64,6 +64,15 @@ export default function Header() {
                   Reports
                 </Link>
               ) : null}
+              {hasPermission(user, 'audit.read') ? (
+                <Link
+                  to="/audit"
+                  className="nav-link"
+                  activeProps={{ className: 'nav-link is-active' }}
+                >
+                  Audit
+                </Link>
+              ) : null}
               {hasPermission(user, 'users.read') ? (
                 <Link
                   to="/users"
