@@ -12,14 +12,40 @@ described in [fnb_multi_outlet_prd.md](./fnb_multi_outlet_prd.md):
 
 All projects use **pnpm** (pinned via `packageManager` in each `package.json`).
 
-## Quick start (Docker)
+## Fresh clone → running system (Docker)
+
+Prerequisites: git and Docker Engine with Compose v2 (`docker compose
+version`). Node/pnpm are **not** required for this flow — every command below
+runs inside the built images. They are only needed for
+[local development without Docker](#local-development-without-docker).
+
+### 1. Clone and configure
 
 ```bash
-cp .env.example .env   # then edit values (dev defaults are pre-filled)
-docker compose up --build
+git clone <repo-url> && cd fnb-platform
+cp .env.example .env
 ```
 
-This starts the full topology from PRD §14.2:
+The pre-filled values boot the full stack as-is — the placeholder secrets
+already satisfy each backend's runtime Zod validation. Replace the secrets
+before exposing the environment beyond loopback. Every variable referenced by
+`docker-compose.yml` is documented in `.env.example`.
+
+### 2. Build and start
+
+```bash
+docker compose up --build -d
+```
+
+- The four app images (`fnb/hq-backend:local`, `fnb/outlet-backend:local`,
+  both frontends) are built locally and tagged — nothing is pulled from a
+  registry for them; only `postgres:17-alpine` / `redis:7-alpine` come from
+  Docker Hub.
+- The one-shot `hq-migrate` / `outlet-a-migrate` jobs apply the TypeORM
+  migrations **before** the APIs start (single controlled job per database,
+  PRD §14.2); `hq-api` additionally gates on Redis health.
+- Wait for readiness: `docker compose ps` — every long-running service should
+  report `healthy`/`running` (health probe: `GET /api/v1/health` per backend).
 
 | Service | Purpose | Host URL |
 |---|---|---|
@@ -32,12 +58,82 @@ This starts the full topology from PRD §14.2:
 | `outlet-a-worker` | Outlet A sync worker (menu pull / outbox push) | — |
 | `outlet-a-db` / `outlet-a-redis` | Outlet A PostgreSQL / Redis (internal) | — |
 
-Health probes: `GET /api/v1/health` on each backend. Check status with
-`docker compose ps` — all services should report `healthy`/`running`.
+(All host ports are configurable via the root `.env`.)
 
-Two one-shot services run to completion **before** the APIs start:
-`hq-migrate` and `outlet-a-migrate` apply the TypeORM migrations as a single
-controlled job per database (PRD §14.2) — never concurrently on API replicas.
+### 3. Seed HQ and issue the outlet machine key
+
+One idempotent command seeds the HQ admin, the demo outlets A/B/C with demo
+items, and issues the outlet sync keys:
+
+```bash
+docker compose run --rm -e SEED_ISSUE_OUTLET_KEYS=1 hq-api node dist/database/seed.js
+```
+
+- HQ console login it creates: `admin@fnb.local` / `Admin123!` (override via
+  `SEED_HQ_ADMIN_EMAIL` / `SEED_HQ_ADMIN_PASSWORD` on the seed run).
+- For each outlet the run prints a `seed_outlet_key_issued` warn line carrying
+  `keyId` + `secret` — **the raw secret is shown exactly once**; copy the pair
+  now. Outlets that already hold an ACTIVE key are skipped
+  (`seed_outlet_key_skipped`), so re-running the seed never rotates a key
+  away from you.
+- Running the seed through Compose (rather than host-side `pnpm seed`)
+  guarantees the `OUTLET_KEY_PEPPER` it hashes with is the exact value
+  `hq-api` runs with — the issuance check requires the match.
+
+### 4. Wire the outlet worker to HQ
+
+Paste the issued pair into the root `.env`:
+
+```dotenv
+OUTLET_A_HQ_KEY_ID=<printed keyId>
+OUTLET_A_HQ_KEY_SECRET=<printed secret>
+```
+
+then recreate the worker so it picks up the new environment:
+
+```bash
+docker compose up -d outlet-a-worker
+```
+
+Until this step the worker runs but its HQ calls are answered `401`. **POS
+sales work regardless** — an outlet sale never depends on HQ (PRD §2); only
+menu pull / event push wait for the key.
+
+### 5. Seed Outlet A
+
+```bash
+docker compose run --rm outlet-a-api node dist/database/seed.js
+```
+
+Creates the local roles and users (`manager@outlet-a.local` / `Manager123!`,
+`cashier@outlet-a.local` / `Cashier123!`, `clerk@outlet-a.local` /
+`Clerk123!` — override via `SEED_OUTLET_<ROLE>_EMAIL/PASSWORD`) plus the demo
+catalog with stock. The seed pins the fixed demo outlet/item UUIDs, so the
+outlet's identity matches `OUTLET_A_ID` and the HQ seed.
+
+### 6. Log in and verify
+
+| URL | What |
+|---|---|
+| http://localhost:8080 | HQ console — `admin@fnb.local` / `Admin123!` |
+| http://localhost:8081 | Outlet A POS — `manager@outlet-a.local` / `Manager123!` |
+| http://localhost:4000/api/v1/docs | HQ Swagger UI (local dev cluster only) |
+| http://localhost:5000/api/v1/docs | Outlet A Swagger UI (local dev cluster only) |
+
+Quickest end-to-end check: sign in to the POS, ring up a sale, then watch it
+appear on the HQ dashboard within a few sync cycles (HQ reports disclose
+`dataAsOf` while they wait). The POS sync-status banner and
+`GET /api/v1/sync/status` show menu revision and outbox backlog locally.
+
+### Reset / teardown
+
+```bash
+docker compose down        # stop the stack, keep all data volumes
+docker compose down -v     # also wipe both databases and queues (irreversible)
+```
+
+After `down -v`, repeat from step 2 (images are retained; re-seeding is
+required).
 
 ## Phase 1 — HQ security & catalog (implemented)
 
@@ -164,13 +260,21 @@ emergency offline-grace override.
 
 ### Machine-key provisioning loop (PRD §9.2)
 
-Outlets sync with HQ only after a real key is provisioned:
+Outlets sync with HQ only after a real key is provisioned — steps 3–4 of
+[Fresh clone → running system](#fresh-clone--running-system-docker) above
+cover the Docker-native loop:
 
 ```bash
-docker compose up -d hq-db hq-api hq-migrate        # 1. HQ first (hq-migrate runs migrations only)
-SEED_ISSUE_OUTLET_KEYS=1 pnpm --dir hq-backend seed # 2. seeds + prints keyId.secret ONCE per outlet
-# 3. paste the pair into root .env (OUTLET_A_HQ_KEY_ID / _SECRET), then:
-docker compose up -d outlet-a-worker                # 4. the sync loop starts
+docker compose run --rm -e SEED_ISSUE_OUTLET_KEYS=1 hq-api node dist/database/seed.js
+# → prints keyId + secret ONCE per outlet; paste into root .env, then:
+docker compose up -d outlet-a-worker
+```
+
+Host-side alternative (requires Node/pnpm and an `hq-backend/.env` whose
+`OUTLET_KEY_PEPPER` matches the root `.env` value `hq-api` runs with):
+
+```bash
+SEED_ISSUE_OUTLET_KEYS=1 pnpm --dir hq-backend seed
 ```
 
 `SEED_ISSUE_OUTLET_KEYS` is off by default; issuance is idempotent (outlets
