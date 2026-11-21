@@ -2,21 +2,28 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { fetchSyncStatus } from './api'
 import { syncKeys } from './keys'
+import { useSession } from '#/features/auth/session'
+import { hasPermission } from '#/lib/permissions'
 
 /**
  * Local sync banner (PRD §11, §8.8): menu revision + last sync, pending
  * upload count, and an escalating warning as the offline grace window
  * approaches expiry. Purely informational — it NEVER blocks a local sale
- * (the backend enforces the grace policy authoritatively).
+ * (the backend enforces the grace policy authoritatively). Hidden for
+ * roles without `sync.read` (e.g. cashiers) instead of polling a route
+ * that would 403 them every 30s.
  */
 export function SyncBanner() {
+  const session = useSession()
+  const canReadSync = hasPermission(session.user, 'sync.read')
   const status = useQuery({
     queryKey: syncKeys.status(),
     queryFn: fetchSyncStatus,
     refetchInterval: 30_000,
+    enabled: canReadSync,
   })
 
-  if (status.isPending) return null
+  if (!canReadSync || status.isPending) return null
 
   if (status.isError) {
     return (
