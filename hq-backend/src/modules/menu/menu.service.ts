@@ -325,6 +325,7 @@ export class MenuService {
     }
     return {
       assignmentId: target.assignmentId,
+      menuItemId: itemId,
       sku: item.sku,
       name: snapshot.name,
       description: snapshot.description,
@@ -353,12 +354,13 @@ export class MenuService {
     for (const target of targets) {
       const item = itemsById.get(target.menuItemId);
       if (!item) continue;
-      changes.push({
-        outletId: target.outletId,
-        action: 'UPSERT',
-        payload: {
-          assignmentId: target.assignmentId,
-          sku: item.sku,
+        changes.push({
+          outletId: target.outletId,
+          action: 'UPSERT',
+          payload: {
+            assignmentId: target.assignmentId,
+            menuItemId: target.menuItemId,
+            sku: item.sku,
           name: item.name,
           description: item.description,
           category: category?.name ?? '',

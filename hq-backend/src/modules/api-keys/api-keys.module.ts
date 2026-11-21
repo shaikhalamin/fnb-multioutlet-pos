@@ -8,5 +8,7 @@ import { ApiKeysService } from './api-keys.service.js';
   imports: [OutletsModule],
   controllers: [ApiKeysController],
   providers: [ApiKeysRepository, ApiKeysService],
+  // The Phase-3 sync guard verifies keys read-only through the same repo.
+  exports: [ApiKeysRepository],
 })
 export class ApiKeysModule {}

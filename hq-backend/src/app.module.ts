@@ -16,6 +16,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { MenuModule } from './modules/menu/menu.module.js';
 import { OutletsModule } from './modules/outlets/outlets.module.js';
+import { SyncIngestModule } from './modules/sync-ingest/sync-ingest.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
@@ -33,6 +34,7 @@ import { UsersModule } from './modules/users/users.module.js';
     MenuModule,
     AssignmentsModule,
     ApiKeysModule,
+    SyncIngestModule,
     HealthModule,
   ],
   providers: [

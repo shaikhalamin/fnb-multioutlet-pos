@@ -161,6 +161,7 @@ export class AssignmentsService {
       .findOne({ where: { id: item.categoryId } });
     return {
       assignmentId,
+      menuItemId: item.id,
       sku: item.sku,
       name: item.name,
       description: item.description,
