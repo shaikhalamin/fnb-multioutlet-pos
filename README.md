@@ -152,6 +152,65 @@ Network isolation (PRD §2):
 Frontends are served by their own Nginx, which also reverse-proxies `/api/`
 to their backend so the browser stays same-origin (no CORS exposure).
 
+## Phase 3 — Synchronization (implemented)
+
+The complete outlet ⇄ HQ synchronization loop (PRD §8, §18): typed HQ machine
+client, menu pull + single-response snapshot, BullMQ dispatcher (sweep →
+lease `FOR UPDATE SKIP LOCKED` → deliver), transactional HQ inbox with
+per-event acks (`ACCEPTED` / `DUPLICATE` / `RETRYABLE_ERROR` /
+`REJECTED_PERMANENT`), capped-backoff retries, hourly checkpoint
+reconciliation, heartbeats, quarantine with manager replay, and the audited
+emergency offline-grace override.
+
+### Machine-key provisioning loop (PRD §9.2)
+
+Outlets sync with HQ only after a real key is provisioned:
+
+```bash
+docker compose up -d hq-db hq-api hq-migrate        # 1. HQ first (migrate + seed)
+SEED_ISSUE_OUTLET_KEYS=1 pnpm --dir hq-backend seed # 2. prints keyId.secret ONCE per outlet
+# 3. paste the pair into root .env (OUTLET_A_HQ_KEY_ID / _SECRET), then:
+docker compose up -d outlet-a-worker                # 4. the sync loop starts
+```
+
+`SEED_ISSUE_OUTLET_KEYS` is off by default; issuance is idempotent (outlets
+holding an ACTIVE, unexpired key are skipped). The seed pins well-known demo
+UUIDs for outlets A/B/C and the three demo items so the HQ seed, the outlet
+seed and root `.env` agree on identity.
+
+### What the loop guarantees (verified by drills + e2e)
+
+- **Sales never wait on HQ** (AT-10/AT-11): during a full `docker stop
+  fnb-platform-hq-api-1` outage, POS sales kept committing with sequential
+  receipts (`A-001145..147`), `/sync/status` showed the growing backlog, the
+  worker backed off (`HQ_UNREACHABLE` → capped exponential backoff honoring
+  `Retry-After`), and the backlog drained within seconds of restart with zero
+  duplicates at HQ.
+- **Exactly-once HQ effects** (AT-09/AT-15): re-posting a delivered batch
+  returns `DUPLICATE` with a single `hq_sales` projection; the same `eventId`
+  with a different payload is `REJECTED_PERMANENT` (`EVENT_ID_CONFLICT` +
+  security audit) and never overwrites the original.
+- **Atomic menu apply** (AT-13/AT-14): a mid-apply failure commits nothing
+  and never advances the checkpoint; a deleted change history (gap) triggers
+  the single-response snapshot — upserts, tombstones for absent items,
+  checkpoint pinned to `snapshotRevision`.
+- **Offline grace** (AT-12/AT-19, §8.8): stale sync (73 h) blocks sales with
+  `503 SYNC_TEMPORARILY_UNAVAILABLE`; a manager's audited override
+  (`POST /sync/grace-override`, banner → dialog) rescues sales; HQ price
+  changes alter only future sales — receipts keep their snapshot prices.
+- **Identity is server-derived** (AT-16/AT-17): the outlet scope comes only
+  from the key record; events claiming another outlet reject the whole batch
+  (403); cashiers cannot apply overrides; `/sync/v1/*` sends no CORS headers.
+- **Restore safety** (AT-22): replaying events from a restored outlet backup
+  is all-`DUPLICATE` at HQ — receipt numbers and projections stay consistent.
+
+HQ-side surfaces: `GET /sync/v1/menu/changes|snapshot`, `POST
+/sync/v1/events/batch`, `GET /sync/v1/checkpoint`, `POST
+/sync/v1/heartbeat` (machine key; 600/min throttle; envelope + `X-Request-Id`
+everywhere) and `GET /outlets/:id/sync-status` (human `sync.read`).
+Outlet-side surfaces: `GET /sync/status`, `POST /sync/grace-override`,
+`POST /sync/outbox/:eventId/replay` (manager `sync.override`).
+
 ## Local development (without Docker)
 
 Each project is independent — install and run from its own folder with pnpm:

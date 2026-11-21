@@ -109,3 +109,27 @@ a fixed-UUID catalog (BURGER-01 `"1000"`, PIZZA-01 `"1500"`, COLA-01
 Verification: `pnpm lint && pnpm test` (70 unit specs) and `pnpm test:e2e`
 (24 specs against the real outlet PostgreSQL/Redis covering AT-03…AT-08,
 AT-11 grace expiry, AT-17 persona denials and AT-18 refresh reuse).
+
+## Phase 3 — sync worker (PRD §8, §13)
+
+`pnpm start:worker` runs the outlet-initiated loop (jobs carry event IDs
+only; the DB sweeper — not BullMQ scheduling — is the source of truth for
+retry eligibility):
+
+- **menu-pull** (30 s): `MenuPullService` pulls deltas, verifies the reply's
+  outlet identity, applies the whole page + checkpoint in ONE transaction;
+  gaps route to the single-response snapshot rebuild (AT-13/AT-14).
+- **outbox-dispatch** (5 s): expire stalled leases → lease due rows
+  `FOR UPDATE SKIP LOCKED` → enqueue IDs to `sync-delivery`.
+- **sync-delivery**: `HqSyncClient` (Kubb-generated, key injected server-side,
+  every reply Zod-parsed) pushes batches; `ACCEPTED`/`DUPLICATE` → DELIVERED,
+  retryable faults → capped backoff (honors `Retry-After`), permanent
+  conflicts → QUARANTINED + audit alert — never deleted.
+- **sync-reconcile** (hourly): compares HQ's checkpoint missing ranges with
+  the local outbox and re-leases only real rows.
+
+Manager surface (`sync.override`, audited in `outlet_audit_logs`):
+`POST /sync/grace-override` (§8.8 emergency window extension; the sale path
+honors `max(last_sync_at + OFFLINE_GRACE_HOURS, grace_overridden_until)`)
+and `POST /sync/outbox/:eventId/replay`; `GET /sync/status` surfaces the
+override, backlog and quarantined-error samples.

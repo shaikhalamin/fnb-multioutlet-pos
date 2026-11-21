@@ -72,3 +72,25 @@ for the full list; placeholder-only, never commit secrets.
 - **Sync contract** — versioned outlet-event JSON Schema in
   `src/contracts/sync-event-v1.schema.json` (PRD §8.4), identical to the
   outlet-backend copy.
+
+## Phase 3 — sync ingestion surface (PRD §7.4, §8.5–§8.7)
+
+Machine-key routes under `/sync/v1/*` (`Authorization: OutletKey
+<keyId>.<secret>`, scopes `menu.pull` / `events.push` / `status.write`,
+600/min throttle, no CORS ever — §9.2):
+
+- `GET /sync/v1/menu/changes?afterRevision=&limit=` — ascending per-outlet
+  deltas; `snapshotRequired` on truncation/gaps (AT-14).
+- `GET /sync/v1/menu/snapshot` — one REPEATABLE READ view: `snapshotId`,
+  `snapshotRevision`, full effective items incl. tombstones.
+- `POST /sync/v1/events/batch` — per-event transactions: inbox dedupe
+  (`(outletId,eventId)` / `(outletId,sequenceNo)` + canonical payload hash),
+  immutable `hq_sales`/`hq_sale_items` projections, contiguous-only
+  checkpoint advance (AT-21). Mixed outcomes ride one HTTP 200.
+- `GET /sync/v1/checkpoint` + `POST /sync/v1/heartbeat` — reconciliation
+  input and outlet backlog reporting (`sync_outlet_checkpoints`).
+- `GET /outlets/:id/sync-status` — human projection (FR-10, `sync.read`).
+
+Identity comes exclusively from the key record; events claiming another
+outlet reject the entire request (AT-16). Dev key provisioning:
+`SEED_ISSUE_OUTLET_KEYS=1 pnpm seed` (see root README §Phase 3).
