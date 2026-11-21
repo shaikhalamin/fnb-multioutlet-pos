@@ -2,7 +2,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import request from 'supertest';
-import type { App } from 'supertest/types.js';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module.js';
@@ -206,6 +205,88 @@ describeWithDeps('Outlet sync dispatch (e2e)', () => {
     }
   });
 
+  it('retries a 503ing HQ and delivers on recovery, logging every attempt (§8.5)', async () => {
+    const eventId = await insertOutboxRow(standalone, (seqBase + 301n).toString());
+    createdIds.push(eventId);
+    // First push: 503 (retryable). Anything after: ACCEPTED.
+    const server = await startScriptedHq([{ status: 503 }]);
+    try {
+      const processor = makeDeliveryProcessor(server.url);
+
+      const first = await processor.deliver([eventId]);
+      expect(first).toMatchObject({ retried: 1, delivered: 0, quarantined: 0 });
+
+      const afterFailure = await standalone.query<
+        Array<{ status: string; next_attempt_at: Date }>
+      >('SELECT status, next_attempt_at FROM outbox_events WHERE id = $1', [eventId]);
+      expect(afterFailure[0]).toMatchObject({ status: 'RETRY' });
+      // `attempts` counts lease cycles (leaseDueBatch), so the direct
+      // deliver() pass leaves it untouched — the authoritative per-attempt
+      // record is sync_attempt_logs below.
+      expect(new Date(afterFailure[0].next_attempt_at).getTime()).toBeGreaterThan(Date.now());
+
+      const failureLog = await standalone.query<Array<{ status_code: number | null }>>(
+        'SELECT status_code FROM sync_attempt_logs WHERE outbox_event_id = $1 ORDER BY attempt_at',
+        [eventId],
+      );
+      expect(failureLog.map((row) => row.status_code)).toEqual([503]);
+
+      // The row is not due until its backoff elapses; force it due and
+      // deliver again — the recovery pass must mark it DELIVERED.
+      await standalone.query(
+        "UPDATE outbox_events SET next_attempt_at = now() - interval '1 second' WHERE id = $1",
+        [eventId],
+      );
+      const second = await processor.deliver([eventId]);
+      expect(second).toMatchObject({ delivered: 1, retried: 0 });
+
+      const recovered = await standalone.query<Array<{ status: string }>>(
+        'SELECT status FROM outbox_events WHERE id = $1',
+        [eventId],
+      );
+      expect(recovered[0].status).toBe('DELIVERED');
+      const allLogs = await standalone.query<Array<{ status_code: number | null }>>(
+        'SELECT status_code FROM sync_attempt_logs WHERE outbox_event_id = $1 ORDER BY attempt_at',
+        [eventId],
+      );
+      expect(allLogs.map((row) => row.status_code)).toEqual([503, 200]);
+    } finally {
+      await closeServer(server.server);
+    }
+  });
+
+  it('honors a 429 Retry-After exactly when scheduling next_attempt_at (§8.5)', async () => {
+    const eventId = await insertOutboxRow(standalone, (seqBase + 401n).toString());
+    createdIds.push(eventId);
+    const server = await startScriptedHq([{ status: 429, headers: { 'retry-after': '30' } }]);
+    try {
+      const processor = makeDeliveryProcessor(server.url);
+      const before = Date.now();
+      const outcome = await processor.deliver([eventId]);
+      const after = Date.now();
+      expect(outcome).toMatchObject({ retried: 1, delivered: 0 });
+
+      const row = await standalone.query<Array<{ status: string; next_attempt_at: Date }>>(
+        'SELECT status, next_attempt_at FROM outbox_events WHERE id = $1',
+        [eventId],
+      );
+      expect(row[0].status).toBe('RETRY');
+      // Retry-After is a floor honored exactly: ≈ 30 s from the failed
+      // attempt, not the short exponential default.
+      const scheduledAt = new Date(row[0].next_attempt_at).getTime();
+      expect(scheduledAt).toBeGreaterThanOrEqual(before + 30_000 - 500);
+      expect(scheduledAt).toBeLessThanOrEqual(after + 30_000 + 500);
+
+      const log = await standalone.query<Array<{ status_code: number | null }>>(
+        'SELECT status_code FROM sync_attempt_logs WHERE outbox_event_id = $1',
+        [eventId],
+      );
+      expect(log.map((entry) => entry.status_code)).toEqual([429]);
+    } finally {
+      await closeServer(server.server);
+    }
+  });
+
   // ---- §8.8: audited emergency grace override (AT-11/AT-17 legs) ---------------
 
   it('grace flow: stale sync blocks sales → manager override rescues → audited', async () => {
@@ -324,6 +405,56 @@ async function startStubHq(
       });
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ data: results(parsed.events), meta: { requestId: 'stub', timestamp: new Date().toISOString() } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address() as { port: number };
+  return { server, url: `http://127.0.0.1:${address.port}/api/v1` };
+}
+
+/**
+ * HQ stub with a scripted prefix of raw HTTP responses (failure legs: 503,
+ * 429 + `retry-after`, …); once the script is exhausted it answers ACCEPTED
+ * so recovery passes can run against the same server.
+ */
+async function startScriptedHq(
+  script: Array<{ status: number; headers?: Record<string, string> }>,
+): Promise<{ server: Server; url: string }> {
+  let index = 0;
+  const server = createServer((req, res) => {
+    if (req.method !== 'POST' || !req.url?.includes('/sync/v1/events/batch')) {
+      res.writeHead(404).end();
+      return;
+    }
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      const step = script[index];
+      index += 1;
+      if (step) {
+        res.writeHead(step.status, { 'content-type': 'application/json', ...step.headers });
+        res.end(JSON.stringify({ error: { code: 'STUB', message: 'scripted failure', requestId: 'stub' } }));
+        return;
+      }
+      const parsed = JSON.parse(body) as { events: Array<{ eventId: string }> };
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          data: {
+            batchId: 'stub',
+            results: parsed.events.map((event) => ({
+              eventId: event.eventId,
+              status: 'ACCEPTED',
+              retryable: false,
+              acknowledgedAt: new Date().toISOString(),
+            })),
+            highestContiguousSequence: '0',
+          },
+          meta: { requestId: 'stub', timestamp: new Date().toISOString() },
+        }),
+      );
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
