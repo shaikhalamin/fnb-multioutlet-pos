@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import {
   configureE2eApp,
+  e2eKey,
   type E2eApp,
   ITEM,
   loginAs,
@@ -60,7 +61,7 @@ describeWithDeps('Outlet sale concurrency (e2e)', () => {
 
   it('AT-06: 100 concurrent sales of one unit each all commit with unique receipts', { timeout: 120_000 }, async () => {
     const results = await Promise.all(
-      Array.from({ length: 100 }, (_, i) => postSale(`e2e-at06-${String(i).padStart(4, '0')}`, [
+      Array.from({ length: 100 }, (_, i) => postSale(e2eKey(`at06-${String(i).padStart(4, '0')}`), [
         { menuItemId: ITEM.cola, quantity: 1 },
       ]).then((response) => ({ status: response.status, body: response.body }))),
     );
@@ -108,8 +109,8 @@ describeWithDeps('Outlet sale concurrency (e2e)', () => {
     ]);
 
     const [first, second] = await Promise.all([
-      postSale('e2e-at05-a-00000000001', [{ menuItemId: ITEM.burger, quantity: 1 }]),
-      postSale('e2e-at05-b-00000000001', [{ menuItemId: ITEM.burger, quantity: 1 }]),
+      postSale(e2eKey('at05-a'), [{ menuItemId: ITEM.burger, quantity: 1 }]),
+      postSale(e2eKey('at05-b'), [{ menuItemId: ITEM.burger, quantity: 1 }]),
     ]);
 
     const statuses = [first.status, second.status].sort((a, b) => a - b);

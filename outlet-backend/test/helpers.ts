@@ -1,5 +1,6 @@
 import cookieParser from 'cookie-parser';
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
@@ -61,6 +62,17 @@ export const ITEM = {
   pizza: 'c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4',
   cola: '3d0f01a2-39a6-4b6f-9d3a-6cb17b2ba110',
 } as const;
+
+/**
+ * Per-run idempotency-key prefix. Fixed keys would replay the stored 201
+ * responses of a previous run (correct AT-07 product behavior) and starve
+ * the suite's stock/counter assertions — unique keys keep the suite
+ * rerunnable against any database.
+ */
+const RUN_ID = randomUUID().slice(0, 8);
+export function e2eKey(suffix: string): string {
+  return `e2e-${RUN_ID}-${suffix}`;
+}
 
 /** Resets the demo stock to the seeded figures (e2e fixture hygiene). */
 export async function resetDemoStock(app: E2eApp): Promise<void> {

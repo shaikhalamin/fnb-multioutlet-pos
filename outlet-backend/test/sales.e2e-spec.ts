@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
 import {
   configureE2eApp,
+  e2eKey,
   type E2eApp,
   ITEM,
   loginAs,
@@ -88,7 +89,7 @@ describeWithDeps('Outlet sales (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${cashierToken}`)
-      .set('Idempotency-Key', 'e2e-whitelist-key-0001')
+      .set('Idempotency-Key', e2eKey('whitelist'))
       .send({
         items: [{ menuItemId: ITEM.burger, quantity: 1 }],
         totalMinor: '1',
@@ -100,7 +101,7 @@ describeWithDeps('Outlet sales (e2e)', () => {
 
   let saleId: string;
   let receiptNo: string;
-  const KEY = 'e2e-at03-key-000000000001';
+  const KEY = e2eKey('at03');
 
   it('commits the AT-03 happy path atomically: 2 burgers + 1 pizza', async () => {
     const response = await request(app.getHttpServer())
@@ -232,7 +233,7 @@ describeWithDeps('Outlet sales (e2e)', () => {
     const response = await request(app.getHttpServer())
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${cashierToken}`)
-      .set('Idempotency-Key', 'e2e-at04-key-000000000001')
+      .set('Idempotency-Key', e2eKey('at04'))
       .send({
         items: [
           { menuItemId: ITEM.burger, quantity: 1 },
@@ -273,7 +274,7 @@ describeWithDeps('Outlet sales (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${cashierToken}`)
-      .set('Idempotency-Key', 'e2e-list-key-000000000001')
+      .set('Idempotency-Key', e2eKey('list'))
       .send({ items: [{ menuItemId: ITEM.cola, quantity: 1 }] })
       .expect(201);
 
@@ -303,7 +304,7 @@ describeWithDeps('Outlet sales (e2e)', () => {
     const clerkDenied = await request(app.getHttpServer())
       .post('/api/v1/sales')
       .set('Authorization', `Bearer ${clerkToken}`)
-      .set('Idempotency-Key', 'e2e-at17-key-000000000001')
+        .set('Idempotency-Key', e2eKey('at17'))
       .send({ items: [{ menuItemId: ITEM.burger, quantity: 1 }] })
       .expect(403);
     expect(clerkDenied.body.error.code).toBe('FORBIDDEN');
@@ -337,7 +338,7 @@ describeWithDeps('Outlet sales (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/v1/sales')
         .set('Authorization', `Bearer ${cashierToken}`)
-        .set('Idempotency-Key', 'e2e-at11-key-000000000001')
+        .set('Idempotency-Key', e2eKey('at11'))
         .send({ items: [{ menuItemId: ITEM.burger, quantity: 1 }] })
         .expect(503);
       expect(response.body.error.code).toBe('SYNC_TEMPORARILY_UNAVAILABLE');
