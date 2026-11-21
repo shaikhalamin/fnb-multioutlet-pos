@@ -37,12 +37,16 @@ const DEFAULT_ADMIN_PASSWORD = 'Admin123!';
 
 const DEMO_CATEGORIES = ['Burgers', 'Pizza', 'Drinks'] as const;
 
+// Fixed item UUIDs mirror the outlet seed's demo catalog ("fixed well-known
+// item UUIDs so docs, seeds and e2e specs agree") — the first sync then
+// reconciles the outlet's seeded rows instead of duplicating them.
 const DEMO_ITEMS: ReadonlyArray<{
   sku: string;
   name: string;
   description: string;
   category: string;
   defaultPriceMinor: string;
+  id: string;
 }> = [
   {
     sku: 'BURGER-01',
@@ -50,6 +54,7 @@ const DEMO_ITEMS: ReadonlyArray<{
     description: 'Grilled chicken burger',
     category: 'Burgers',
     defaultPriceMinor: '1000',
+    id: '9708835e-2e21-465a-87e9-5f8d56cd44ab',
   },
   {
     sku: 'PIZZA-01',
@@ -57,6 +62,7 @@ const DEMO_ITEMS: ReadonlyArray<{
     description: 'Margherita pizza',
     category: 'Pizza',
     defaultPriceMinor: '1500',
+    id: 'c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4',
   },
   {
     sku: 'COLA-01',
@@ -64,6 +70,7 @@ const DEMO_ITEMS: ReadonlyArray<{
     description: 'Chilled cola 330ml',
     category: 'Drinks',
     defaultPriceMinor: '300',
+    id: '3d0f01a2-39a6-4b6f-9d3a-6cb17b2ba110',
   },
 ];
 
@@ -217,6 +224,7 @@ async function seedDemoData(dataSource: DataSource, companyId: string): Promise<
     if (!categoryId) throw new Error(`seed category missing: ${item.category}`);
     const saved = await itemsRepo.save(
       itemsRepo.create({
+        id: item.id,
         companyId,
         categoryId,
         sku: item.sku,
