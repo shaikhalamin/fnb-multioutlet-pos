@@ -21,6 +21,10 @@ export {
 } from './outlet-catalog-change.entity.js';
 export { OutletApiKeyEntity, type OutletApiKeyStatus } from './outlet-api-key.entity.js';
 export { AuditLogEntity, type AuditActorType } from './audit-log.entity.js';
+export { SyncInboxEventEntity } from './sync-inbox-event.entity.js';
+export { HqSaleEntity } from './hq-sale.entity.js';
+export { HqSaleItemEntity } from './hq-sale-item.entity.js';
+export { SyncOutletCheckpointEntity } from './sync-outlet-checkpoint.entity.js';
 
 import { CompanyEntity } from './company.entity.js';
 import { OutletEntity } from './outlet.entity.js';
@@ -37,6 +41,10 @@ import { OutletCatalogRevisionEntity } from './outlet-catalog-revision.entity.js
 import { OutletCatalogChangeEntity } from './outlet-catalog-change.entity.js';
 import { OutletApiKeyEntity } from './outlet-api-key.entity.js';
 import { AuditLogEntity } from './audit-log.entity.js';
+import { SyncInboxEventEntity } from './sync-inbox-event.entity.js';
+import { HqSaleEntity } from './hq-sale.entity.js';
+import { HqSaleItemEntity } from './hq-sale-item.entity.js';
+import { SyncOutletCheckpointEntity } from './sync-outlet-checkpoint.entity.js';
 
 /** Every HQ TypeORM entity, registered on the shared DataSource (PRD §6.1). */
 export const hqEntities = [
@@ -55,4 +63,8 @@ export const hqEntities = [
   OutletCatalogChangeEntity,
   OutletApiKeyEntity,
   AuditLogEntity,
+  SyncInboxEventEntity,
+  HqSaleEntity,
+  HqSaleItemEntity,
+  SyncOutletCheckpointEntity,
 ];
