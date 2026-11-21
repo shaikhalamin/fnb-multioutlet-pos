@@ -67,10 +67,12 @@ const DEMO_ITEMS: ReadonlyArray<{
   },
 ];
 
-const DEMO_OUTLETS: ReadonlyArray<{ code: string; name: string }> = [
-  { code: 'A', name: 'Outlet A' },
-  { code: 'B', name: 'Outlet B' },
-  { code: 'C', name: 'Outlet C' },
+const DEMO_OUTLETS: ReadonlyArray<{ code: string; name: string; id: string }> = [
+  // Fixed demo UUIDs so docs, seeds, root .env (OUTLET_A_ID) and the outlet
+  // database identity all agree — sync derives the outlet scope from them.
+  { code: 'A', name: 'Outlet A', id: '11111111-1111-4111-8111-111111111111' },
+  { code: 'B', name: 'Outlet B', id: '22222222-2222-4222-8222-222222222222' },
+  { code: 'C', name: 'Outlet C', id: '33333333-3333-4333-8333-333333333333' },
 ];
 
 async function seedCompany(dataSource: DataSource): Promise<CompanyEntity> {
@@ -184,7 +186,7 @@ async function seedDemoData(dataSource: DataSource, companyId: string): Promise<
     const existing = await outletsRepo.findOne({ where: { companyId, code: demo.code } });
     if (existing) continue;
     const outlet = await outletsRepo.save(
-      outletsRepo.create({ companyId, code: demo.code, name: demo.name, timezone: 'UTC', status: 'ACTIVE' }),
+      outletsRepo.create({ id: demo.id, companyId, code: demo.code, name: demo.name, timezone: 'UTC', status: 'ACTIVE' }),
     );
     await revisionsRepo.save(revisionsRepo.create({ outletId: outlet.id, currentRevision: '0' }));
     log('seed_outlet_created', { outletId: outlet.id, code: demo.code });
