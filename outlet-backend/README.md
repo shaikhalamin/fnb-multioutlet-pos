@@ -68,3 +68,44 @@ key ID (PRD §9.2). See [.env.example](./.env.example).
   Kubb pipeline (PRD §11).
 - **Sync contract** — `src/contracts/sync-event-v1.schema.json` (PRD §8.4),
   identical to the hq-backend copy.
+
+## Phase 2 — outlet operations
+
+Modules under `src/modules/` (layered per PRD §5: controller → service →
+repository, transactions always owned by the service):
+
+| Module | Routes / role | Purpose |
+|---|---|---|
+| `auth` | `POST /auth/login\|refresh\|logout` | Rotating refresh sessions in the `outlet_rt` HttpOnly cookie; tokens carry the `outletId` claim re-checked against `OUTLET_ID` every request (PRD §9.1). |
+| `users` | `GET/POST /users`, `PATCH /users/:id`, `GET /roles` | Local staff management (`users.read`/`users.write`). |
+| `menu-cache` | `GET /menu` | Active local catalog + effective prices + live stock, `meta.catalogRevision`/`lastCatalogSyncAt` via the envelope `withMeta` hook (PRD §7.3). |
+| `inventory` | `GET /inventory`, `POST /inventory/adjustments` | Row-locked, versioned, nonnegative balances; every movement audited with reason/actor/request ID (FR-04/FR-05). |
+| `sales` | `POST /sales`, `GET /sales`, `GET /sales/:id` | The protected core (PRD §8.6) — one transaction, deterministic lock order, BigInt money, idempotent replay/409, offline-grace enforcement (§8.8). |
+| `receipts`, `outbox` | — | Receipt counter and per-outlet event sequence allocation + the immutable `sale.completed` writer (canonical-JSON SHA-256). |
+| `sync` | `GET /sync/status` | Local-only checkpoint + outbox backlog; never calls HQ. |
+
+The sale transaction (PRD §8.6, FR-06): advisory-lock the idempotency key →
+replay or `IDEMPOTENCY_KEY_REUSED` → grace check → catalog resolution
+(`ITEM_NOT_ASSIGNED`/`ITEM_INACTIVE`) → conditional stock decrements in
+sorted item order (`INSUFFICIENT_STOCK` + full rollback) → audited
+movements → receipt allocation → snapshot lines → exactly one outbox event
+→ stored idempotency response → COMMIT. No queue or HTTP calls inside the
+transaction; the Phase-3 dispatcher picks the outbox up asynchronously.
+
+Phase-2 migration `1720000000000-outlet-phase2-core.ts` creates every PRD
+§6.2 table except `sync_attempt_logs` (Phase 3): identity, users/RBAC,
+refresh sessions, catalog cache + sync state, balances/movements (with the
+§6.2 CHECK constraints; the `stock_movements → sales` FK is deferred so the
+§8.6 step order holds), receipt/outbox counters, sales + immutable lines +
+idempotency keys, and the outbox (unique `(outlet_id, sequence_no)`, partial
+due-index, jsonb sale-id expression index).
+
+Seed (`pnpm seed`, idempotent): identity from `OUTLET_ID`/`OUTLET_CODE`,
+permission catalog + 3 default roles, demo staff (manager/cashier/clerk),
+a fixed-UUID catalog (BURGER-01 `"1000"`, PIZZA-01 `"1500"`, COLA-01
+`"300"`) at 50/40/100 stock simulating a completed sync
+(`applied_revision = 1`, fresh `last_sync_at`), and both counters at 1.
+
+Verification: `pnpm lint && pnpm test` (70 unit specs) and `pnpm test:e2e`
+(24 specs against the real outlet PostgreSQL/Redis covering AT-03…AT-08,
+AT-11 grace expiry, AT-17 persona denials and AT-18 refresh reuse).

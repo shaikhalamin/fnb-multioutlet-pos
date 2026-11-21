@@ -73,6 +73,64 @@ AT-01 assignment fan-out, AT-02 override, RBAC denial, key lifecycle),
 browser walkthrough of the console, and direct SQL checks of revisions,
 change payloads, key hashes and audit rows.
 
+## Phase 2 — Outlet operations (implemented)
+
+Sign in to the Outlet A POS at http://localhost:8081 with a seeded account:
+`manager@outlet-a.local` / `Manager123!`, `cashier@outlet-a.local` /
+`Cashier123!`, `clerk@outlet-a.local` / `Clerk123!` (override via
+`SEED_OUTLET_<ROLE>_EMAIL/PASSWORD` before seeding). Phase 2 delivers
+(PRD §18):
+
+- **Outlet JWT auth with rotating refresh** — mirror of the HQ session model
+  with outlet-only secrets (`OUTLET_JWT_*`), the `outlet_rt` HttpOnly cookie,
+  CAS rotation and family revocation on reuse; access tokens carry the
+  `outletId` claim re-validated against this deployment on every request.
+- **Local RBAC + user management** — 8 permissions, 3 seeded roles
+  (`OUTLET_MANAGER` / `OUTLET_CASHIER` / `OUTLET_INVENTORY_CLERK`), local
+  user CRUD at `/api/v1/users` + `/api/v1/roles`.
+- **Catalog cache** — `GET /menu` serves the locally assigned catalog with
+  effective prices, live stock and `meta.catalogRevision`/`lastCatalogSyncAt`;
+  seeded to simulate a completed sync (the Phase-3 pull worker reconciles it).
+- **Inventory** — `GET /inventory` + audited `POST /inventory/adjustments`
+  (RESTOCK/WRITE_OFF/RECOUNT): row-locked, versioned, nonnegative, every
+  movement records reason/actor/request ID (FR-04/FR-05).
+- **Atomic idempotent sales** — `POST /sales` runs the exact PRD §8.6
+  transaction: advisory-lock the idempotency key → offline-grace check
+  (`SYNC_TEMPORARILY_UNAVAILABLE` past 72h) → catalog/price resolution →
+  conditional stock decrements in deterministic order (insufficient stock ⇒
+  409 with `{menuItemId, requestedQuantity, availableQuantity}` and full
+  rollback) → receipt allocation (`A-000001`) → immutable snapshot lines →
+  exactly one `sale.completed` outbox event (canonical-JSON SHA-256) →
+  stored idempotency response. Same key + same body replays the stored
+  receipt (AT-07); same key + different body ⇒ 409 `IDEMPOTENCY_KEY_REUSED`
+  (AT-08). Money is `bigint` end to end, serialized as decimal strings.
+- **Local sync status** — `GET /sync/status` (menu revision, grace state,
+  outbox backlog) answered entirely from local tables; never calls HQ.
+- **POS frontend** — login, POS menu/cart/checkout (one idempotency key per
+  attempt, held across retries; totals only from the authoritative
+  response), receipt confirmation/reprint, inventory adjustments, sales
+  history + receipt detail, local user management, and a sync-status banner.
+  All API access goes through Kubb-generated typed clients (Axios + Zod +
+  TanStack Query) from the exported OpenAPI contract.
+
+Seed (idempotent; identity, roles, demo users, fixed-UUID catalog with
+burger/pizza/cola at 50/40/100 stock, counters, fresh sync state):
+
+```bash
+cd outlet-backend && pnpm seed          # or: docker compose run --rm outlet-a-api node dist/database/seed.js
+```
+
+Verification used in Phase 2: outlet-backend `pnpm test` (70 unit) and
+`pnpm test:e2e` (24 e2e against the real outlet PostgreSQL/Redis — AT-03
+atomic sale with SQL persistence asserts, AT-04 full rollback, AT-05
+last-unit race, AT-06 100 concurrent sales with contiguous receipts,
+AT-07/AT-08 idempotency, AT-11 grace expiry, AT-17-flavor persona denials,
+AT-18 refresh reuse), a browser walkthrough of the POS (cashier checkout ⇒
+receipt `A-000001`, clerk restock, manager user creation, sync banner
+showing the pending upload), curl spot-checks of every error code, and
+direct SQL checks of snapshots, movements, counters, the outbox payload
+hash and the idempotency response JSON.
+
 Swagger UI (local dev cluster only): http://localhost:4000/api/v1/docs (HQ)
 and http://localhost:5000/api/v1/docs (Outlet A); machine-readable documents
 at `/openapi.json`. The committed artifacts in
