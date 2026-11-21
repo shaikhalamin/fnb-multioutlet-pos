@@ -10,33 +10,94 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthInventoryRouteImport } from './routes/_auth/inventory'
+import { Route as AuthPosRouteImport } from './routes/_auth/pos'
+import { Route as AuthSalesRouteImport } from './routes/_auth/sales'
+import { Route as AuthUsersRouteImport } from './routes/_auth/users'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthInventoryRoute = AuthInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthPosRoute = AuthPosRouteImport.update({
+  id: '/pos',
+  path: '/pos',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSalesRoute = AuthSalesRouteImport.update({
+  id: '/sales',
+  path: '/sales',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthUsersRoute = AuthUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/inventory': typeof AuthInventoryRoute
+  '/pos': typeof AuthPosRoute
+  '/sales': typeof AuthSalesRoute
+  '/users': typeof AuthUsersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/inventory': typeof AuthInventoryRoute
+  '/pos': typeof AuthPosRoute
+  '/sales': typeof AuthSalesRoute
+  '/users': typeof AuthUsersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/inventory': typeof AuthInventoryRoute
+  '/_auth/pos': typeof AuthPosRoute
+  '/_auth/sales': typeof AuthSalesRoute
+  '/_auth/users': typeof AuthUsersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/login' | '/inventory' | '/pos' | '/sales' | '/users'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/login' | '/inventory' | '/pos' | '/sales' | '/users'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/inventory'
+    | '/_auth/pos'
+    | '/_auth/sales'
+    | '/_auth/users'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +109,71 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/inventory': {
+      id: '/_auth/inventory'
+      path: '/inventory'
+      fullPath: '/inventory'
+      preLoaderRoute: typeof AuthInventoryRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/pos': {
+      id: '/_auth/pos'
+      path: '/pos'
+      fullPath: '/pos'
+      preLoaderRoute: typeof AuthPosRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/sales': {
+      id: '/_auth/sales'
+      path: '/sales'
+      fullPath: '/sales'
+      preLoaderRoute: typeof AuthSalesRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/users': {
+      id: '/_auth/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthUsersRouteImport
+      parentRoute: typeof AuthRoute
+    }
   }
 }
 
+interface AuthRouteChildren {
+  AuthInventoryRoute: typeof AuthInventoryRoute
+  AuthPosRoute: typeof AuthPosRoute
+  AuthSalesRoute: typeof AuthSalesRoute
+  AuthUsersRoute: typeof AuthUsersRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthInventoryRoute: AuthInventoryRoute,
+  AuthPosRoute: AuthPosRoute,
+  AuthSalesRoute: AuthSalesRoute,
+  AuthUsersRoute: AuthUsersRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

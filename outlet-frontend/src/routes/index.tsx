@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { healthControllerGetHealth } from '#/api/generated/clients/healthControllerGetHealth'
 import { healthControllerGetHealthStatus200Schema } from '#/api/generated/schemas/healthControllerGetHealthSchema'
 import { ApiError } from '#/api/axios'
+import { useSession } from '#/features/auth/session'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -120,6 +122,14 @@ function HealthPanel() {
 }
 
 function App() {
+  const session = useSession()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    // Signed-in staff go straight to the register.
+    if (session.user) void navigate({ to: '/pos', replace: true })
+  }, [session.user, navigate])
+
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
       <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-10 sm:px-10 sm:py-14">
