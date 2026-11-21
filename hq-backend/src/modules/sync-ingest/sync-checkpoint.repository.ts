@@ -71,4 +71,26 @@ export class SyncCheckpointRepository {
     );
     return next;
   }
+
+  /**
+   * Persists an outlet heartbeat (PRD §7.4): the reported backlog snapshot and
+   * the menu revision the outlet last applied. Standalone write — never part
+   * of an ingest transaction.
+   */
+  async upsertHeartbeat(
+    outletId: string,
+    backlog: Record<string, unknown>,
+    lastMenuSeenRevision: string,
+    now: Date,
+  ): Promise<void> {
+    await this.dataSource.query(
+      `INSERT INTO sync_outlet_checkpoints (outlet_id, last_reported_backlog, last_menu_seen_revision, last_heartbeat_at)
+       VALUES ($1, $2::jsonb, $3, $4)
+       ON CONFLICT (outlet_id) DO UPDATE
+       SET last_reported_backlog = $2::jsonb,
+           last_menu_seen_revision = $3,
+           last_heartbeat_at = $4`,
+      [outletId, JSON.stringify(backlog), lastMenuSeenRevision, now.toISOString()],
+    );
+  }
 }

@@ -1233,6 +1233,121 @@
         ]
       }
     },
+    "/sync/v1/checkpoint": {
+      "get": {
+        "operationId": "SyncStatusController_getCheckpoint",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncCheckpointResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the events.push scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Highest contiguous accepted sequence + missing ranges.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/sync/v1/heartbeat": {
+      "post": {
+        "operationId": "SyncStatusController_heartbeat",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key lacks the status.write scope"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Report local backlog and applied menu revision.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
+    "/outlets/{id}/sync-status": {
+      "get": {
+        "operationId": "SyncAdminController_getSyncStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutletSyncStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND — outlet does not exist"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Outbox replication status known to HQ (FR-10).",
+        "tags": [
+          "Outlets"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -2575,6 +2690,177 @@
           "batchId",
           "results",
           "highestContiguousSequence"
+        ]
+      },
+      "SequenceRange": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string",
+            "example": "94",
+            "description": "First missing sequence — decimal string."
+          },
+          "to": {
+            "type": "string",
+            "example": "101",
+            "description": "Last missing sequence — decimal string."
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      },
+      "SyncCheckpointResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "highestContiguousSequence": {
+            "type": "string",
+            "example": "108",
+            "description": "Highest contiguous accepted sequence — decimal string."
+          },
+          "missingRanges": {
+            "description": "Sequence ranges accepted above the watermark but not yet contiguous (reconciliation input).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SequenceRange"
+            }
+          }
+        },
+        "required": [
+          "outletId",
+          "highestContiguousSequence",
+          "missingRanges"
+        ]
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "properties": {
+          "appliedMenuRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Menu revision the outlet last applied — decimal string."
+          },
+          "pendingOutboxCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Events awaiting delivery at the outlet."
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Events parked for manual repair at the outlet."
+          },
+          "oldestPendingAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z",
+            "nullable": true,
+            "description": "Oldest undelivered event timestamp, when a backlog exists."
+          }
+        },
+        "required": [
+          "appliedMenuRevision",
+          "pendingOutboxCount",
+          "quarantinedCount"
+        ]
+      },
+      "HeartbeatResponse": {
+        "type": "object",
+        "properties": {
+          "acknowledgedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z"
+          }
+        },
+        "required": [
+          "acknowledgedAt"
+        ]
+      },
+      "OutletSyncBacklog": {
+        "type": "object",
+        "properties": {
+          "pendingOutboxCount": {
+            "type": "number",
+            "example": 3
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0
+          },
+          "oldestPendingAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z",
+            "nullable": true
+          }
+        },
+        "required": [
+          "pendingOutboxCount",
+          "quarantinedCount",
+          "oldestPendingAt"
+        ]
+      },
+      "OutletSyncStatusResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "currentMenuRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Current HQ catalog revision — decimal string."
+          },
+          "highestContiguousSequence": {
+            "type": "string",
+            "example": "108",
+            "description": "Highest contiguous accepted event sequence — decimal string."
+          },
+          "lastEventAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10.000Z",
+            "nullable": true
+          },
+          "lastHeartbeatAt": {
+            "type": "string",
+            "example": "2026-11-20T04:03:00.000Z",
+            "nullable": true
+          },
+          "lastMenuSeenRevision": {
+            "type": "string",
+            "example": "42",
+            "nullable": true,
+            "description": "Menu revision the outlet last reported applying — decimal string."
+          },
+          "lastReportedBacklog": {
+            "nullable": true,
+            "description": "Backlog as last reported by the outlet heartbeat; null before the first heartbeat.",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/OutletSyncBacklog"
+              }
+            ]
+          },
+          "quarantinedCount": {
+            "type": "number",
+            "example": 0,
+            "description": "Quarantined events at the outlet, as last reported (HQ never sees outlet rows directly)."
+          }
+        },
+        "required": [
+          "outletId",
+          "currentMenuRevision",
+          "highestContiguousSequence",
+          "lastEventAt",
+          "lastHeartbeatAt",
+          "lastMenuSeenRevision",
+          "lastReportedBacklog",
+          "quarantinedCount"
         ]
       },
       "DependencyStatusResponse": {
