@@ -67,22 +67,34 @@ export function SyncBanner() {
     <div role="status" className={`border-b border-hairline ${tone}`}>
       <div className="px-4 py-1.5 text-center text-xs font-medium">
         <span>
-          Outlet {data.outletCode} · menu rev {data.lastAppliedRevision} ·
-          synced {synced}
+          Outlet {data.outletCode} · menu rev{' '}
+          <span className="money">{data.lastAppliedRevision}</span> · synced{' '}
+          {synced}
         </span>
         {data.outbox.pendingCount > 0 || data.outbox.quarantinedCount > 0 ? (
           <span>
             {' · '}
-            {data.outbox.pendingCount} pending upload
-            {data.outbox.quarantinedCount > 0
-              ? ` · ${data.outbox.quarantinedCount} quarantined`
-              : ''}
+            <span className="money">{data.outbox.pendingCount}</span> pending
+            upload
+            {data.outbox.quarantinedCount > 0 ? (
+              <>
+                {' · '}
+                <span className="money">
+                  {data.outbox.quarantinedCount}
+                </span>{' '}
+                quarantined
+              </>
+            ) : null}
           </span>
         ) : null}
         {override ? (
           <span>
             {' '}
-            · override until {new Date(override.until).toLocaleTimeString()}
+            · override until {new Date(
+              override.until,
+            ).toLocaleTimeString()} by{' '}
+            {override.overriddenBy || 'unknown operator'} — “
+            {override.reason || 'no reason recorded'}”
           </span>
         ) : null}
         {data.grace.expired && !override ? (
@@ -233,6 +245,7 @@ function ReplayPanel({
 }) {
   const queryClient = useQueryClient()
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [replayed, setReplayed] = useState<{ sequenceNo: string } | null>(null)
 
   const replay = useMutation({
     mutationFn: replayQuarantinedEvent,
@@ -263,7 +276,9 @@ function ReplayPanel({
               className="flex items-center justify-between gap-3 rounded-lg border border-hairline px-3 py-1.5 text-xs"
             >
               <span>
-                <span className="font-medium">seq {sample.sequenceNo}</span>
+                <span className="font-medium">
+                  seq <span className="money">{sample.sequenceNo}</span>
+                </span>
                 {' · '}
                 <code className="text-error">
                   {sample.lastError ?? 'UNKNOWN'}
@@ -277,7 +292,10 @@ function ReplayPanel({
                     size="xs"
                     disabled={replay.isPending}
                     onClick={() => {
-                      replay.mutate(sample.eventId)
+                      replay.mutate(sample.eventId, {
+                        onSuccess: () =>
+                          setReplayed({ sequenceNo: sample.sequenceNo }),
+                      })
                       setConfirming(null)
                     }}
                   >
@@ -307,9 +325,10 @@ function ReplayPanel({
         </ul>
       )}
       {message ? <p className="mt-2 text-xs text-error">{message}</p> : null}
-      {samples.length > 0 && replay.isSuccess ? (
+      {replayed ? (
         <p className="mt-2 text-xs text-success">
-          Event re-armed for delivery.
+          Event seq <span className="money">{replayed.sequenceNo}</span>{' '}
+          re-armed for delivery.
         </p>
       ) : null}
       <div className="mt-3">
