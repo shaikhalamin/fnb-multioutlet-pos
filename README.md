@@ -167,8 +167,8 @@ emergency offline-grace override.
 Outlets sync with HQ only after a real key is provisioned:
 
 ```bash
-docker compose up -d hq-db hq-api hq-migrate        # 1. HQ first (migrate + seed)
-SEED_ISSUE_OUTLET_KEYS=1 pnpm --dir hq-backend seed # 2. prints keyId.secret ONCE per outlet
+docker compose up -d hq-db hq-api hq-migrate        # 1. HQ first (hq-migrate runs migrations only)
+SEED_ISSUE_OUTLET_KEYS=1 pnpm --dir hq-backend seed # 2. seeds + prints keyId.secret ONCE per outlet
 # 3. paste the pair into root .env (OUTLET_A_HQ_KEY_ID / _SECRET), then:
 docker compose up -d outlet-a-worker                # 4. the sync loop starts
 ```
