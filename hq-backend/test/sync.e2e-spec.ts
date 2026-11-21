@@ -415,6 +415,15 @@ describeWithDeps('HQ sync surface (e2e)', () => {
     expect(afterFill.missingRanges).not.toContainEqual({ from: s1, to: s2 });
   });
 
+  it('never serves CORS headers on machine sync routes (§9.2)', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/v1/sync/v1/menu/changes?afterRevision=0')
+      .set('Authorization', auth(keyA))
+      .set('Origin', 'http://localhost:8080') // an allowed human origin
+      .expect(200);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
   it('persists heartbeats and serves the human sync-status projection (FR-10)', async () => {
     await request(app.getHttpServer())
       .post('/api/v1/sync/v1/heartbeat')

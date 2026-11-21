@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import type { Request, Response } from 'express';
 import { loadAppConfig } from './config/app.config.js';
 import { parseApiEnv } from './config/env.schema.js';
 import { JsonLogger } from './common/logging/logger.service.js';
@@ -39,8 +40,29 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix(config.apiPrefix);
   // Refresh cookies (`hq_rt`) are read on /auth/refresh|logout (PRD §9.1).
   app.use(cookieParser());
+  // CORS is allowed only for the HQ web origin AND never for the machine
+  // sync surface: `/sync/v1/*` must not be browser-accessible at all
+  // (PRD §9.2 — keys live server-side only).
+  app.use((req: Request, res: Response, next: () => void) => {
+    const origin = req.headers.origin;
+    if (!origin || req.path.startsWith(`/${config.apiPrefix}/sync/v1/`)) {
+      next();
+      return;
+    }
+    if (config.corsOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      if (req.method === 'OPTIONS') {
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,PUT,DELETE,OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Request-Id,Idempotency-Key');
+        res.sendStatus(204);
+        return;
+      }
+    }
+    next();
+  });
   app.useGlobalPipes(makeGlobalValidationPipe());
-  app.enableCors({ origin: config.corsOrigins, credentials: true });
   app.enableShutdownHooks();
 
   if (config.swaggerEnabled || config.openApiExport) {
