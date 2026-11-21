@@ -29,7 +29,7 @@ export function SyncBanner() {
     return (
       <div
         role="status"
-        className="border-b border-[var(--line)] bg-[rgba(120,120,120,0.08)] px-4 py-1.5 text-center text-xs text-[var(--sea-ink-soft)]"
+        className="border-b border-hairline bg-surface-strong px-4 py-1.5 text-center text-xs text-body"
       >
         Sync status unavailable (local sales keep working).
       </div>
@@ -41,21 +41,22 @@ export function SyncBanner() {
     ? new Date(data.lastMenuSyncAt).toLocaleString()
     : 'never'
 
-  // Escalation: expired ⇒ red and loud; within 20% of the window ⇒ amber.
+  // Escalation: expired ⇒ error and loud; within 20% of the window ⇒ neutral
+  // warning (the system has no amber — neutral stays on-system).
   const expiresAt = data.grace.expiresAt ? new Date(data.grace.expiresAt) : null
   const hoursLeft = expiresAt
     ? (expiresAt.getTime() - Date.now()) / 3_600_000
     : Number.NEGATIVE_INFINITY
   const tone = data.grace.expired
-    ? 'bg-[rgba(235,87,87,0.14)] text-[#a03030]'
+    ? 'bg-error/10 text-error'
     : hoursLeft < data.grace.hours * 0.2
-      ? 'bg-[rgba(240,173,20,0.16)] text-[#8a6116]'
-      : 'bg-[rgba(86,198,190,0.12)] text-[#2f8f83]'
+      ? 'bg-surface-strong text-body-strong'
+      : 'bg-success/10 text-success'
 
   return (
     <div
       role="status"
-      className={`border-b border-[var(--line)] px-4 py-1.5 text-center text-xs font-semibold ${tone}`}
+      className={`border-b border-hairline px-4 py-1.5 text-center text-xs font-medium ${tone}`}
     >
       <span>
         Outlet {data.outletCode} · menu rev {data.lastAppliedRevision} · synced{' '}

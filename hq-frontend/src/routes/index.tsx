@@ -22,14 +22,12 @@ function useHealth() {
 function StatusPill({ status }: { status: 'up' | 'down' | 'unknown' }) {
   const tone =
     status === 'up'
-      ? 'bg-[rgba(52,199,89,0.15)] text-[#1d7a3f]'
+      ? 'badge-success'
       : status === 'down'
-        ? 'bg-[rgba(235,87,87,0.14)] text-[#a03030]'
-        : 'bg-[rgba(120,120,120,0.14)] text-[var(--sea-ink-soft)]'
+        ? 'badge-error'
+        : 'badge-neutral'
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}
-    >
+    <span className={`badge-pill ${tone}`}>
       <span
         className="h-1.5 w-1.5 rounded-full bg-current"
         aria-hidden="true"
@@ -44,11 +42,9 @@ function HealthPanel() {
 
   if (health.isPending) {
     return (
-      <section className="island-shell mt-8 rounded-2xl p-6" aria-busy="true">
-        <p className="island-kicker mb-2">Platform Health</p>
-        <p className="m-0 text-sm text-[var(--sea-ink-soft)]">
-          Checking backend services…
-        </p>
+      <section className="card-panel mt-8 p-6" aria-busy="true">
+        <p className="kicker mb-2">Platform Health</p>
+        <p className="m-0 text-sm text-body">Checking backend services…</p>
       </section>
     )
   }
@@ -56,12 +52,12 @@ function HealthPanel() {
   if (health.isError) {
     const error = health.error instanceof ApiError ? health.error : null
     return (
-      <section className="island-shell mt-8 rounded-2xl p-6" role="alert">
-        <p className="island-kicker mb-2">Platform Health</p>
-        <h2 className="mb-2 text-base font-semibold text-[var(--sea-ink)]">
+      <section className="card-panel mt-8 p-6" role="alert">
+        <p className="kicker mb-2">Platform Health</p>
+        <h2 className="mb-2 flex flex-wrap items-center gap-2 font-display text-title-md text-ink">
           HQ API unreachable <StatusPill status="down" />
         </h2>
-        <p className="m-0 text-sm text-[var(--sea-ink-soft)]">
+        <p className="m-0 text-sm text-body">
           {error
             ? `${error.code}: ${error.message}`
             : 'Network request failed.'}
@@ -72,47 +68,39 @@ function HealthPanel() {
 
   const report = health.data
   return (
-    <section className="island-shell mt-8 rounded-2xl p-6">
+    <section className="card-panel mt-8 p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="island-kicker m-0">Platform Health</p>
+        <p className="kicker m-0">Platform Health</p>
         <StatusPill status={report.status === 'ok' ? 'up' : 'down'} />
       </div>
       <dl className="m-0 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-            Service
-          </dt>
-          <dd className="m-0 text-sm font-semibold text-[var(--sea-ink)]">
+          <dt className="kicker mb-1">Service</dt>
+          <dd className="m-0 text-sm font-medium text-ink">
             {report.service} v{report.version}
           </dd>
         </div>
         <div>
-          <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-            Database
-          </dt>
+          <dt className="kicker mb-1">Database</dt>
           <dd className="m-0">
             <StatusPill status={report.checks.database.status} />
           </dd>
         </div>
         <div>
-          <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-            Redis
-          </dt>
+          <dt className="kicker mb-1">Redis</dt>
           <dd className="m-0">
             <StatusPill status={report.checks.redis.status} />
           </dd>
         </div>
         <div>
-          <dt className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-            Uptime
-          </dt>
-          <dd className="m-0 text-sm font-semibold text-[var(--sea-ink)]">
+          <dt className="kicker mb-1">Uptime</dt>
+          <dd className="m-0 text-sm font-medium text-ink">
             {Math.floor(report.uptimeSeconds / 60)}m {report.uptimeSeconds % 60}
             s
           </dd>
         </div>
       </dl>
-      <p className="mt-4 mb-0 text-xs text-[var(--sea-ink-soft)]">
+      <p className="mt-4 mb-0 text-xs text-muted-foreground">
         Checked at {new Date(report.timestamp).toLocaleTimeString()}
       </p>
     </section>
@@ -122,25 +110,30 @@ function HealthPanel() {
 function App() {
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
-      <section className="island-shell rise-in relative overflow-hidden rounded-[2rem] px-6 py-10 sm:px-10 sm:py-14">
-        <div className="pointer-events-none absolute -left-20 -top-24 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(79,184,178,0.32),transparent_66%)]" />
-        <div className="pointer-events-none absolute -bottom-20 -right-20 h-56 w-56 rounded-full bg-[radial-gradient(circle,rgba(47,106,74,0.18),transparent_66%)]" />
-        <p className="island-kicker mb-3">Multi-Outlet F&amp;B Platform</p>
-        <h1 className="display-title mb-5 max-w-3xl text-4xl leading-[1.02] font-bold tracking-tight text-[var(--sea-ink)] sm:text-6xl">
-          Headquarters console.
-        </h1>
-        <p className="mb-8 max-w-2xl text-base text-[var(--sea-ink-soft)] sm:text-lg">
-          Master menu governance, outlet assignment, API keys and cross-outlet
-          reporting for every outlet site. Phase 0 foundation: signed builds,
-          typed contracts and observable services.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <a
-            href="/api/v1/docs"
-            className="rounded-full border border-[rgba(50,143,151,0.3)] bg-[rgba(79,184,178,0.14)] px-5 py-2.5 text-sm font-semibold text-[var(--lagoon-deep)] no-underline transition hover:-translate-y-0.5 hover:bg-[rgba(79,184,178,0.24)]"
-          >
-            API Documentation
-          </a>
+      <section className="rise-in relative overflow-hidden py-10 sm:py-16">
+        <span
+          aria-hidden="true"
+          className="orb orb-mint -left-24 -top-16 h-72 w-72"
+        />
+        <span
+          aria-hidden="true"
+          className="orb orb-peach -right-28 top-8 h-80 w-80"
+        />
+        <div className="relative">
+          <p className="kicker mb-4">Multi-Outlet F&amp;B Platform</p>
+          <h1 className="mb-6 max-w-3xl font-display text-display-md text-ink sm:text-display-xl lg:text-display-mega">
+            Headquarters console.
+          </h1>
+          <p className="mb-8 max-w-2xl text-body-md text-body sm:text-lg sm:leading-relaxed">
+            Master menu governance, outlet assignment, API keys and cross-outlet
+            reporting for every outlet site. Phase 0 foundation: signed builds,
+            typed contracts and observable services.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <a href="/api/v1/docs" className="btn-primary no-underline">
+              API Documentation
+            </a>
+          </div>
         </div>
       </section>
 
@@ -167,13 +160,13 @@ function App() {
         ].map(([title, desc], index) => (
           <article
             key={title}
-            className="island-shell feature-card rise-in rounded-2xl p-5"
+            className="feature-card rise-in p-5"
             style={{ animationDelay: `${index * 90 + 80}ms` }}
           >
-            <h2 className="mb-2 text-base font-semibold text-[var(--sea-ink)]">
+            <h2 className="mb-2 font-display text-title-md text-ink">
               {title}
             </h2>
-            <p className="m-0 text-sm text-[var(--sea-ink-soft)]">{desc}</p>
+            <p className="m-0 text-sm text-body">{desc}</p>
           </article>
         ))}
       </section>

@@ -1,11 +1,15 @@
 # AGENTS.md — hq-frontend
 
-Independent HQ React application (React 19, Vite, TanStack Router/Query, Tailwind, shadcn-style `components/ui`).
-Read the root [../AGENTS.md](../AGENTS.md) first — universal frontend API rules apply. Source of truth: [../fnb_multi_outlet_prd.md](../fnb_multi_outlet_prd.md) ("PRD").
+Independent HQ React application (React 19, Vite, TanStack Router/Query, Tailwind v4, shadcn-style `components/ui`).
+Read the root [../AGENTS.md](../AGENTS.md) first — universal frontend API and design-system rules apply (§4.5). Design system: [../DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md). Source of truth: [../fnb_multi_outlet_prd.md](../fnb_multi_outlet_prd.md) ("PRD").
 
 ## Mission
 
 HQ admin console: login, dashboard (revenue, lag, outlet health), master categories/menu CRUD, assignment matrix with override editor + effective-price preview, outlet & API-key lifecycle (secret shown once), reports with date filters and `dataAsOf`, sync-health panel, audit views (PRD §11).
+
+## Design system
+
+Styling follows the editorial design system in [../DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) — `src/styles.css` is the single token/class source (Tailwind v4 CSS-first; no `tailwind.config.*`). In short: token utilities only (no hardcoded hex/rgba), ink pill `.btn-primary` is the only primary CTA, `font-display` (EB Garamond) is never bolded, orbs are `aria-hidden` decoration only, money uses `.money` (Inter tabular numerals, never `font-mono`), no dark mode, fonts self-hosted via Fontsource. `src/styles.css` stays **byte-identical** to `outlet-frontend/src/styles.css` — copy changes across in the same commit.
 
 ## Commands
 

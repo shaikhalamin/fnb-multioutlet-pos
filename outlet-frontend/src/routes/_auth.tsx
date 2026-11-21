@@ -41,7 +41,7 @@ function AuthLayout() {
   if (!bootstrapped) {
     return (
       <main
-        className="page-wrap py-24 text-center text-sm text-[var(--sea-ink-soft)]"
+        className="page-wrap py-24 text-center text-sm text-body"
         aria-busy="true"
       >
         Restoring your session…

@@ -87,10 +87,7 @@ function InventoryPage() {
   if (!canRead) {
     return (
       <main className="page-wrap py-16">
-        <p
-          role="alert"
-          className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-        >
+        <p role="alert" className="card-panel p-6 text-sm text-error">
           You do not have permission to view inventory.
         </p>
       </main>
@@ -133,83 +130,71 @@ function InventoryPage() {
 
   return (
     <main className="page-wrap py-10">
-      <p className="island-kicker mb-2">Back of house</p>
-      <h1 className="mb-1 text-2xl font-semibold text-[var(--sea-ink)]">
-        Inventory
-      </h1>
-      <p className="mb-6 mt-1 text-sm text-[var(--sea-ink-soft)]">
+      <p className="kicker mb-2">Back of house</p>
+      <h1 className="mb-1 font-display text-display-md text-ink">Inventory</h1>
+      <p className="mb-6 mt-1 text-sm text-body">
         Local balances only — every adjustment is an audited movement.
       </p>
 
       {notice ? (
         <p
           role="status"
-          className="mb-4 rounded-lg bg-[rgba(52,199,89,0.12)] px-3 py-2 text-sm text-[#1d7a3f]"
+          className="mb-4 rounded-lg bg-success/10 px-3 py-2 text-sm text-success"
         >
           {notice}
         </p>
       ) : null}
 
       {balances.isPending ? (
-        <p
-          className="island-shell rounded-2xl p-6 text-sm text-[var(--sea-ink-soft)]"
-          aria-busy="true"
-        >
+        <p className="card-panel p-6 text-sm text-body" aria-busy="true">
           Loading balances…
         </p>
       ) : balances.isError ? (
-        <p
-          role="alert"
-          className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-        >
+        <p role="alert" className="card-panel p-6 text-sm text-error">
           Inventory unavailable:{' '}
           {balances.error instanceof Error
             ? balances.error.message
             : 'network error'}
         </p>
       ) : (
-        <section className="island-shell overflow-x-auto rounded-2xl p-6">
+        <section className="card-panel overflow-x-auto p-6">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-                <th className="py-2 pr-4">Item</th>
-                <th className="py-2 pr-4">SKU</th>
-                <th className="py-2 pr-4">On hand</th>
-                <th className="py-2 pr-4">Version</th>
-                <th className="py-2 pr-4">Updated</th>
-                {canAdjust ? <th className="py-2">Actions</th> : null}
+              <tr className="border-b border-hairline text-left">
+                <th className="kicker py-2 pr-4">Item</th>
+                <th className="kicker py-2 pr-4">SKU</th>
+                <th className="kicker py-2 pr-4">On hand</th>
+                <th className="kicker py-2 pr-4">Version</th>
+                <th className="kicker py-2 pr-4">Updated</th>
+                {canAdjust ? <th className="kicker py-2">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {balances.data.map((row) => (
                 <tr
                   key={row.menuItemId}
-                  className="border-b border-[var(--line)]/60"
+                  className="border-b border-hairline-soft"
                 >
-                  <td className="py-2 pr-4 font-medium text-[var(--sea-ink)]">
-                    {row.name}
-                  </td>
-                  <td className="py-2 pr-4 text-[var(--sea-ink-soft)]">
-                    {row.sku}
-                  </td>
-                  <td className="py-2 pr-4 font-mono font-semibold">
+                  <td className="py-2 pr-4 font-medium text-ink">{row.name}</td>
+                  <td className="py-2 pr-4 text-body">{row.sku}</td>
+                  <td className="money py-2 pr-4 font-semibold">
                     <span
-                      className={row.quantityOnHand > 0 ? '' : 'text-[#a03030]'}
+                      className={row.quantityOnHand > 0 ? '' : 'text-error'}
                     >
                       {row.quantityOnHand}
                     </span>
                   </td>
-                  <td className="py-2 pr-4 text-xs text-[var(--sea-ink-soft)]">
+                  <td className="money py-2 pr-4 text-xs text-muted-foreground">
                     v{row.version}
                   </td>
-                  <td className="py-2 pr-4 text-xs text-[var(--sea-ink-soft)]">
+                  <td className="py-2 pr-4 text-xs text-body">
                     {new Date(row.updatedAt).toLocaleString()}
                   </td>
                   {canAdjust ? (
                     <td className="py-2">
                       <button
                         type="button"
-                        className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1 text-xs font-semibold text-[var(--sea-ink)]"
+                        className="btn-outline btn-sm"
                         onClick={() => openDialog(row.menuItemId)}
                       >
                         Adjust
@@ -225,35 +210,33 @@ function InventoryPage() {
 
       {adjustingRow ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(10,30,26,0.45)] p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/45 p-4"
           role="dialog"
           aria-modal="true"
           aria-label={`Adjust stock for ${adjustingRow.name}`}
         >
           <form
             onSubmit={handleAdjust}
-            className="island-shell w-full max-w-md rounded-2xl p-6"
+            className="card-panel w-full max-w-md p-6"
           >
-            <p className="island-kicker mb-2">Audited adjustment</p>
-            <h2 className="mb-1 text-lg font-semibold text-[var(--sea-ink)]">
+            <p className="kicker mb-2">Audited adjustment</p>
+            <h2 className="mb-1 font-display text-title-md text-ink">
               {adjustingRow.name}
             </h2>
-            <p className="mb-4 mt-0 text-xs text-[var(--sea-ink-soft)]">
+            <p className="mb-4 mt-0 text-xs text-body">
               {adjustingRow.sku} · on hand {adjustingRow.quantityOnHand} · every
               change is recorded with your account and the request ID.
             </p>
 
             <fieldset className="mb-4 m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-                Reason
-              </legend>
+              <legend className="kicker mb-2">Reason</legend>
               {REASONS.map((option) => (
                 <label
                   key={option.value}
                   className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
                     reason === option.value
-                      ? 'border-[#56c6be] bg-[rgba(86,198,190,0.10)]'
-                      : 'border-[var(--chip-line)] bg-[var(--chip-bg)]'
+                      ? 'border-ink bg-surface-strong'
+                      : 'border-hairline-strong bg-surface-card'
                   }`}
                 >
                   <input
@@ -263,17 +246,15 @@ function InventoryPage() {
                     checked={reason === option.value}
                     onChange={() => setReason(option.value)}
                   />
-                  <span className="font-semibold text-[var(--sea-ink)]">
-                    {option.label}
-                  </span>
-                  <span className="ml-auto text-xs text-[var(--sea-ink-soft)]">
+                  <span className="font-medium text-ink">{option.label}</span>
+                  <span className="ml-auto text-xs text-body">
                     {option.hint}
                   </span>
                 </label>
               ))}
             </fieldset>
 
-            <label className="mb-4 flex flex-col gap-1 text-sm font-medium">
+            <label className="mb-4 flex flex-col gap-1 text-sm font-medium text-ink">
               Signed quantity change
               <input
                 type="number"
@@ -282,14 +263,14 @@ function InventoryPage() {
                 value={quantity}
                 onChange={(event) => setQuantity(event.target.value)}
                 placeholder={reason === 'RESTOCK' ? 'e.g. 50' : 'e.g. -3'}
-                className="rounded-lg border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-2 font-mono text-sm font-normal text-[var(--sea-ink)] outline-none focus:border-[#56c6be]"
+                className="text-input money font-normal"
               />
             </label>
 
             {formError ? (
               <p
                 role="alert"
-                className="mb-3 rounded-lg bg-[rgba(235,87,87,0.12)] px-3 py-2 text-xs text-[#a03030]"
+                className="mb-3 rounded-lg bg-error/10 px-3 py-2 text-xs text-error"
               >
                 {formError}
               </p>
@@ -299,14 +280,14 @@ function InventoryPage() {
               <button
                 type="submit"
                 disabled={adjust.isPending}
-                className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                className="btn-primary btn-sm"
               >
                 {adjust.isPending ? 'Applying…' : 'Apply adjustment'}
               </button>
               <button
                 type="button"
                 onClick={closeDialog}
-                className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-4 py-2 text-xs font-semibold text-[var(--sea-ink)]"
+                className="btn-outline btn-sm"
               >
                 Cancel
               </button>

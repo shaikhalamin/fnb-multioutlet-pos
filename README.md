@@ -7,8 +7,8 @@ described in [fnb_multi_outlet_prd.md](./fnb_multi_outlet_prd.md):
 |---|---|---|
 | HQ backend (API + worker) | `hq-backend/` | NestJS, TypeScript (ESM) |
 | Outlet backend (API + sync worker) | `outlet-backend/` | NestJS, TypeScript (ESM) |
-| HQ frontend | `hq-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind |
-| Outlet POS frontend | `outlet-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind |
+| HQ frontend | `hq-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind — editorial design system ([DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)) |
+| Outlet POS frontend | `outlet-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind — editorial design system ([DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)) |
 
 All projects use **pnpm** (pinned via `packageManager` in each `package.json`).
 

@@ -61,21 +61,16 @@ function OutletsPage() {
 
   return (
     <main className="page-wrap py-10">
-      <p className="island-kicker mb-2">Sites</p>
-      <h1 className="mb-6 text-2xl font-semibold text-[var(--sea-ink)]">
-        Outlets
-      </h1>
+      <p className="kicker mb-2">Sites</p>
+      <h1 className="mb-6 font-display text-display-md text-ink">Outlets</h1>
 
-      <section className="island-shell rounded-2xl p-6">
+      <section className="card-panel p-6">
         {outlets.isPending ? (
-          <p
-            className="m-0 text-sm text-[var(--sea-ink-soft)]"
-            aria-busy="true"
-          >
+          <p className="m-0 text-sm text-body" aria-busy="true">
             Loading outlets…
           </p>
         ) : outlets.isError ? (
-          <p role="alert" className="m-0 text-sm text-[#a03030]">
+          <p role="alert" className="m-0 text-sm text-error">
             {outlets.error instanceof ApiError
               ? `${outlets.error.code}: ${outlets.error.message}`
               : 'Failed to load outlets.'}
@@ -87,23 +82,19 @@ function OutletsPage() {
                 key={outlet.id}
                 to="/outlets/$outletId"
                 params={{ outletId: outlet.id }}
-                className="rounded-xl border border-[var(--chip-line)] bg-[var(--chip-bg)] p-4 no-underline transition hover:border-[#56c6be]"
+                className="feature-card p-4 no-underline"
               >
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="rounded-full bg-[rgba(86,198,190,0.16)] px-2.5 py-0.5 text-xs font-semibold text-[#2f8f83]">
-                    {outlet.code}
-                  </span>
-                  <span className="text-xs font-semibold text-[var(--sea-ink-soft)]">
+                  <span className="badge-pill">{outlet.code}</span>
+                  <span className="money text-xs font-medium text-muted-foreground">
                     rev {outlet.catalogRevision}
                   </span>
                 </div>
-                <p className="m-0 text-sm font-semibold text-[var(--sea-ink)]">
+                <p className="m-0 text-sm font-medium text-ink">
                   {outlet.name}
                 </p>
-                <p className="m-0 mt-1 text-xs text-[var(--sea-ink-soft)]">
-                  {outlet.timezone}
-                </p>
-                <p className="m-0 mt-3 text-xs font-semibold text-[#2f8f83]">
+                <p className="m-0 mt-1 text-xs text-body">{outlet.timezone}</p>
+                <p className="m-0 mt-3 text-xs font-medium text-ink">
                   Assignments &amp; keys →
                 </p>
               </Link>
@@ -115,9 +106,9 @@ function OutletsPage() {
       {canWrite ? (
         <form
           onSubmit={handleCreate}
-          className="island-shell mt-6 grid gap-3 rounded-2xl p-6 sm:grid-cols-3"
+          className="card-panel mt-6 grid gap-3 p-6 sm:grid-cols-3"
         >
-          <p className="m-0 col-span-full text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
+          <p className="kicker m-0 col-span-full">
             Provision outlet (creates its revision-0 catalog row)
           </p>
           <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -128,7 +119,7 @@ function OutletsPage() {
                 setForm({ ...form, code: event.target.value.toUpperCase() })
               }
               placeholder="D"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -139,7 +130,7 @@ function OutletsPage() {
                 setForm({ ...form, name: event.target.value })
               }
               placeholder="Outlet D"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -150,19 +141,19 @@ function OutletsPage() {
                 setForm({ ...form, timezone: event.target.value })
               }
               placeholder="Asia/Dhaka"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
-          <div className="col-span-full flex items-center gap-3">
+          <div className="col-span-full flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={createOutlet.isPending}
-              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+              className="btn-primary btn-sm"
             >
               Create outlet
             </button>
             {error ? (
-              <p role="alert" className="m-0 text-xs text-[#a03030]">
+              <p role="alert" className="m-0 text-xs text-error">
                 {error}
               </p>
             ) : null}

@@ -88,10 +88,7 @@ function UsersPage() {
   if (!canRead) {
     return (
       <main className="page-wrap py-16">
-        <p
-          role="alert"
-          className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-        >
+        <p role="alert" className="card-panel p-6 text-sm text-error">
           You do not have permission to manage users.
         </p>
       </main>
@@ -141,50 +138,44 @@ function UsersPage() {
 
   return (
     <main className="page-wrap py-10">
-      <p className="island-kicker mb-2">Administration</p>
-      <h1 className="mb-6 text-2xl font-semibold text-[var(--sea-ink)]">
+      <p className="kicker mb-2">Administration</p>
+      <h1 className="mb-6 font-display text-display-md text-ink">
         Outlet users
       </h1>
 
       {error ? (
         <p
           role="alert"
-          className="mb-4 rounded-lg bg-[rgba(235,87,87,0.12)] px-3 py-2 text-sm text-[#a03030]"
+          className="mb-4 rounded-lg bg-error/10 px-3 py-2 text-sm text-error"
         >
           {error}
         </p>
       ) : null}
 
-      <section className="island-shell mb-6 overflow-x-auto rounded-2xl p-6">
-        <h2 className="m-0 mb-4 text-base font-semibold text-[var(--sea-ink)]">
+      <section className="card-panel mb-6 overflow-x-auto p-6">
+        <h2 className="m-0 mb-4 font-display text-title-md text-ink">
           Local staff accounts
         </h2>
         {users.isPending ? (
-          <p
-            className="m-0 text-sm text-[var(--sea-ink-soft)]"
-            aria-busy="true"
-          >
+          <p className="m-0 text-sm text-body" aria-busy="true">
             Loading users…
           </p>
         ) : (
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-                <th className="py-2 pr-4">Email</th>
-                <th className="py-2 pr-4">Roles</th>
-                <th className="py-2 pr-4">Status</th>
-                {canWrite ? <th className="py-2">Actions</th> : null}
+              <tr className="border-b border-hairline text-left">
+                <th className="kicker py-2 pr-4">Email</th>
+                <th className="kicker py-2 pr-4">Roles</th>
+                <th className="kicker py-2 pr-4">Status</th>
+                {canWrite ? <th className="kicker py-2">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {users.data?.flatMap((user) => {
                 const editing = editingUserId === user.id
                 return [
-                  <tr
-                    key={user.id}
-                    className="border-b border-[var(--line)]/60"
-                  >
-                    <td className="py-2 pr-4 font-medium text-[var(--sea-ink)]">
+                  <tr key={user.id} className="border-b border-hairline-soft">
+                    <td className="py-2 pr-4 font-medium text-ink">
                       {user.email}
                     </td>
                     <td className="py-2 pr-4">
@@ -192,7 +183,7 @@ function UsersPage() {
                         {user.roleCodes.map((code) => (
                           <span
                             key={code}
-                            className="rounded-full bg-[rgba(86,198,190,0.16)] px-2 py-0.5 text-xs font-semibold text-[#2f8f83]"
+                            className="badge-pill normal-case tracking-[0.08em]"
                           >
                             {code}
                           </span>
@@ -203,8 +194,8 @@ function UsersPage() {
                       <span
                         className={
                           user.status === 'ACTIVE'
-                            ? 'rounded-full bg-[rgba(52,199,89,0.15)] px-2 py-0.5 text-xs font-semibold text-[#1d7a3f]'
-                            : 'rounded-full bg-[rgba(120,120,120,0.14)] px-2 py-0.5 text-xs font-semibold text-[var(--sea-ink-soft)]'
+                            ? 'badge-pill badge-success'
+                            : 'badge-pill badge-neutral'
                         }
                       >
                         {user.status}
@@ -215,6 +206,7 @@ function UsersPage() {
                         <div className="flex flex-wrap gap-2 text-xs">
                           <button
                             type="button"
+                            className="font-medium text-ink hover:underline"
                             onClick={() => {
                               setEditingUserId(editing ? null : user.id)
                               setEditingRoles([...user.roleCodes])
@@ -231,7 +223,7 @@ function UsersPage() {
                                   ? 'You cannot disable your own account.'
                                   : undefined
                               }
-                              className="text-[#a03030] disabled:opacity-40"
+                              className="font-medium text-error hover:underline disabled:opacity-40"
                               onClick={() =>
                                 updateUser.mutate({
                                   id: user.id,
@@ -244,6 +236,7 @@ function UsersPage() {
                           ) : (
                             <button
                               type="button"
+                              className="font-medium text-ink hover:underline"
                               onClick={() =>
                                 updateUser.mutate({
                                   id: user.id,
@@ -261,18 +254,18 @@ function UsersPage() {
                   editing ? (
                     <tr
                       key={`${user.id}-roles`}
-                      className="border-b border-[var(--line)]/60 bg-[var(--chip-bg)]"
+                      className="border-b border-hairline-soft bg-canvas-soft"
                     >
                       <td colSpan={canWrite ? 4 : 3} className="px-2 py-3">
                         <fieldset className="m-0 border-0 p-0">
-                          <legend className="mb-1 text-xs font-semibold">
+                          <legend className="kicker mb-1">
                             Roles for {user.email}
                           </legend>
                           <div className="flex flex-wrap items-center gap-2">
                             {roles.data?.map((role) => (
                               <label
                                 key={role.code}
-                                className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-1.5 text-xs font-semibold text-[var(--sea-ink)]"
+                                className="badge-pill cursor-pointer normal-case tracking-[0.08em]"
                                 title={role.permissions.join(', ')}
                               >
                                 <input
@@ -286,7 +279,7 @@ function UsersPage() {
                             <button
                               type="button"
                               disabled={updateUser.isPending}
-                              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                              className="btn-primary btn-sm"
                               onClick={() => saveRoles(user.id)}
                             >
                               Save roles
@@ -306,38 +299,36 @@ function UsersPage() {
       {canWrite ? (
         <form
           onSubmit={handleCreate}
-          className="island-shell grid gap-3 rounded-2xl p-6 sm:grid-cols-2"
+          className="card-panel grid gap-3 p-6 sm:grid-cols-2"
         >
-          <p className="m-0 col-span-full text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-            Create outlet user
-          </p>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
+          <p className="kicker m-0 col-span-full">Create outlet user</p>
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
             Email
             <input
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="new.cashier@outlet-a.local"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
             Password
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Min 8 characters"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
           <fieldset className="col-span-full m-0 border-0 p-0">
-            <legend className="mb-1 text-xs font-semibold">Roles</legend>
+            <legend className="kicker mb-1">Roles</legend>
             <div className="flex flex-wrap gap-2">
               {roles.data?.map((role) => (
                 <label
                   key={role.code}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--sea-ink)]"
+                  className="badge-pill cursor-pointer normal-case tracking-[0.08em]"
                   title={role.permissions.join(', ')}
                 >
                   <input
@@ -354,7 +345,7 @@ function UsersPage() {
             <button
               type="submit"
               disabled={createUser.isPending}
-              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+              className="btn-primary btn-sm"
             >
               Create user
             </button>

@@ -18,10 +18,7 @@ function SaleDetailPage() {
 
   if (sale.isPending) {
     return (
-      <main
-        className="page-wrap py-16 text-sm text-[var(--sea-ink-soft)]"
-        aria-busy="true"
-      >
+      <main className="page-wrap py-16 text-sm text-body" aria-busy="true">
         Loading receipt…
       </main>
     )
@@ -29,16 +26,13 @@ function SaleDetailPage() {
   if (sale.isError) {
     return (
       <main className="page-wrap py-16">
-        <p
-          role="alert"
-          className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-        >
+        <p role="alert" className="card-panel p-6 text-sm text-error">
           {sale.error instanceof Error
             ? sale.error.message
             : 'Receipt unavailable.'}
         </p>
         <p className="mt-3 text-sm">
-          <Link to="/sales" className="text-[var(--lagoon-deep)] underline">
+          <Link to="/sales" className="underline">
             ← Back to sales
           </Link>
         </p>
@@ -50,52 +44,50 @@ function SaleDetailPage() {
   return (
     <main className="page-wrap py-10">
       <p className="mb-3 text-sm print:hidden">
-        <Link to="/sales" className="text-[var(--lagoon-deep)] underline">
+        <Link to="/sales" className="underline">
           ← Back to sales
         </Link>
       </p>
 
-      <section className="island-shell mx-auto max-w-xl rounded-2xl p-6 print:border-0 print:shadow-none">
+      <section className="card-panel mx-auto max-w-xl p-6 print:border-0 print:shadow-none">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="island-kicker m-0">Receipt</p>
-          <span className="rounded-full bg-[rgba(52,199,89,0.15)] px-3 py-1 text-xs font-semibold text-[#1d7a3f]">
+          <p className="kicker m-0">Receipt</p>
+          <span className="badge-pill badge-success">
             {data.status} · sync {data.syncStatus}
           </span>
         </div>
-        <h1 className="m-0 mb-1 font-mono text-3xl font-bold text-[var(--sea-ink)]">
+        <h1 className="money m-0 mb-1 font-display text-display-sm text-ink">
           {data.receiptNo}
         </h1>
-        <p className="m-0 mb-5 text-xs text-[var(--sea-ink-soft)]">
+        <p className="m-0 mb-5 text-xs text-body">
           Sold {new Date(data.soldAt).toLocaleString()} · catalog revision{' '}
           {data.catalogRevision} · {data.currencyCode}
         </p>
 
         <table className="mb-4 w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-              <th className="py-2 pr-3">Item</th>
-              <th className="py-2 pr-3">Qty</th>
-              <th className="py-2 pr-3">Unit</th>
-              <th className="py-2 text-right">Subtotal</th>
+            <tr className="border-b border-hairline text-left">
+              <th className="kicker py-2 pr-3">Item</th>
+              <th className="kicker py-2 pr-3">Qty</th>
+              <th className="kicker py-2 pr-3">Unit</th>
+              <th className="kicker py-2 text-right">Subtotal</th>
             </tr>
           </thead>
           <tbody>
             {data.items.map((item) => (
               <tr
                 key={item.saleItemId}
-                className="border-b border-[var(--line)]/60"
+                className="border-b border-hairline-soft"
               >
-                <td className="py-2 pr-3 font-medium text-[var(--sea-ink)]">
+                <td className="py-2 pr-3 font-medium text-ink">
                   {item.name}
-                  <span className="ml-2 text-xs text-[var(--sea-ink-soft)]">
-                    {item.sku}
-                  </span>
+                  <span className="ml-2 text-xs text-body">{item.sku}</span>
                 </td>
-                <td className="py-2 pr-3">{item.quantity}</td>
-                <td className="py-2 pr-3">
+                <td className="money py-2 pr-3">{item.quantity}</td>
+                <td className="money py-2 pr-3">
                   {formatMinor(item.unitPriceMinor, data.currencyCode)}
                 </td>
-                <td className="py-2 text-right">
+                <td className="money py-2 text-right">
                   {formatMinor(item.subtotalMinor, data.currencyCode)}
                 </td>
               </tr>
@@ -103,10 +95,10 @@ function SaleDetailPage() {
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={3} className="pt-3 text-right font-semibold">
+              <td colSpan={3} className="pt-3 text-right font-medium">
                 Total
               </td>
-              <td className="pt-3 text-right font-mono text-lg font-bold">
+              <td className="money pt-3 text-right text-lg font-semibold">
                 {formatMinor(data.totalMinor, data.currencyCode)}
               </td>
             </tr>
@@ -115,7 +107,7 @@ function SaleDetailPage() {
 
         <button
           type="button"
-          className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white print:hidden"
+          className="btn-primary btn-sm print:hidden"
           onClick={() => window.print()}
         >
           Reprint receipt

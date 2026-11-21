@@ -74,60 +74,67 @@ function LoginPage() {
 
   return (
     <main className="page-wrap py-16">
-      <section className="island-shell mx-auto max-w-md rounded-2xl p-8">
-        <p className="island-kicker mb-2">F&amp;B Headquarters</p>
-        <h1 className="mb-1 text-2xl font-semibold text-[var(--sea-ink)]">
-          Sign in
-        </h1>
-        <p className="mb-6 mt-1 text-sm text-[var(--sea-ink-soft)]">
-          Use your HQ staff account to manage the master menu, outlets and keys.
-        </p>
-        <form
-          onSubmit={handleSubmit}
-          className="flex flex-col gap-4"
-          noValidate
-        >
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Email
-            <input
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-2 text-sm font-normal text-[var(--sea-ink)] outline-none focus:border-[#56c6be]"
-              placeholder="admin@fnb.local"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-sm font-medium">
-            Password
-            <input
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-2 text-sm font-normal text-[var(--sea-ink)] outline-none focus:border-[#56c6be]"
-              placeholder="••••••••"
-            />
-          </label>
-          {error ? (
-            <p
-              role="alert"
-              className="m-0 rounded-lg bg-[rgba(235,87,87,0.12)] px-3 py-2 text-sm text-[#a03030]"
-            >
-              {error}
-            </p>
-          ) : null}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="mt-2 rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(47,143,131,0.28)] transition hover:brightness-105 disabled:opacity-60"
+      <div className="relative mx-auto max-w-md">
+        <span
+          aria-hidden="true"
+          className="orb orb-lavender -top-12 -right-16 h-56 w-56"
+        />
+        <section className="card-panel relative p-8">
+          <p className="kicker mb-2">F&amp;B Headquarters</p>
+          <h1 className="mb-1 font-display text-display-sm text-ink">
+            Sign in
+          </h1>
+          <p className="mb-6 mt-1 text-sm text-body">
+            Use your HQ staff account to manage the master menu, outlets and
+            keys.
+          </p>
+          <form
+            onSubmit={handleSubmit}
+            className="flex flex-col gap-4"
+            noValidate
           >
-            {submitting ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-      </section>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
+              Email
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="text-input font-normal"
+                placeholder="admin@fnb.local"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
+              Password
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="text-input font-normal"
+                placeholder="••••••••"
+              />
+            </label>
+            {error ? (
+              <p
+                role="alert"
+                className="m-0 rounded-lg bg-error/10 px-3 py-2 text-sm text-error"
+              >
+                {error}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-primary mt-2"
+            >
+              {submitting ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        </section>
+      </div>
     </main>
   )
 }

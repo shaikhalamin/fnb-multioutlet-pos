@@ -137,10 +137,7 @@ function PosPage() {
   if (!canSell) {
     return (
       <main className="page-wrap py-16">
-        <p
-          role="alert"
-          className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-        >
+        <p role="alert" className="card-panel p-6 text-sm text-error">
           You do not have permission to run sales on this register.
         </p>
       </main>
@@ -200,16 +197,20 @@ function PosPage() {
 
   return (
     <main className="page-wrap py-10">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="island-kicker mb-2">Register</p>
-          <h1 className="m-0 text-2xl font-semibold text-[var(--sea-ink)]">
+      <div className="relative mb-6 flex flex-wrap items-end justify-between gap-3">
+        <span
+          aria-hidden="true"
+          className="orb orb-peach -top-8 right-16 h-40 w-40"
+        />
+        <div className="relative">
+          <p className="kicker mb-2">Register</p>
+          <h1 className="m-0 font-display text-display-md text-ink">
             Point of sale
           </h1>
         </div>
         <button
           type="button"
-          className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-4 py-2 text-xs font-semibold text-[var(--sea-ink)]"
+          className="btn-outline btn-sm relative"
           onClick={() =>
             void queryClient.invalidateQueries({ queryKey: posKeys.menu() })
           }
@@ -221,48 +222,46 @@ function PosPage() {
 
       {receipt ? (
         <section
-          className="island-shell mb-6 rounded-2xl p-6 print:border-0 print:shadow-none"
+          className="card-panel mb-6 p-6 print:border-0 print:shadow-none"
           aria-live="polite"
         >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="island-kicker m-0">Receipt confirmed</p>
-            <span className="rounded-full bg-[rgba(52,199,89,0.15)] px-3 py-1 text-xs font-semibold text-[#1d7a3f]">
+            <p className="kicker m-0">Receipt confirmed</p>
+            <span className="badge-pill badge-success">
               {receipt.status} · sync {receipt.syncStatus}
             </span>
           </div>
-          <h2 className="m-0 mb-1 font-mono text-3xl font-bold tracking-tight text-[var(--sea-ink)]">
+          <h2 className="money m-0 mb-1 font-display text-display-sm text-ink">
             {receipt.receiptNo}
           </h2>
-          <p className="m-0 mb-4 text-xs text-[var(--sea-ink-soft)]">
+          <p className="m-0 mb-4 text-xs text-body">
             Sold {new Date(receipt.soldAt).toLocaleString()} · catalog revision{' '}
             {receipt.catalogRevision}
           </p>
           <table className="mb-4 w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-                <th className="py-2 pr-4">Item</th>
-                <th className="py-2 pr-4">Qty</th>
-                <th className="py-2 pr-4">Unit</th>
-                <th className="py-2 text-right">Subtotal</th>
+              <tr className="border-b border-hairline text-left">
+                <th className="kicker py-2 pr-4">Item</th>
+                <th className="kicker py-2 pr-4">Qty</th>
+                <th className="kicker py-2 pr-4">Unit</th>
+                <th className="kicker py-2 text-right">Subtotal</th>
               </tr>
             </thead>
             <tbody>
               {receipt.items.map((item) => (
                 <tr
                   key={item.saleItemId}
-                  className="border-b border-[var(--line)]/60"
+                  className="border-b border-hairline-soft"
                 >
-                  <td className="py-2 pr-4 font-medium text-[var(--sea-ink)]">
+                  <td className="py-2 pr-4 font-medium text-ink">
                     {item.name}
-                    <span className="ml-2 text-xs text-[var(--sea-ink-soft)]">
-                      {item.sku}
-                    </span>
+                    <span className="ml-2 text-xs text-body">{item.sku}</span>
                   </td>
-                  <td className="py-2 pr-4">{item.quantity}</td>
-                  <td className="py-2 pr-4">
+                  <td className="money py-2 pr-4">{item.quantity}</td>
+                  <td className="money py-2 pr-4">
                     {formatMinor(item.unitPriceMinor, receipt.currencyCode)}
                   </td>
-                  <td className="py-2 text-right">
+                  <td className="money py-2 text-right">
                     {formatMinor(item.subtotalMinor, receipt.currencyCode)}
                   </td>
                 </tr>
@@ -270,13 +269,10 @@ function PosPage() {
             </tbody>
             <tfoot>
               <tr>
-                <td
-                  colSpan={3}
-                  className="pt-3 text-right text-sm font-semibold"
-                >
+                <td colSpan={3} className="pt-3 text-right text-sm font-medium">
                   Total (server-computed)
                 </td>
-                <td className="pt-3 text-right font-mono text-base font-bold">
+                <td className="money pt-3 text-right text-base font-semibold">
                   {formatMinor(receipt.totalMinor, receipt.currencyCode)}
                 </td>
               </tr>
@@ -285,14 +281,14 @@ function PosPage() {
           <div className="flex flex-wrap gap-2 print:hidden">
             <button
               type="button"
-              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white"
+              className="btn-primary btn-sm"
               onClick={() => window.print()}
             >
               Print receipt
             </button>
             <button
               type="button"
-              className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-5 py-2 text-xs font-semibold text-[var(--sea-ink)]"
+              className="btn-outline btn-sm"
               onClick={() => setReceipt(null)}
             >
               New sale
@@ -304,17 +300,11 @@ function PosPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_340px]">
         <section>
           {menu.isPending ? (
-            <p
-              className="island-shell rounded-2xl p-6 text-sm text-[var(--sea-ink-soft)]"
-              aria-busy="true"
-            >
+            <p className="card-panel p-6 text-sm text-body" aria-busy="true">
               Loading menu…
             </p>
           ) : menu.isError ? (
-            <p
-              role="alert"
-              className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-            >
+            <p role="alert" className="card-panel p-6 text-sm text-error">
               Menu unavailable:{' '}
               {menu.error instanceof Error
                 ? menu.error.message
@@ -328,29 +318,29 @@ function PosPage() {
                 return (
                   <article
                     key={item.menuItemId}
-                    className="island-shell flex flex-col gap-2 rounded-2xl p-4"
+                    className="card-panel flex flex-col gap-2 p-4"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <h2 className="m-0 text-sm font-semibold text-[var(--sea-ink)]">
+                      <h2 className="m-0 text-sm font-medium text-ink">
                         {item.name}
                       </h2>
-                      <span className="whitespace-nowrap font-mono text-sm font-bold text-[var(--sea-ink)]">
+                      <span className="money whitespace-nowrap text-sm font-semibold text-ink">
                         {formatMinor(item.unitPriceMinor, item.currencyCode)}
                       </span>
                     </div>
-                    <p className="m-0 text-xs text-[var(--sea-ink-soft)]">
+                    <p className="m-0 text-xs text-body">
                       {item.sku} · {item.category}
                     </p>
                     <p
-                      className={`m-0 text-xs font-semibold ${
-                        remaining > 0 ? 'text-[#1d7a3f]' : 'text-[#a03030]'
+                      className={`m-0 text-xs font-medium ${
+                        remaining > 0 ? 'text-success' : 'text-error'
                       }`}
                     >
                       {remaining > 0 ? `${remaining} in stock` : 'Out of stock'}
                     </p>
                     <button
                       type="button"
-                      className="mt-auto rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-4 py-1.5 text-xs font-semibold text-white transition hover:brightness-105 disabled:opacity-40"
+                      className="btn-primary btn-sm mt-auto"
                       disabled={remaining <= 0 || checkout.isPending}
                       onClick={() => addToCart(item.menuItemId)}
                     >
@@ -365,13 +355,11 @@ function PosPage() {
 
         <form
           onSubmit={handleCheckout}
-          className="island-shell h-fit rounded-2xl p-5 lg:sticky lg:top-24"
+          className="card-panel h-fit p-5 lg:sticky lg:top-24"
         >
-          <p className="island-kicker mb-3">Cart</p>
+          <p className="kicker mb-3">Cart</p>
           {Object.entries(cart).length === 0 ? (
-            <p className="m-0 text-sm text-[var(--sea-ink-soft)]">
-              Scan or tap items to begin.
-            </p>
+            <p className="m-0 text-sm text-body">Scan or tap items to begin.</p>
           ) : (
             <ul className="m-0 mb-4 flex list-none flex-col gap-3 p-0">
               {Object.entries(cart).map(([menuItemId, quantity]) => {
@@ -384,10 +372,10 @@ function PosPage() {
                     className="flex items-center justify-between gap-2 text-sm"
                   >
                     <div className="min-w-0">
-                      <p className="m-0 truncate font-medium text-[var(--sea-ink)]">
+                      <p className="m-0 truncate font-medium text-ink">
                         {item.name}
                       </p>
-                      <p className="m-0 text-xs text-[var(--sea-ink-soft)]">
+                      <p className="money m-0 text-xs text-body">
                         {formatMinor(item.unitPriceMinor, item.currencyCode)}{' '}
                         each
                       </p>
@@ -396,18 +384,18 @@ function PosPage() {
                       <button
                         type="button"
                         aria-label={`Remove one ${item.name}`}
-                        className="h-7 w-7 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] text-sm font-bold text-[var(--sea-ink)]"
+                        className="h-7 w-7 rounded-full border border-hairline-strong bg-surface-card text-sm font-medium text-ink"
                         onClick={() => setQuantity(menuItemId, quantity - 1)}
                       >
                         −
                       </button>
-                      <span className="w-8 text-center font-mono text-sm font-semibold">
+                      <span className="money w-8 text-center text-sm font-semibold">
                         {quantity}
                       </span>
                       <button
                         type="button"
                         aria-label={`Add one ${item.name}`}
-                        className="h-7 w-7 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] text-sm font-bold text-[var(--sea-ink)] disabled:opacity-40"
+                        className="h-7 w-7 rounded-full border border-hairline-strong bg-surface-card text-sm font-medium text-ink disabled:opacity-40"
                         disabled={quantity >= max}
                         onClick={() => setQuantity(menuItemId, quantity + 1)}
                       >
@@ -416,7 +404,7 @@ function PosPage() {
                       <button
                         type="button"
                         aria-label={`Clear ${item.name}`}
-                        className="ml-1 text-xs font-semibold text-[#a03030]"
+                        className="ml-1 text-xs font-medium text-error hover:underline"
                         onClick={() => setQuantity(menuItemId, 0)}
                       >
                         ✕
@@ -430,15 +418,13 @@ function PosPage() {
 
           {Object.entries(cart).length > 0 ? (
             <>
-              <div className="mb-4 flex items-center justify-between border-t border-[var(--line)] pt-3">
-                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
-                  Estimated total
-                </span>
-                <span className="font-mono text-lg font-bold text-[var(--sea-ink)]">
+              <div className="mb-4 flex items-center justify-between border-t border-hairline pt-3">
+                <span className="kicker">Estimated total</span>
+                <span className="money text-lg font-semibold text-ink">
                   {formatMinor(cartTotalMinor, currency)}
                 </span>
               </div>
-              <p className="m-0 mb-3 text-[11px] leading-relaxed text-[var(--sea-ink-soft)]">
+              <p className="m-0 mb-3 text-[11px] leading-relaxed text-body">
                 The register computes the final total. Retries reuse the same
                 idempotency key — a double-tap can never double-charge.
               </p>
@@ -448,14 +434,14 @@ function PosPage() {
           {error ? (
             <p
               role="alert"
-              className="mb-3 rounded-lg bg-[rgba(235,87,87,0.12)] px-3 py-2 text-xs text-[#a03030]"
+              className="mb-3 rounded-lg bg-error/10 px-3 py-2 text-xs text-error"
             >
               {error}
             </p>
           ) : null}
 
           {keyPreview ? (
-            <p className="m-0 mb-3 font-mono text-[10px] break-all text-[var(--sea-ink-soft)]">
+            <p className="money m-0 mb-3 text-[10px] break-all text-muted-foreground">
               attempt key: {keyPreview}
             </p>
           ) : null}
@@ -463,7 +449,7 @@ function PosPage() {
           <div className="flex flex-wrap gap-2">
             <button
               type="submit"
-              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(47,143,131,0.28)] transition hover:brightness-105 disabled:opacity-50"
+              className="btn-primary"
               disabled={Object.keys(cart).length === 0 || checkout.isPending}
             >
               {checkout.isPending ? 'Charging…' : 'Charge sale'}
@@ -471,7 +457,7 @@ function PosPage() {
             {keyPreview ? (
               <button
                 type="button"
-                className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-4 py-2.5 text-xs font-semibold text-[var(--sea-ink)]"
+                className="btn-outline btn-sm"
                 onClick={abandonAttempt}
               >
                 Abandon attempt

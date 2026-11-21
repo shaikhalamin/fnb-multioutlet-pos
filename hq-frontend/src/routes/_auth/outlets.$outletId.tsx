@@ -83,16 +83,16 @@ function OutletDetailPage() {
 
   return (
     <main className="page-wrap py-10">
-      <p className="island-kicker mb-2">
+      <p className="kicker mb-2">
         {outlet ? `Outlet ${outlet.code}` : 'Outlet'}
       </p>
-      <h1 className="mb-1 text-2xl font-semibold text-[var(--sea-ink)]">
+      <h1 className="mb-1 font-display text-display-md text-ink">
         {outlet?.name ?? 'Loading…'}
       </h1>
       {outlet ? (
-        <p className="mb-6 mt-1 text-sm text-[var(--sea-ink-soft)]">
+        <p className="mb-6 mt-1 text-sm text-body">
           {outlet.timezone} · {outlet.status} · catalog revision{' '}
-          {outlet.catalogRevision}
+          <span className="money">{outlet.catalogRevision}</span>
         </p>
       ) : null}
 
@@ -186,11 +186,11 @@ function AssignmentMatrix({
   })
 
   return (
-    <section className="island-shell mb-6 rounded-2xl p-6">
-      <h2 className="m-0 mb-1 text-base font-semibold text-[var(--sea-ink)]">
+    <section className="card-panel mb-6 p-6">
+      <h2 className="m-0 mb-1 font-display text-title-md text-ink">
         Assignment matrix
       </h2>
-      <p className="m-0 mb-4 text-xs text-[var(--sea-ink-soft)]">
+      <p className="m-0 mb-4 text-xs text-body">
         Effective price = override ?? master default (PRD FR-02). Saving emits a
         per-outlet catalog revision atomically.
       </p>
@@ -198,7 +198,7 @@ function AssignmentMatrix({
       {error ? (
         <p
           role="alert"
-          className="mb-3 rounded-lg bg-[rgba(235,87,87,0.12)] px-3 py-2 text-sm text-[#a03030]"
+          className="mb-3 rounded-lg bg-error/10 px-3 py-2 text-sm text-error"
         >
           {error}
         </p>
@@ -207,12 +207,12 @@ function AssignmentMatrix({
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-              <th className="py-2 pr-4">Item</th>
-              <th className="py-2 pr-4">Default</th>
-              <th className="py-2 pr-4">Override (minor)</th>
-              <th className="py-2 pr-4">Effective preview</th>
-              <th className="py-2">Assigned</th>
+            <tr className="border-b border-hairline text-left">
+              <th className="kicker py-2 pr-4">Item</th>
+              <th className="kicker py-2 pr-4">Default</th>
+              <th className="kicker py-2 pr-4">Override (minor)</th>
+              <th className="kicker py-2 pr-4">Effective preview</th>
+              <th className="kicker py-2">Assigned</th>
             </tr>
           </thead>
           <tbody>
@@ -226,16 +226,14 @@ function AssignmentMatrix({
                     : draft
               const effective = overrideDraft ?? item.defaultPriceMinor
               return (
-                <tr key={item.id} className="border-b border-[var(--line)]/60">
+                <tr key={item.id} className="border-b border-hairline-soft">
                   <td className="py-2 pr-4">
-                    <p className="m-0 font-medium text-[var(--sea-ink)]">
-                      {item.name}
-                    </p>
-                    <p className="m-0 font-mono text-xs text-[var(--sea-ink-soft)]">
+                    <p className="m-0 font-medium text-ink">{item.name}</p>
+                    <p className="m-0 text-xs text-body">
                       {item.sku} · {item.categoryName}
                     </p>
                   </td>
-                  <td className="py-2 pr-4">
+                  <td className="money py-2 pr-4">
                     {formatMinor(item.defaultPriceMinor, item.currencyCode)}
                   </td>
                   <td className="py-2 pr-4">
@@ -249,10 +247,10 @@ function AssignmentMatrix({
                       }
                       placeholder="inherit"
                       inputMode="numeric"
-                      className="w-28 rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-2.5 py-1.5 text-sm disabled:opacity-50"
+                      className="text-input money h-9 w-28 px-2.5 py-1.5 text-sm font-normal disabled:opacity-50"
                     />
                   </td>
-                  <td className="py-2 pr-4 font-semibold text-[#2f8f83]">
+                  <td className="money py-2 pr-4 font-medium text-ink">
                     {formatMinor(effective, item.currencyCode)}
                   </td>
                   <td className="py-2">
@@ -287,8 +285,8 @@ function AssignmentMatrix({
                           }}
                           className={
                             active
-                              ? 'rounded-full bg-[rgba(52,199,89,0.16)] px-3 py-1 font-semibold text-[#1d7a3f]'
-                              : 'rounded-full border border-[var(--chip-line)] px-3 py-1 font-semibold text-[var(--sea-ink)]'
+                              ? 'badge-pill badge-success'
+                              : 'btn-outline btn-sm'
                           }
                         >
                           {active ? 'Assigned' : 'Assign'}
@@ -298,14 +296,14 @@ function AssignmentMatrix({
                             type="button"
                             disabled={assign.isPending || unassign.isPending}
                             onClick={() => unassign.mutate(item.id)}
-                            className="rounded-full border border-[var(--chip-line)] px-3 py-1 font-semibold text-[#a03030]"
+                            className="btn-outline btn-sm text-error"
                           >
                             Remove
                           </button>
                         ) : null}
                       </div>
                     ) : (
-                      <span className="text-xs text-[var(--sea-ink-soft)]">
+                      <span className="text-xs text-body">
                         {active ? 'Assigned' : '—'}
                       </span>
                     )}
@@ -317,7 +315,7 @@ function AssignmentMatrix({
         </table>
       </div>
       {rows.length === 0 ? (
-        <p className="m-0 mt-4 text-sm text-[var(--sea-ink-soft)]">
+        <p className="m-0 mt-4 text-sm text-body">
           No active master items yet — create some on the Menu page first.
         </p>
       ) : null}
@@ -371,11 +369,11 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
   }
 
   return (
-    <section className="island-shell rounded-2xl p-6">
-      <h2 className="m-0 mb-1 text-base font-semibold text-[var(--sea-ink)]">
+    <section className="card-panel p-6">
+      <h2 className="m-0 mb-1 font-display text-title-md text-ink">
         Outlet sync keys
       </h2>
-      <p className="m-0 mb-4 text-xs text-[var(--sea-ink-soft)]">
+      <p className="m-0 mb-4 text-xs text-body">
         Used by the outlet worker as{' '}
         <code>Authorization: OutletKey keyId.secret</code>. The secret is
         revealed exactly once at issue/rotation.
@@ -383,27 +381,27 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
 
       {issued ? (
         <div
-          className="mb-4 rounded-xl border border-[#56c6be] bg-[rgba(86,198,190,0.08)] p-4"
+          className="mb-4 rounded-xl border border-hairline bg-canvas-soft p-4"
           role="alert"
         >
-          <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-wide text-[#2f8f83]">
+          <p className="kicker m-0 mb-2">
             One-time secret — store it now, it will not be shown again
           </p>
-          <code className="block break-all rounded-lg bg-[var(--card,#fff)] px-3 py-2 text-xs">
+          <code className="money block break-all rounded-lg bg-surface-card px-3 py-2 text-xs">
             {issued.keyId}.{issued.secret}
           </code>
           <div className="mt-2 flex items-center gap-2">
             <button
               type="button"
               onClick={() => void copySecret()}
-              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-4 py-1.5 text-xs font-semibold text-white"
+              className="btn-primary btn-sm"
             >
               {copied ? 'Copied ✓' : 'Copy full key'}
             </button>
             <button
               type="button"
               onClick={() => setIssued(null)}
-              className="rounded-full border border-[var(--chip-line)] px-4 py-1.5 text-xs font-semibold text-[var(--sea-ink)]"
+              className="btn-outline btn-sm"
             >
               Dismiss
             </button>
@@ -412,37 +410,37 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
       ) : null}
 
       {keys.isPending ? (
-        <p className="m-0 text-sm text-[var(--sea-ink-soft)]" aria-busy="true">
+        <p className="m-0 text-sm text-body" aria-busy="true">
           Loading keys…
         </p>
       ) : (
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-              <th className="py-2 pr-4">Key ID</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2 pr-4">Expires</th>
-              <th className="py-2 pr-4">Last used</th>
-              <th className="py-2 pr-4">Rotated from</th>
-              <th className="py-2">Actions</th>
+            <tr className="border-b border-hairline text-left">
+              <th className="kicker py-2 pr-4">Key ID</th>
+              <th className="kicker py-2 pr-4">Status</th>
+              <th className="kicker py-2 pr-4">Expires</th>
+              <th className="kicker py-2 pr-4">Last used</th>
+              <th className="kicker py-2 pr-4">Rotated from</th>
+              <th className="kicker py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
             {keys.data?.map((key) => (
-              <tr key={key.id} className="border-b border-[var(--line)]/60">
-                <td className="py-2 pr-4 font-mono text-xs">{key.keyId}</td>
+              <tr key={key.id} className="border-b border-hairline-soft">
+                <td className="money py-2 pr-4 text-xs">{key.keyId}</td>
                 <td className="py-2 pr-4">{key.status}</td>
-                <td className="py-2 pr-4 text-xs text-[var(--sea-ink-soft)]">
+                <td className="py-2 pr-4 text-xs text-body">
                   {key.expiresAt
                     ? new Date(key.expiresAt).toLocaleString()
                     : '—'}
                 </td>
-                <td className="py-2 pr-4 text-xs text-[var(--sea-ink-soft)]">
+                <td className="py-2 pr-4 text-xs text-body">
                   {key.lastUsedAt
                     ? new Date(key.lastUsedAt).toLocaleString()
                     : 'never'}
                 </td>
-                <td className="py-2 pr-4 font-mono text-xs text-[var(--sea-ink-soft)]">
+                <td className="money py-2 pr-4 text-xs text-body">
                   {key.rotatedFromKeyId ?? '—'}
                 </td>
                 <td className="py-2">
@@ -451,13 +449,14 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
                       <>
                         <button
                           type="button"
+                          className="font-medium text-ink hover:underline"
                           onClick={() => rotate.mutate(key.keyId)}
                         >
                           Rotate
                         </button>
                         <button
                           type="button"
-                          className="text-[#a03030]"
+                          className="font-medium text-error hover:underline"
                           onClick={() => revoke.mutate(key.keyId)}
                         >
                           Revoke
@@ -476,7 +475,7 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
         type="button"
         disabled={issue.isPending}
         onClick={() => issue.mutate()}
-        className="mt-4 rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+        className="btn-primary btn-sm mt-4"
       >
         Issue new key
       </button>

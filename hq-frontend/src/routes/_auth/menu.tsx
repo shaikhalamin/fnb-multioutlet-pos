@@ -73,10 +73,7 @@ function MenuPage() {
   if (!hasPermission(session.user, 'menu.read')) {
     return (
       <main className="page-wrap py-16">
-        <p
-          role="alert"
-          className="island-shell rounded-2xl p-6 text-sm text-[#a03030]"
-        >
+        <p role="alert" className="card-panel p-6 text-sm text-error">
           You do not have permission to view the master menu.
         </p>
       </main>
@@ -85,8 +82,8 @@ function MenuPage() {
 
   return (
     <main className="page-wrap py-10">
-      <p className="island-kicker mb-2">Master menu</p>
-      <h1 className="mb-6 text-2xl font-semibold text-[var(--sea-ink)]">
+      <p className="kicker mb-2">Master menu</p>
+      <h1 className="mb-6 font-display text-display-md text-ink">
         Categories &amp; items
       </h1>
 
@@ -139,33 +136,32 @@ function CategoriesPanel({ canWrite }: { canWrite: boolean }) {
   }
 
   return (
-    <section className="island-shell mb-6 rounded-2xl p-6">
-      <h2 className="m-0 mb-4 text-base font-semibold text-[var(--sea-ink)]">
+    <section className="card-panel mb-6 p-6">
+      <h2 className="m-0 mb-4 font-display text-title-md text-ink">
         Categories
       </h2>
       <div className="flex flex-wrap gap-2">
         {categories.isPending ? (
-          <p
-            className="m-0 text-sm text-[var(--sea-ink-soft)]"
-            aria-busy="true"
-          >
+          <p className="m-0 text-sm text-body" aria-busy="true">
             Loading…
           </p>
         ) : (
           categories.data?.map((category) => (
             <span
               key={category.id}
-              className="inline-flex items-center gap-2 rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-1.5 text-xs font-semibold text-[var(--sea-ink)]"
+              className="badge-pill normal-case tracking-[0.08em]"
             >
               {category.name}
               {category.status === 'ARCHIVED' ? (
-                <span className="text-[var(--sea-ink-soft)]">(archived)</span>
+                <span className="font-medium text-muted-foreground">
+                  (archived)
+                </span>
               ) : canWrite ? (
                 <button
                   type="button"
                   title="Archive category (requires no active items)"
                   onClick={() => archiveCategory.mutate(category.id)}
-                  className="rounded-full px-1 text-[var(--sea-ink-soft)] hover:text-[#a03030]"
+                  className="rounded-full px-1 text-muted-foreground hover:text-error"
                 >
                   ×
                 </button>
@@ -183,17 +179,17 @@ function CategoriesPanel({ canWrite }: { canWrite: boolean }) {
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="New category name"
-            className="rounded-lg border border-[var(--chip-line)] bg-[var(--chip-bg)] px-3 py-2 text-sm text-[var(--sea-ink)] outline-none focus:border-[#56c6be]"
+            className="text-input w-56 font-normal"
           />
           <button
             type="submit"
             disabled={createCategory.isPending}
-            className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            className="btn-primary btn-sm"
           >
             Add category
           </button>
           {error ? (
-            <p role="alert" className="m-0 text-xs text-[#a03030]">
+            <p role="alert" className="m-0 text-xs text-error">
               {error}
             </p>
           ) : null}
@@ -277,17 +273,17 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
   }
 
   return (
-    <section className="island-shell rounded-2xl p-6">
-      <h2 className="m-0 mb-4 text-base font-semibold text-[var(--sea-ink)]">
+    <section className="card-panel p-6">
+      <h2 className="m-0 mb-4 font-display text-title-md text-ink">
         Master items
       </h2>
 
       {items.isPending ? (
-        <p className="m-0 text-sm text-[var(--sea-ink-soft)]" aria-busy="true">
+        <p className="m-0 text-sm text-body" aria-busy="true">
           Loading items…
         </p>
       ) : items.isError ? (
-        <p role="alert" className="m-0 text-sm text-[#a03030]">
+        <p role="alert" className="m-0 text-sm text-error">
           {items.error instanceof ApiError
             ? `${items.error.code}: ${items.error.message}`
             : 'Failed to load items.'}
@@ -296,41 +292,39 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-[var(--line)] text-left text-xs uppercase tracking-wide text-[var(--sea-ink-soft)]">
-                <th className="py-2 pr-4">SKU</th>
-                <th className="py-2 pr-4">Name</th>
-                <th className="py-2 pr-4">Category</th>
-                <th className="py-2 pr-4">Default price</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">v</th>
-                {canWrite ? <th className="py-2">Actions</th> : null}
+              <tr className="border-b border-hairline text-left">
+                <th className="kicker py-2 pr-4">SKU</th>
+                <th className="kicker py-2 pr-4">Name</th>
+                <th className="kicker py-2 pr-4">Category</th>
+                <th className="kicker py-2 pr-4">Default price</th>
+                <th className="kicker py-2 pr-4">Status</th>
+                <th className="kicker py-2 pr-4">v</th>
+                {canWrite ? <th className="kicker py-2">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {items.data.map((item) => (
-                <tr key={item.id} className="border-b border-[var(--line)]/60">
-                  <td className="py-2 pr-4 font-mono text-xs">{item.sku}</td>
-                  <td className="py-2 pr-4 font-medium text-[var(--sea-ink)]">
+                <tr key={item.id} className="border-b border-hairline-soft">
+                  <td className="py-2 pr-4 text-xs text-body">{item.sku}</td>
+                  <td className="py-2 pr-4 font-medium text-ink">
                     {item.name}
                   </td>
-                  <td className="py-2 pr-4 text-[var(--sea-ink-soft)]">
-                    {item.categoryName}
-                  </td>
-                  <td className="py-2 pr-4">
+                  <td className="py-2 pr-4 text-body">{item.categoryName}</td>
+                  <td className="money py-2 pr-4">
                     {formatMinor(item.defaultPriceMinor, item.currencyCode)}
                   </td>
                   <td className="py-2 pr-4">
                     <span
                       className={
                         item.status === 'ACTIVE'
-                          ? 'rounded-full bg-[rgba(52,199,89,0.15)] px-2 py-0.5 text-xs font-semibold text-[#1d7a3f]'
-                          : 'rounded-full bg-[rgba(120,120,120,0.14)] px-2 py-0.5 text-xs font-semibold text-[var(--sea-ink-soft)]'
+                          ? 'badge-pill badge-success'
+                          : 'badge-pill badge-neutral'
                       }
                     >
                       {item.status}
                     </span>
                   </td>
-                  <td className="py-2 pr-4 text-xs text-[var(--sea-ink-soft)]">
+                  <td className="money py-2 pr-4 text-xs text-muted-foreground">
                     {item.version}
                   </td>
                   {canWrite ? (
@@ -338,6 +332,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                       <div className="flex gap-2 text-xs">
                         <button
                           type="button"
+                          className="font-medium text-ink hover:underline"
                           onClick={() => {
                             setEditingId(item.id)
                             setForm({
@@ -356,7 +351,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                         {item.status === 'ACTIVE' ? (
                           <button
                             type="button"
-                            className="text-[#a03030]"
+                            className="font-medium text-error hover:underline"
                             onClick={() => archiveItem.mutate(item.id)}
                           >
                             Archive
@@ -364,6 +359,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                         ) : (
                           <button
                             type="button"
+                            className="font-medium text-ink hover:underline"
                             onClick={() => restoreItem.mutate(item.id)}
                           >
                             Restore
@@ -382,12 +378,12 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
       {canWrite ? (
         <form
           onSubmit={handleSubmit}
-          className="mt-6 grid gap-3 rounded-xl border border-[var(--chip-line)] bg-[var(--chip-bg)] p-4 sm:grid-cols-2 lg:grid-cols-3"
+          className="mt-6 grid gap-3 rounded-xl border border-hairline bg-canvas-soft p-4 sm:grid-cols-2 lg:grid-cols-3"
         >
-          <p className="m-0 col-span-full text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
+          <p className="kicker m-0 col-span-full">
             {editingId ? 'Edit item (SKU immutable)' : 'Create item'}
           </p>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
             SKU
             <input
               value={form.sku}
@@ -396,10 +392,10 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, sku: event.target.value })
               }
               placeholder="BURGER-02"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal disabled:opacity-50"
+              className="text-input font-normal disabled:opacity-50"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
             Name
             <input
               value={form.name}
@@ -407,17 +403,17 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, name: event.target.value })
               }
               placeholder="Beef Burger"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
             Category
             <select
               value={form.categoryId}
               onChange={(event) =>
                 setForm({ ...form, categoryId: event.target.value })
               }
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             >
               <option value="">Select…</option>
               {categories.data
@@ -429,7 +425,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 ))}
             </select>
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
             Default price (minor units)
             <input
               value={form.defaultPriceMinor}
@@ -437,10 +433,10 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, defaultPriceMinor: event.target.value })
               }
               placeholder="1000 = $10.00"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input money font-normal"
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs font-semibold sm:col-span-2">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-ink sm:col-span-2">
             Description
             <input
               value={form.description ?? ''}
@@ -448,14 +444,14 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, description: event.target.value })
               }
               placeholder="Optional"
-              className="rounded-lg border border-[var(--chip-line)] bg-[var(--card,#fff)] px-3 py-2 text-sm font-normal"
+              className="text-input font-normal"
             />
           </label>
-          <div className="col-span-full flex items-center gap-3">
+          <div className="col-span-full flex flex-wrap items-center gap-3">
             <button
               type="submit"
               disabled={saveItem.isPending}
-              className="rounded-full bg-[linear-gradient(90deg,#2f8f83,#56c6be)] px-5 py-2 text-xs font-semibold text-white disabled:opacity-60"
+              className="btn-primary btn-sm"
             >
               {editingId ? 'Save changes' : 'Create item'}
             </button>
@@ -466,13 +462,13 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                   setEditingId(null)
                   setForm(emptyItem)
                 }}
-                className="rounded-full border border-[var(--chip-line)] px-4 py-2 text-xs font-semibold text-[var(--sea-ink)]"
+                className="btn-outline btn-sm"
               >
                 Cancel
               </button>
             ) : null}
             {error ? (
-              <p role="alert" className="m-0 text-xs text-[#a03030]">
+              <p role="alert" className="m-0 text-xs text-error">
                 {error}
               </p>
             ) : null}

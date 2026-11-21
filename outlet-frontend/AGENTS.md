@@ -1,11 +1,15 @@
 # AGENTS.md — outlet-frontend
 
-Independent Outlet POS React application (React 19, Vite, TanStack Router/Query, Tailwind, shadcn-style `components/ui`).
-Read the root [../AGENTS.md](../AGENTS.md) first — universal frontend API rules apply. Source of truth: [../fnb_multi_outlet_prd.md](../fnb_multi_outlet_prd.md) ("PRD").
+Independent Outlet POS React application (React 19, Vite, TanStack Router/Query, Tailwind v4, shadcn-style `components/ui`).
+Read the root [../AGENTS.md](../AGENTS.md) first — universal frontend API and design-system rules apply (§4.5). Design system: [../DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md). Source of truth: [../fnb_multi_outlet_prd.md](../fnb_multi_outlet_prd.md) ("PRD").
 
 ## Mission
 
 Outlet POS: local login, responsive menu/cart with live stock, checkout, receipt detail/reprint, audited inventory adjustments, local sales history, and sync-status visibility (last menu sync / pending uploads banner) (PRD §11).
+
+## Design system
+
+Styling follows the editorial design system in [../DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md) — `src/styles.css` is the single token/class source (Tailwind v4 CSS-first; no `tailwind.config.*`). In short: token utilities only (no hardcoded hex/rgba), ink pill `.btn-primary` is the only primary CTA, `font-display` (EB Garamond) is never bolded, orbs are `aria-hidden` decoration only, money uses `.money` (Inter tabular numerals, never `font-mono`), no dark mode, fonts self-hosted via Fontsource. `src/styles.css` stays **byte-identical** to `hq-frontend/src/styles.css` — copy changes across in the same commit. Preserve `print:*` variants when restyling receipt views.
 
 ## Commands
 

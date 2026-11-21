@@ -4,6 +4,10 @@ HQ administration console for the multi-outlet F&B platform — React 19 SPA
 (TanStack Start in SPA mode, Vite, Tailwind), served by its own Nginx which
 reverse-proxies `/api/` to `hq-backend`.
 
+UI follows the editorial design system (off-white canvas, ink pill CTAs,
+EB Garamond display + Inter body, self-hosted via Fontsource) — see
+[../DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md).
+
 ## Commands (pnpm via corepack)
 
 ```bash

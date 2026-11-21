@@ -148,6 +148,19 @@ Worker      → Calls application services. NEVER controllers.
 - The client never sends price, total, receipt number, or outlet ID with a sale — only `menuItemId` + `quantity` lines (PRD §7.3, §15).
 - HQ report views must always render `dataAsOf` / per-outlet sync watermarks so stale data is never mistaken for zero sales (PRD §8, AT-20).
 
+### 4.5 Design system (both frontends)
+
+The single source of truth is [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) (editorial: off-white canvas, warm ink, EB Garamond display + Inter body, hairline cards, pill CTAs, pastel gradient orbs). Non-negotiable rules:
+
+- Token utilities only — **no hardcoded hex/rgba in components**. All colors, type sizes, radii, and shadows come from the `@theme`/`:root` tokens in each app's `src/styles.css`.
+- The near-black **ink pill is the only primary CTA color** (`bg-primary` / `.btn-primary`). No saturated action color, no gradient buttons, no glow shadows.
+- Display type (`font-display`) **stays at its token weight — never bold**. Body stays Inter 400/500/600.
+- Gradient orbs (mint/peach/lavender/sky/rose) are `aria-hidden` **decoration only** — never fills for interactive elements or text colors.
+- Money and aligned numerals render with `.money` (Inter + tabular numerals), never `font-mono`; the money value itself stays a string (§4.3).
+- **No dark mode** — never add a theme toggle or `.dark` values; dark surfaces are fixed tokens for deliberate dark bands.
+- Fonts are **self-hosted** via Fontsource — never introduce a CDN font import (outlets run offline).
+- `hq-frontend/src/styles.css` and `outlet-frontend/src/styles.css` are **byte-identical**: change one, copy to the other in the same change, and update DESIGN_SYSTEM.md when tokens/classes change.
+
 ---
 
 ## 5. Server-authoritative computation (PRD §7.3, §8.4, §15)

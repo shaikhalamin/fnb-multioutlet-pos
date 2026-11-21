@@ -5,3 +5,12 @@ Use the latest version of Shadcn to install new components, like this command to
 ```bash
 pnpm dlx shadcn@latest add button
 ```
+
+# design system instructions
+
+Components MUST consume the design tokens and classes in `src/styles.css` (see
+[../DESIGN_SYSTEM.md](../DESIGN_SYSTEM.md)) — never hardcode hex/rgba colors.
+After `shadcn add`, swap any `bg-muted`/`bg-accent` surface utilities for
+`bg-surface-strong` and give action buttons pill geometry (`rounded-full`);
+CTAs use the ink pill only (`bg-primary` / `.btn-primary`). Display type
+(`font-display`) is never bolded; money renders with `.money`, not `font-mono`.
