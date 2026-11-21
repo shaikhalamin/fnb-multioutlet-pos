@@ -50,4 +50,16 @@ export class ApiKeysRepository {
       .update({ id }, { status: 'REVOKED' })
       .then(() => undefined);
   }
+
+  /**
+   * Fire-and-forget `last_used_at` refresh for the Phase 3 sync guard — a
+   * liveness signal for rotation confirmation (PRD §9.2), never part of a
+   * larger transaction. Failures are swallowed on purpose.
+   */
+  touchLastUsed(id: string): void {
+    this.dataSource
+      .getRepository(OutletApiKeyEntity)
+      .update({ id }, { lastUsedAt: new Date() })
+      .catch(() => undefined);
+  }
 }
