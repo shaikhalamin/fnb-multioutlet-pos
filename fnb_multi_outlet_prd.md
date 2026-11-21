@@ -534,6 +534,7 @@ type MoneyMinor = string;          // regex ^(0|[1-9][0-9]*)$
 | `GET` | `/reports/revenue-by-outlet?from=&to=` | `reports.read` | Completed revenue per outlet. |
 | `GET` | `/reports/outlets/:id/top-items?from=&to=&limit=5` | `reports.read` | Top item quantities (max 5 in V1). |
 | `GET` | `/outlets/:id/sync-status` | `sync.read` | Outbox replication status known to HQ. |
+| `GET` | `/audit/logs?cursor=&limit=&action=&actorId=&entityId=&from=&to=` | `audit.read` | Immutable audit trail listing (super admin only, FR-10). |
 
 **Assign menu request / response:**
 
@@ -893,6 +894,7 @@ Refresh token is set in an HTTP-only cookie, **not** returned in this JSON examp
 | Assign/price menu | Yes | Yes | No | No | No | No |
 | Manage outlet API keys | Yes | No | No | No | No | No |
 | Read cross-outlet reports | Yes | Optional | Yes | No | No | No |
+| Read audit trail | Yes | No | No | No | No | No |
 | Read assigned local menu | No | No | No | Yes | Yes | Yes |
 | Create local sale | No | No | No | Yes | Yes | No |
 | Adjust local stock | No | No | No | Yes | No | Yes |
@@ -1096,7 +1098,7 @@ These are design targets subject to performance tests and infrastructure sizing;
 
 **Phase 3 – Synchronization:** typed HQ sync client, pull deltas/snapshot, BullMQ dispatcher/workers, HQ transactional inbox ingestion, per-event ACKs, retries, reconciliation, status and alerting, offline policy.
 
-**Phase 4 – Reporting / hardening:** revenue/top items, staleness indicators, admin dashboards, audit, cross-outlet security tests, load/concurrency/failure tests, backup and recovery rehearsal, production rollout.
+**Phase 4 – Reporting / hardening:** revenue/top items, staleness indicators, admin dashboards, audit, cross-outlet security tests, load/concurrency/failure tests
 
 **Definition of done:** all AT-01 to AT-22 pass; API docs and generated clients match; production migrations and Docker deployment work; no leaked secrets; observability dashboards and on-call runbook exist; a failed/duplicate sync cannot double-count HQ revenue.
 
