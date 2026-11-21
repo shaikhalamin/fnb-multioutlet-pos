@@ -14,10 +14,11 @@ export type AuditLogFilter = {
 };
 
 /**
- * Read side of the immutable audit trail (PRD §11 audit views). Ordering is
- * `occurred_at DESC, id DESC` — the (timestamp, id) keyset makes pagination
- * stable under concurrent writes: newer rows land above the cursor and never
- * shift an in-flight walk.
+ * Data access for the immutable audit trail (PRD §11 audit views). Listing is
+ * read-only; ordering is `occurred_at DESC, id DESC` — the (timestamp, id)
+ * keyset makes pagination stable under concurrent writes: newer rows land
+ * above the cursor and never shift an in-flight walk. The only write is the
+ * retention sweep's bounded DELETE (FR-10 lifecycle).
  */
 @Injectable()
 export class AuditLogsRepository {
@@ -55,5 +56,20 @@ export class AuditLogsRepository {
             )
           : undefined,
     };
+  }
+
+  /**
+   * Retention sweep (PRD FR-10): deletes rows older than `cutoff` in one
+   * bounded batch. A single-statement DELETE is atomic per pass; the hourly
+   * timer drains whatever remains.
+   */
+  async deleteExpiredBatchBefore(cutoff: Date, limit: number): Promise<number> {
+    const deleted = await this.dataSource.query<Array<{ id: string }>>(
+      `DELETE FROM audit_logs
+       WHERE id IN (SELECT id FROM audit_logs WHERE occurred_at < $1 LIMIT $2)
+       RETURNING id`,
+      [cutoff.toISOString(), limit],
+    );
+    return deleted.length;
   }
 }

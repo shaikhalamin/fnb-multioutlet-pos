@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiSecurity, ApiTags } from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiResponse, ApiSecurity, ApiTags } from '@nestjs/swagger';
 import { RequirePermissions } from '../../common/rbac/require-permissions.decorator.js';
 import { withCursor } from '../../common/interceptors/envelope.interceptor.js';
 import { AuditLogResponse, ListAuditLogsQuery } from './dto/audit.dto.js';
@@ -20,6 +20,10 @@ export class AuditController {
   @RequirePermissions('audit.read')
   @ApiOperation({ summary: 'List audit log entries (newest first, keyset pagination).' })
   @ApiOkResponse({ type: [AuditLogResponse] })
+  @ApiResponse({
+    status: 400,
+    description: 'VALIDATION_FAILED — malformed filters, out-of-range limit, or invalid cursor',
+  })
   async listLogs(@Query() query: ListAuditLogsQuery): Promise<AuditLogResponse[]> {
     const page = await this.auditRead.list(query);
     return withCursor(page.rows, page.nextCursor);

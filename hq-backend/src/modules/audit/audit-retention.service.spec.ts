@@ -1,43 +1,43 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConfigService } from '@nestjs/config';
-import type { DataSource } from 'typeorm';
 import { AUDIT_RETENTION_BATCH_SIZE } from './audit-retention.service.js';
 import { AuditRetentionService } from './audit-retention.service.js';
+import type { AuditLogsRepository } from './audit.repository.js';
 import type { Env } from '../../config/env.schema.js';
 
 const NOW = new Date('2026-11-20T12:00:00.000Z');
 
-function makeService(retentionDays: number, deletedRows: string[] = []) {
+function makeService(retentionDays: number, deleted = 0) {
   const config = { get: vi.fn().mockReturnValue(retentionDays) };
-  const query = vi.fn().mockResolvedValue(deletedRows.map((id) => ({ id })));
-  const dataSource = { query };
+  const deleteExpiredBatchBefore = vi.fn().mockResolvedValue(deleted);
+  const logs = { deleteExpiredBatchBefore } as unknown as AuditLogsRepository;
   const service = new AuditRetentionService(
-    dataSource as unknown as DataSource,
+    logs,
     config as unknown as ConfigService<Env, true>,
   );
-  return { service, query, config };
+  return { service, deleteExpiredBatchBefore };
 }
 
 describe('AuditRetentionService.runOnce', () => {
   it('performs no deletes when retention is disabled (default 0 — immutable trail)', async () => {
-    const { service, query } = makeService(0);
+    const { service, deleteExpiredBatchBefore } = makeService(0);
     expect(await service.runOnce(NOW)).toBeNull();
-    expect(query).not.toHaveBeenCalled();
+    expect(deleteExpiredBatchBefore).not.toHaveBeenCalled();
   });
 
-  it('computes the cutoff exactly retentionDays before now and deletes bounded batches', async () => {
-    const { service, query } = makeService(90, ['a', 'b', 'c']);
+  it('computes the cutoff exactly retentionDays before now and delegates one bounded batch', async () => {
+    const { service, deleteExpiredBatchBefore } = makeService(90, 3);
     const result = await service.runOnce(NOW);
     expect(result?.deleted).toBe(3);
     expect(result?.cutoff.toISOString()).toBe(new Date('2026-08-22T12:00:00.000Z').toISOString());
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(query).toHaveBeenCalledWith(
-      expect.stringContaining(`LIMIT $2`),
-      [new Date('2026-08-22T12:00:00.000Z').toISOString(), AUDIT_RETENTION_BATCH_SIZE],
+    expect(deleteExpiredBatchBefore).toHaveBeenCalledTimes(1);
+    expect(deleteExpiredBatchBefore).toHaveBeenCalledWith(
+      new Date('2026-08-22T12:00:00.000Z'),
+      AUDIT_RETENTION_BATCH_SIZE,
     );
   });
 
-  it('bounds every pass to the batch size regardless of the expired backlog', () => {
-    expect(AUDIT_RETENTION_BATCH_SIZE).toBeLessThanOrEqual(1000);
+  it('pins the pass bound to the plan-documented 1000 rows', () => {
+    expect(AUDIT_RETENTION_BATCH_SIZE).toBe(1000);
   });
 });

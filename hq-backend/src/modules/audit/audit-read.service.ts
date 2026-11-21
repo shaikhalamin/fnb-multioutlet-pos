@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { isUUID } from 'class-validator';
+import { ApiException } from '../../common/exceptions/api.exception.js';
 import type { AuditLogEntity } from '../../database/entities/audit-log.entity.js';
 import type { AuditLogResponse, ListAuditLogsQuery } from './dto/audit.dto.js';
 import { AuditLogsRepository } from './audit.repository.js';
@@ -32,16 +34,23 @@ export class AuditReadService {
 
 function decodeCursor(raw: string | undefined): { occurredAt: string; id: string } | undefined {
   if (!raw) return undefined;
+  let parsed: { occurredAt?: unknown; id?: unknown };
   try {
-    const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+    parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
       occurredAt?: unknown;
       id?: unknown;
     };
-    if (typeof parsed.occurredAt !== 'string' || typeof parsed.id !== 'string') return undefined;
-    return parsed as { occurredAt: string; id: string };
   } catch {
+    // Undecodable cursors fall back to the first page (listing precedent).
     return undefined;
   }
+  if (typeof parsed.occurredAt !== 'string' || typeof parsed.id !== 'string') return undefined;
+  // Decodable but semantically invalid cursors must reject cleanly — the pg
+  // driver would otherwise bind an Invalid Date / non-UUID and surface a 500.
+  if (Number.isNaN(Date.parse(parsed.occurredAt)) || !isUUID(parsed.id)) {
+    throw new ApiException('VALIDATION_FAILED', 'Malformed pagination cursor.', 400, { cursor: raw });
+  }
+  return parsed as { occurredAt: string; id: string };
 }
 
 function toAuditLogResponse(row: AuditLogEntity): AuditLogResponse {

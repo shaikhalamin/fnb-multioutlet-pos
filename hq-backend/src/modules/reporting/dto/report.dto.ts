@@ -101,7 +101,7 @@ export class OutletTopItemsQuery {
   @IsISO8601({ strict: true })
   to!: string;
 
-  @ApiPropertyOptional({ example: 5, default: 5, minimum: 1, maximum: 5, description: 'V1 cap: max 5 (§7.2).' })
+  @ApiPropertyOptional({ type: Number, example: 5, default: 5, minimum: 1, maximum: 5, description: 'V1 cap: max 5 (§7.2).' })
   @IsOptional()
   @Transform(({ value }) => Number(value))
   @IsInt()
@@ -117,7 +117,10 @@ export class TopItemResponse {
   @ApiProperty({ example: '9708835e-2e21-465a-87e9-5f8d56cd44ab' })
   menuItemId!: string;
 
-  @ApiProperty({ example: 'Chicken Burger', description: 'Current master name; sale-time snapshot for items no longer in the master catalog.' })
+  @ApiProperty({
+    example: 'Chicken Burger',
+    description: 'Current master name; sale-time snapshot for ARCHIVED items or ids missing from the master catalog.',
+  })
   itemName!: string;
 
   @ApiProperty({ example: 250, description: 'Units sold in this window.' })

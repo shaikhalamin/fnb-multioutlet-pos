@@ -21,11 +21,11 @@ export type TopItemRow = {
 export class ReportingRepository {
   constructor(@Inject(DATA_SOURCE) private readonly dataSource: DataSource) {}
 
-  async findCompanyCurrency(companyId: string): Promise<string> {
+  async findCompanyCurrency(companyId: string): Promise<string | null> {
     const company = await this.dataSource
       .getRepository(CompanyEntity)
       .findOne({ where: { id: companyId } });
-    return company?.currencyCode ?? 'USD';
+    return company?.currencyCode ?? null;
   }
 
   /** Every ACTIVE outlet of the company, ordered by code (report row order). */
@@ -120,9 +120,10 @@ export class ReportingRepository {
   /**
    * Per-outlet top items (PRD §10): groups `hq_sale_items` by stable
    * `menu_item_id`, sums quantity, and orders `quantitySold DESC,
-   * menu_item_id` (deterministic tie-break). The master-name join is a LEFT
-   * JOIN — the caller falls back to the immutable `name_snapshot` when the
-   * item is no longer in the master catalog.
+   * `menu_item_id` (deterministic tie-break). The master-name join is a LEFT
+   * JOIN restricted to ACTIVE master rows — the caller falls back to the
+   * immutable `name_snapshot` for ARCHIVED items (tombstoned, never deleted)
+   * and for ids no longer present in the master catalog at all.
    */
   async topItemsByOutlet(filter: {
     outletId: string;
@@ -144,7 +145,7 @@ export class ReportingRepository {
               SUM(i.quantity)::int AS quantity_sold
        FROM hq_sale_items i
        JOIN hq_sales s ON s.id = i.hq_sale_id
-       LEFT JOIN master_menu_items m ON m.id = i.menu_item_id
+       LEFT JOIN master_menu_items m ON m.id = i.menu_item_id AND m.status = 'ACTIVE'
        WHERE s.outlet_id = $1
          AND s.status = 'COMPLETED'
          AND s.sold_at >= $2

@@ -4,7 +4,7 @@ import { IsISO8601, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from
 
 /** Immutable audit-trail listing filters (PRD §11 "audit views", FR-10). */
 export class ListAuditLogsQuery {
-  @ApiPropertyOptional({ example: 50, default: 50, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({ type: Number, example: 50, default: 50, minimum: 1, maximum: 100 })
   @IsOptional()
   @Transform(({ value }) => Number(value))
   @IsInt()

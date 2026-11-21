@@ -110,6 +110,24 @@ describe('AuditReadService.list', () => {
     expect(logs.list).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: undefined }));
   });
 
+  it('rejects decodable but semantically invalid cursors with VALIDATION_FAILED (never a 500)', async () => {
+    const { service, logs } = makeService({ rows: [] });
+    const encode = (value: unknown) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
+    // The pg driver would bind an Invalid Date here and PostgreSQL would 500.
+    const badTimestamp = encode({ occurredAt: 'garbage', id: '0b6a8fd0-0468-4f7a-9e94-6c1e4f0e2a11' });
+    await expect(service.list(query({ cursor: badTimestamp }))).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_FAILED',
+    });
+    // A non-UUID id would hit the same driver-level failure (22P02).
+    const badId = encode({ occurredAt: '2026-11-20T04:02:10.000Z', id: 'not-a-uuid' });
+    await expect(service.list(query({ cursor: badId }))).rejects.toMatchObject({
+      status: 400,
+      code: 'VALIDATION_FAILED',
+    });
+    expect(logs.list).not.toHaveBeenCalled();
+  });
+
   it('forwards the next cursor so the envelope can hoist meta.nextCursor', async () => {
     const { service } = makeService({ rows: [auditRow()], nextCursor: 'next-token' });
     const page = await service.list(query());

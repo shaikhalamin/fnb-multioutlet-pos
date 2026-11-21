@@ -56,6 +56,11 @@ export class ReportingService {
     const window = parseReportWindow(query.from, query.to);
     const companyId = await resolveCompanyId(this.dataSource);
     const currencyCode = query.currency ?? (await this.reporting.findCompanyCurrency(companyId));
+    if (!currencyCode) {
+      // resolveCompanyId just proved the company exists — unreachable barring
+      // a provisioning race; never default the reporting currency silently.
+      throw new ApiException('SERVICE_UNAVAILABLE', 'Company provisioning is missing.', 503);
+    }
 
     const [outlets, windowTotals, watermarks, pendingBacklogs] = await Promise.all([
       this.reporting.listActiveOutlets(companyId),
@@ -95,8 +100,8 @@ export class ReportingService {
    * Per-outlet top items (PRD §10): ranks are computed only after enforcing
    * the `quantitySold DESC, menu_item_id` order in-process, so the contract
    * holds even if the SQL plan ever drifts. `itemName` prefers the current
-   * master name and falls back to the immutable sale-time snapshot for items
-   * that no longer exist in the master catalog.
+   * master name and falls back to the immutable sale-time snapshot for
+   * ARCHIVED items and ids missing from the master catalog.
    */
   async topItemsForOutlet(outletId: string, query: OutletTopItemsQuery): Promise<OutletTopItemsResponse> {
     const window = parseReportWindow(query.from, query.to);

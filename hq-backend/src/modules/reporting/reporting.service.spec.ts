@@ -17,7 +17,7 @@ function makeService(
     windowTotals?: Map<string, { totalRevenueMinor: string; completedSaleCount: number }>;
     watermarks?: Map<string, Date>;
     pendingBacklogs?: Map<string, number>;
-    companyCurrency?: string;
+    companyCurrency?: string | null;
   } = {},
 ) {
   const outlets = overrides.outlets ?? [
@@ -30,7 +30,9 @@ function makeService(
   const watermarks = overrides.watermarks ?? new Map([[OUTLET_A, INGESTED_A]]);
   const pendingBacklogs = overrides.pendingBacklogs ?? new Map<string, number>();
   const reporting = {
-    findCompanyCurrency: vi.fn().mockResolvedValue(overrides.companyCurrency ?? 'USD'),
+    findCompanyCurrency: vi.fn().mockResolvedValue(
+      overrides.companyCurrency === undefined ? 'USD' : overrides.companyCurrency,
+    ),
     listActiveOutlets: vi.fn().mockResolvedValue(outlets),
     sumWindowRevenue: vi.fn().mockResolvedValue(windowTotals),
     listIngestWatermarks: vi.fn().mockResolvedValue({
@@ -133,6 +135,17 @@ describe('ReportingService.revenueByOutlet', () => {
     );
   });
 
+  it('refuses to invent a currency when the company row has none (no silent default)', async () => {
+    const { service } = makeService({ companyCurrency: null });
+    let caught: unknown;
+    try {
+      await service.revenueByOutlet(query());
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ code: 'SERVICE_UNAVAILABLE', status: 503 });
+  });
+
   it('isProvisional truth table: backlog, never-ingested, and clean cases', async () => {
     // Heartbeat backlog > 0 on any ACTIVE outlet → provisional.
     const backlog = makeService({ pendingBacklogs: new Map([[OUTLET_A, 7]]) });
@@ -230,7 +243,10 @@ describe('ReportingService.topItemsForOutlet', () => {
     expect(report.items.map((item) => item.rank)).toEqual([1, 2, 3]);
   });
 
-  it('falls back to the sale-time snapshot name when the master item is gone', async () => {
+  it('falls back to the sale-time snapshot name for ARCHIVED or missing master items', async () => {
+    // The SQL join resolves names only from ACTIVE master rows, so both an
+    // ARCHIVED item (tombstoned, row still present) and an id absent from the
+    // master catalog surface here with currentName: null.
     const rows = [
       topItem('9708835e-2e21-465a-87e9-5f8d56cd44ab', 10, { currentName: null }),
       topItem('c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4', 5),

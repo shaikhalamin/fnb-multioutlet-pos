@@ -325,13 +325,32 @@ describeWithDeps('HQ reporting surface (e2e)', () => {
       return report.isProvisional === (await sqlIsProvisional());
     };
 
-    // Baseline: the API mirrors the contract definition on whatever the
-    // shared DB currently holds (other outlets included).
-    expect(await matchesSql()).toBe(true);
+    // Branch-scoped mirror: the backlog dimension alone. R3 keeps the
+    // report-level flag true throughout (never ingested), so the AT-20 flip
+    // is proven on this isolated branch — deterministic because every other
+    // suite heartbeats 0 and suspends its throwaway outlets.
+    const sqlBacklogReported = async (): Promise<boolean> => {
+      const rows = await dataSource.query<Array<{ backlog: boolean }>>(
+        `SELECT EXISTS (
+           SELECT 1 FROM sync_outlet_checkpoints c
+           JOIN outlets o ON o.id = c.outlet_id
+           WHERE o.status = 'ACTIVE'
+             AND (c.last_reported_backlog->>'pendingOutboxCount')::int > 0
+         ) AS backlog`,
+      );
+      return rows[0]?.backlog === true;
+    };
 
-    // A reported backlog flips the report provisional and the SQL mirror
-    // agrees — this is the AT-20 "stale, not zero" disclosure.
+    // Baseline: the API mirrors the contract definition on whatever the
+    // shared DB currently holds (other outlets included), with no outlet
+    // currently reporting a backlog.
+    expect(await matchesSql()).toBe(true);
+    expect(await sqlBacklogReported()).toBe(false);
+
+    // A reported backlog flips the report provisional and both SQL mirrors
+    // agree — this is the AT-20 "stale, not zero" disclosure.
     await heartbeat(keyR1, 3);
+    expect(await sqlBacklogReported()).toBe(true);
     const withBacklog = (
       await request(app.getHttpServer())
         .get(revenueQuery())
@@ -341,8 +360,9 @@ describeWithDeps('HQ reporting surface (e2e)', () => {
     expect(withBacklog.isProvisional).toBe(true);
     expect(await sqlIsProvisional()).toBe(true);
 
-    // Draining the backlog restores the mirrored state.
+    // Draining the backlog restores the mirrored state and clears the branch.
     await heartbeat(keyR1, 0);
+    expect(await sqlBacklogReported()).toBe(false);
     expect(await matchesSql()).toBe(true);
   });
 

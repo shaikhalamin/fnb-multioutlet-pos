@@ -1,8 +1,7 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { DataSource } from 'typeorm';
 import type { Env } from '../../config/env.schema.js';
-import { DATA_SOURCE } from '../../database/database.module.js';
+import { AuditLogsRepository } from './audit.repository.js';
 
 /** One bounded batch per timer pass — the hourly tick drains gradually. */
 export const AUDIT_RETENTION_BATCH_SIZE = 1000;
@@ -18,7 +17,7 @@ export type AuditRetentionResult = { deleted: number; cutoff: Date };
 @Injectable()
 export class AuditRetentionService {
   constructor(
-    @Inject(DATA_SOURCE) private readonly dataSource: DataSource,
+    private readonly logs: AuditLogsRepository,
     private readonly config: ConfigService<Env, true>,
   ) {}
 
@@ -27,12 +26,7 @@ export class AuditRetentionService {
     if (!retentionDays || retentionDays <= 0) return null;
 
     const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
-    const deleted = await this.dataSource.query<Array<{ id: string }>>(
-      `DELETE FROM audit_logs
-       WHERE id IN (SELECT id FROM audit_logs WHERE occurred_at < $1 LIMIT $2)
-       RETURNING id`,
-      [cutoff.toISOString(), AUDIT_RETENTION_BATCH_SIZE],
-    );
-    return { deleted: deleted.length, cutoff };
+    const deleted = await this.logs.deleteExpiredBatchBefore(cutoff, AUDIT_RETENTION_BATCH_SIZE);
+    return { deleted, cutoff };
   }
 }
