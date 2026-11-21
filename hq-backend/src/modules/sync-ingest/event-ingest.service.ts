@@ -185,7 +185,11 @@ export function saleInvariantError(event: SyncEventV1): string | null {
 }
 
 function uniqueViolationConstraint(error: unknown): string | null {
-  const candidate = error as { constraint?: string; driverError?: { constraint?: string }; code?: string };
+  const candidate = error as {
+    constraint?: string;
+    code?: string;
+    driverError?: { constraint?: string; code?: string };
+  };
   if (candidate?.code !== '23505' && candidate?.driverError?.code !== '23505') return null;
   return candidate.constraint ?? candidate.driverError?.constraint ?? null;
 }

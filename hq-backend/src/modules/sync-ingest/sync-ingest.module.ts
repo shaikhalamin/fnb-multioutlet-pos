@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ApiKeysModule } from '../api-keys/api-keys.module.js';
 import { OutletKeyGuard } from '../../common/auth/outlet-key.guard.js';
-import { EventsController } from './events.controller.js';
+import { SyncEventsController } from './events.controller.js';
 import { EventIngestService } from './event-ingest.service.js';
 import { MenuPullController } from './menu-pull.controller.js';
 import { MenuPullRepository } from './menu-pull.repository.js';
@@ -17,7 +17,7 @@ import { SyncInboxRepository } from './sync-inbox.repository.js';
  */
 @Module({
   imports: [ApiKeysModule],
-  controllers: [MenuPullController, EventsController],
+  controllers: [MenuPullController, SyncEventsController],
   providers: [
     OutletKeyGuard,
     MenuPullRepository,

@@ -1184,6 +1184,55 @@
         ]
       }
     },
+    "/sync/v1/events/batch": {
+      "post": {
+        "operationId": "SyncEventsController_pushBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Mixed per-event outcomes (§8.5).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED — missing Idempotency-Key"
+          },
+          "401": {
+            "description": "UNAUTHENTICATED — missing/invalid outlet key"
+          },
+          "403": {
+            "description": "FORBIDDEN — key scope or event outlet mismatch (whole request)"
+          },
+          "413": {
+            "description": "Body exceeds SYNC_MAX_BODY_BYTES"
+          }
+        },
+        "security": [
+          {
+            "outlet-key": []
+          }
+        ],
+        "summary": "Push a batch of sync events; per-event acks ride one HTTP 200.",
+        "tags": [
+          "sync"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -2297,6 +2346,235 @@
           "snapshotId",
           "snapshotRevision",
           "items"
+        ]
+      },
+      "SyncEventItemRequest": {
+        "type": "object",
+        "properties": {
+          "saleItemId": {
+            "type": "string",
+            "example": "64750166-32a4-46f8-9285-f536f5b03213"
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "nameSnapshot": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "skuSnapshot": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Minor units, canonical decimal string."
+          },
+          "subtotalMinor": {
+            "type": "string",
+            "example": "2400",
+            "description": "Minor units, canonical decimal string."
+          }
+        },
+        "required": [
+          "saleItemId",
+          "menuItemId",
+          "nameSnapshot",
+          "skuSnapshot",
+          "quantity",
+          "unitPriceMinor",
+          "subtotalMinor"
+        ]
+      },
+      "SyncEventDataRequest": {
+        "type": "object",
+        "properties": {
+          "saleId": {
+            "type": "string",
+            "example": "0a44e56a-628e-492a-81e0-83f4a4d68f76"
+          },
+          "receiptNo": {
+            "type": "string",
+            "example": "A-000001"
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "42",
+            "description": "Local catalog revision — decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "COMPLETED"
+            ]
+          },
+          "soldAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03Z"
+          },
+          "totalMinor": {
+            "type": "string",
+            "example": "3900",
+            "description": "Minor units, canonical decimal string."
+          },
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncEventItemRequest"
+            }
+          }
+        },
+        "required": [
+          "saleId",
+          "receiptNo",
+          "catalogRevision",
+          "currencyCode",
+          "status",
+          "soldAt",
+          "totalMinor",
+          "items"
+        ]
+      },
+      "SyncEventV1": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "3feeb5c0-53fa-476e-a758-3040a3529041",
+            "description": "Equals the outlet outbox row ID."
+          },
+          "eventType": {
+            "type": "string",
+            "enum": [
+              "sale.completed"
+            ]
+          },
+          "schemaVersion": {
+            "type": "number",
+            "example": 1,
+            "description": "Schema version; HQ supports 1 and rejects others per event."
+          },
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "sequenceNo": {
+            "type": "string",
+            "example": "108",
+            "description": "Per-outlet contiguous sequence — decimal string."
+          },
+          "occurredAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03Z"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SyncEventDataRequest"
+          }
+        },
+        "required": [
+          "eventId",
+          "eventType",
+          "schemaVersion",
+          "outletId",
+          "sequenceNo",
+          "occurredAt",
+          "data"
+        ]
+      },
+      "EventBatchRequest": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "example": "047bfdb5-727a-47eb-970a-03a038c11b92"
+          },
+          "events": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SyncEventV1"
+            }
+          }
+        },
+        "required": [
+          "batchId",
+          "events"
+        ]
+      },
+      "EventBatchResult": {
+        "type": "object",
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "example": "3feeb5c0-53fa-476e-a758-3040a3529041"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACCEPTED",
+              "DUPLICATE",
+              "REJECTED_PERMANENT",
+              "RETRYABLE_ERROR"
+            ]
+          },
+          "retryable": {
+            "type": "boolean",
+            "example": false,
+            "description": "True when the outlet should retry this event unchanged."
+          },
+          "acknowledgedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:10Z",
+            "nullable": true,
+            "description": "Present for terminal successes (ACCEPTED, DUPLICATE); null otherwise."
+          },
+          "detail": {
+            "type": "string",
+            "example": "UNSUPPORTED_EVENT_VERSION",
+            "nullable": true,
+            "description": "Stable reason code for non-success outcomes (e.g. UNSUPPORTED_EVENT_VERSION, EVENT_ID_CONFLICT)."
+          }
+        },
+        "required": [
+          "eventId",
+          "status",
+          "retryable"
+        ]
+      },
+      "EventBatchResponse": {
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "example": "047bfdb5-727a-47eb-970a-03a038c11b92"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventBatchResult"
+            }
+          },
+          "highestContiguousSequence": {
+            "type": "string",
+            "example": "108",
+            "description": "Highest contiguous accepted sequence for the outlet — decimal string."
+          }
+        },
+        "required": [
+          "batchId",
+          "results",
+          "highestContiguousSequence"
         ]
       },
       "DependencyStatusResponse": {
