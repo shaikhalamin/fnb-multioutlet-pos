@@ -104,7 +104,27 @@ describeWithDeps('HQ sync surface (e2e)', () => {
   });
 
   afterAll(async () => {
-    if (app) await app.close();
+    if (!app) return;
+    // Restore the canonical demo catalog so the outlet-side suites (and the
+    // live compose sync loop) converge on seeded truth after this suite's
+    // mutations — Phase-2 sale specs sell these items at these prices.
+    for (const [menuItemId, price] of [
+      ['9708835e-2e21-465a-87e9-5f8d56cd44ab', '1000'],
+      ['c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4', '1500'],
+      ['3d0f01a2-39a6-4b6f-9d3a-6cb17b2ba110', '300'],
+    ] as const) {
+      await request(app.getHttpServer())
+        .patch(`/api/v1/menu-items/${menuItemId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ defaultPriceMinor: price })
+        .expect(200);
+      await request(app.getHttpServer())
+        .put(`/api/v1/outlets/${outletA.id}/menu/${menuItemId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ active: true, priceOverrideMinor: null })
+        .expect(200);
+    }
+    await app.close();
   });
 
   const auth = (key: IssuedKey) => `OutletKey ${key.keyId}.${key.secret}`;

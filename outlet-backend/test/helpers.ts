@@ -86,3 +86,25 @@ export async function resetDemoStock(app: E2eApp): Promise<void> {
       WHERE inventory_balances.menu_item_id = v.item_id`,
   );
 }
+
+/**
+ * Phase-2 suites sell the seeded demo items; with the Phase-3 live worker the
+ * local catalog tracks HQ truth (an HQ-side e2e run may have unassigned an
+ * item or changed a price). Re-asserting the seeded catalog state makes the
+ * sale-semantics specs deterministic against any previously synced state —
+ * the worker re-applying seed truth on its next pull is then a no-op.
+ */
+export async function ensureDemoCatalog(app: E2eApp): Promise<void> {
+  await sql(app)(
+    `INSERT INTO catalog_items (menu_item_id, assignment_id, sku, name, description, category, effective_price_minor, currency_code, active, hq_item_version, applied_revision)
+     VALUES
+       ('${ITEM.burger}', '31fe8f6b-02b8-409d-b1fa-6c441f422949', 'BURGER-01', 'Chicken Burger', 'Grilled chicken burger', 'Burgers', 1000, 'USD', true, 1, 1),
+       ('${ITEM.pizza}', '7bbca9d3-64d1-43b0-94ab-9da64d2a2f10', 'PIZZA-01', 'Pizza', 'Margherita pizza', 'Pizza', 1500, 'USD', true, 1, 1),
+       ('${ITEM.cola}', 'e5a1c9b7-92b3-45f1-8f6e-0f1a9d1c4b22', 'COLA-01', 'Cola', 'Chilled cola 330ml', 'Drinks', 300, 'USD', true, 1, 1)
+     ON CONFLICT (menu_item_id) DO UPDATE SET
+       effective_price_minor = EXCLUDED.effective_price_minor,
+       active = true,
+       updated_at = now()`,
+  );
+  await resetDemoStock(app);
+}

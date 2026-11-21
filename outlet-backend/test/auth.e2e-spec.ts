@@ -93,7 +93,8 @@ describeWithDeps('Outlet auth (e2e)', () => {
       .expect(200);
     expect(Array.isArray(response.body.data)).toBe(true);
     expect(response.body.data.length).toBeGreaterThan(0);
-    expect(response.body.meta.catalogRevision).toBe('1');
+    // Any revision ≥ 1: the Phase-3 worker advances the checkpoint from HQ.
+    expect(BigInt(response.body.meta.catalogRevision)).toBeGreaterThanOrEqual(1n);
     expect(response.body.meta.lastCatalogSyncAt).toBeTruthy();
   });
 
