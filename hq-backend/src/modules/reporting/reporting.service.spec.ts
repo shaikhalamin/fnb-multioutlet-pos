@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DataSource } from 'typeorm';
 import { parseReportWindow } from './reporting.service.js';
 import { ReportingService } from './reporting.service.js';
-import type { ReportingRepository } from './reporting.repository.js';
-import type { RevenueByOutletQuery } from './dto/report.dto.js';
+import type { ReportingRepository, TopItemRow } from './reporting.repository.js';
+import type { OutletTopItemsQuery, RevenueByOutletQuery } from './dto/report.dto.js';
 
 const OUTLET_A = '11111111-1111-4111-8111-111111111111';
 const OUTLET_B = '22222222-2222-4222-8222-222222222222';
@@ -176,5 +176,110 @@ describe('ReportingService.revenueByOutlet', () => {
     const report = await empty.service.revenueByOutlet(query());
     expect(report.dataAsOf).toBeNull();
     expect(report.totalRevenueMinor).toBe('0');
+  });
+});
+
+const topItem = (menuItemId: string, quantitySold: number, patch: Partial<TopItemRow> = {}): TopItemRow => ({
+  menuItemId,
+  currentName: `Master ${menuItemId}`,
+  snapshotName: `Snapshot ${menuItemId}`,
+  quantitySold,
+  ...patch,
+});
+
+function makeTopItemsService(rows: TopItemRow[], outletExists = true) {
+  const reporting = {
+    findCompanyCurrency: vi.fn().mockResolvedValue('USD'),
+    listActiveOutlets: vi.fn().mockResolvedValue([]),
+    sumWindowRevenue: vi.fn().mockResolvedValue(new Map()),
+    listIngestWatermarks: vi.fn().mockResolvedValue({ byOutlet: new Map([[OUTLET_A, INGESTED_A]]), dataAsOf: INGESTED_A }),
+    listActivePendingBacklogs: vi.fn().mockResolvedValue(new Map<string, number>()),
+    findOutlet: vi.fn().mockResolvedValue(outletExists),
+    topItemsByOutlet: vi.fn().mockResolvedValue(rows),
+  };
+  const dataSource = { getRepository: vi.fn().mockReturnValue({ findOne: vi.fn().mockResolvedValue({ id: 'c1' }) }) };
+  const service = new ReportingService(
+    dataSource as unknown as DataSource,
+    reporting as unknown as ReportingRepository,
+  );
+  return { service, reporting };
+}
+
+const topQuery = (patch: Partial<OutletTopItemsQuery> = {}): OutletTopItemsQuery => ({
+  from: '2026-11-01T00:00:00Z',
+  to: '2026-12-01T00:00:00Z',
+  ...patch,
+});
+
+describe('ReportingService.topItemsForOutlet', () => {
+  it('orders by quantitySold DESC with menu_item_id as deterministic tie-break', async () => {
+    // Deliberately unsorted fixture: equal quantities must fall back to id,
+    // and the smaller quantity must rank last regardless of input order.
+    const rows = [
+      topItem('c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4', 200),
+      topItem('9708835e-2e21-465a-87e9-5f8d56cd44ab', 250),
+      topItem('3d0f01a2-39a6-4b6f-9d3a-6cb17b2ba110', 250),
+    ];
+    const { service } = makeTopItemsService(rows);
+    const report = await service.topItemsForOutlet(OUTLET_A, topQuery());
+    expect(report.items.map((item) => item.menuItemId)).toEqual([
+      '3d0f01a2-39a6-4b6f-9d3a-6cb17b2ba110',
+      '9708835e-2e21-465a-87e9-5f8d56cd44ab',
+      'c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4',
+    ]);
+    expect(report.items.map((item) => item.rank)).toEqual([1, 2, 3]);
+  });
+
+  it('falls back to the sale-time snapshot name when the master item is gone', async () => {
+    const rows = [
+      topItem('9708835e-2e21-465a-87e9-5f8d56cd44ab', 10, { currentName: null }),
+      topItem('c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4', 5),
+    ];
+    const { service } = makeTopItemsService(rows);
+    const report = await service.topItemsForOutlet(OUTLET_A, topQuery());
+    expect(report.items[0]?.itemName).toBe('Snapshot 9708835e-2e21-465a-87e9-5f8d56cd44ab');
+    expect(report.items[1]?.itemName).toBe('Master c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4');
+  });
+
+  it('passes from/to through as window bounds and defaults limit to 5', async () => {
+    const { service, reporting } = makeTopItemsService([]);
+    await service.topItemsForOutlet(OUTLET_A, topQuery());
+    expect(reporting.topItemsByOutlet).toHaveBeenCalledWith({
+      outletId: OUTLET_A,
+      from: new Date('2026-11-01T00:00:00Z'),
+      to: new Date('2026-12-01T00:00:00Z'),
+      limit: 5,
+    });
+    await service.topItemsForOutlet(OUTLET_A, topQuery({ limit: 2 }));
+    expect(reporting.topItemsByOutlet).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 2 }));
+  });
+
+  it('caps the ranked rows at the requested limit', async () => {
+    const rows = [
+      topItem('3d0f01a2-39a6-4b6f-9d3a-6cb17b2ba110', 30),
+      topItem('9708835e-2e21-465a-87e9-5f8d56cd44ab', 20),
+      topItem('c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4', 10),
+    ];
+    const { service } = makeTopItemsService(rows);
+    const report = await service.topItemsForOutlet(OUTLET_A, topQuery({ limit: 2 }));
+    expect(report.items).toHaveLength(2);
+    expect(report.items.at(-1)?.quantitySold).toBe(20);
+  });
+
+  it('scopes strictly to the requested outlet and 404s unknown outlets', async () => {
+    const rows = [topItem('9708835e-2e21-465a-87e9-5f8d56cd44ab', 7)];
+    const { service, reporting } = makeTopItemsService(rows);
+    const report = await service.topItemsForOutlet(OUTLET_A, topQuery());
+    // Outlet isolation: the repository filter — not post-filtering — carries
+    // the scope; the report echoes exactly that outlet.
+    expect(reporting.topItemsByOutlet).toHaveBeenCalledWith(expect.objectContaining({ outletId: OUTLET_A }));
+    expect(report.outletId).toBe(OUTLET_A);
+    expect(report.items.every((item) => item.menuItemId === '9708835e-2e21-465a-87e9-5f8d56cd44ab')).toBe(true);
+
+    const missing = makeTopItemsService(rows, false);
+    await expect(missing.service.topItemsForOutlet(OUTLET_B, topQuery())).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+      status: 404,
+    });
   });
 });

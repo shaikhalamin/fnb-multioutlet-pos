@@ -3,8 +3,15 @@ import type { DataSource } from 'typeorm';
 import { ApiException } from '../../common/exceptions/api.exception.js';
 import { resolveCompanyId } from '../../common/utils/company.js';
 import { DATA_SOURCE } from '../../database/database.module.js';
-import type { OutletRevenueResponse, RevenueByOutletQuery, RevenueByOutletResponse } from './dto/report.dto.js';
-import { ReportingRepository } from './reporting.repository.js';
+import type {
+  OutletRevenueResponse,
+  OutletTopItemsQuery,
+  OutletTopItemsResponse,
+  RevenueByOutletQuery,
+  RevenueByOutletResponse,
+  TopItemResponse,
+} from './dto/report.dto.js';
+import { ReportingRepository, type TopItemRow } from './reporting.repository.js';
 
 /** §15 unbounded-query protection: report windows are capped at 366 days. */
 export const MAX_REPORT_WINDOW_MS = 366 * 24 * 60 * 60 * 1000;
@@ -83,4 +90,51 @@ export class ReportingService {
       isProvisional,
     };
   }
+
+  /**
+   * Per-outlet top items (PRD §10): ranks are computed only after enforcing
+   * the `quantitySold DESC, menu_item_id` order in-process, so the contract
+   * holds even if the SQL plan ever drifts. `itemName` prefers the current
+   * master name and falls back to the immutable sale-time snapshot for items
+   * that no longer exist in the master catalog.
+   */
+  async topItemsForOutlet(outletId: string, query: OutletTopItemsQuery): Promise<OutletTopItemsResponse> {
+    const window = parseReportWindow(query.from, query.to);
+    const limit = query.limit ?? DEFAULT_TOP_ITEMS_LIMIT;
+    const companyId = await resolveCompanyId(this.dataSource);
+
+    const outletExists = await this.reporting.findOutlet(companyId, outletId);
+    if (!outletExists) {
+      // Unknown or cross-company outlets are indistinguishable — never leak
+      // which one (§2.2 404 semantics).
+      throw new ApiException('NOT_FOUND', 'Outlet not found.', 404);
+    }
+
+    const [rows, watermarks] = await Promise.all([
+      this.reporting.topItemsByOutlet({ outletId, ...window, limit }),
+      this.reporting.listIngestWatermarks(),
+    ]);
+
+    const ordered = [...rows].sort(compareTopItemRows).slice(0, limit);
+    const items: TopItemResponse[] = ordered.map((row, index) => ({
+      rank: index + 1,
+      menuItemId: row.menuItemId,
+      itemName: row.currentName ?? row.snapshotName,
+      quantitySold: row.quantitySold,
+    }));
+
+    return {
+      outletId,
+      items,
+      dataAsOf: watermarks.dataAsOf ? watermarks.dataAsOf.toISOString() : null,
+    };
+  }
+}
+
+/** V1 caps top-items at five rows (PRD §7.2). */
+export const DEFAULT_TOP_ITEMS_LIMIT = 5;
+
+function compareTopItemRows(a: TopItemRow, b: TopItemRow): number {
+  if (b.quantitySold !== a.quantitySold) return b.quantitySold - a.quantitySold;
+  return a.menuItemId < b.menuItemId ? -1 : a.menuItemId > b.menuItemId ? 1 : 0;
 }

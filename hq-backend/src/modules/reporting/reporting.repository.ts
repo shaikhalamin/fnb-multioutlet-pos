@@ -5,6 +5,12 @@ import { CompanyEntity } from '../../database/entities/company.entity.js';
 
 export type ActiveOutletRow = { outletId: string; outletName: string };
 export type WindowRevenueRow = { outletId: string; totalRevenueMinor: string; completedSaleCount: number };
+export type TopItemRow = {
+  menuItemId: string;
+  currentName: string | null;
+  snapshotName: string;
+  quantitySold: number;
+};
 
 /**
  * Read-only reporting queries (PRD §10, FR-08): aggregation runs entirely in
@@ -101,5 +107,58 @@ export class ReportingRepository {
       if (row.pending !== null) pending.set(row.outlet_id, row.pending);
     }
     return pending;
+  }
+
+  async findOutlet(companyId: string, outletId: string): Promise<boolean> {
+    const rows = await this.dataSource.query<Array<{ exists: boolean }>>(
+      'SELECT EXISTS (SELECT 1 FROM outlets WHERE company_id = $1 AND id = $2) AS exists',
+      [companyId, outletId],
+    );
+    return rows[0]?.exists === true;
+  }
+
+  /**
+   * Per-outlet top items (PRD §10): groups `hq_sale_items` by stable
+   * `menu_item_id`, sums quantity, and orders `quantitySold DESC,
+   * menu_item_id` (deterministic tie-break). The master-name join is a LEFT
+   * JOIN — the caller falls back to the immutable `name_snapshot` when the
+   * item is no longer in the master catalog.
+   */
+  async topItemsByOutlet(filter: {
+    outletId: string;
+    from: Date;
+    to: Date;
+    limit: number;
+  }): Promise<TopItemRow[]> {
+    const rows = await this.dataSource.query<
+      Array<{
+        menu_item_id: string;
+        current_name: string | null;
+        snapshot_name: string;
+        quantity_sold: number;
+      }>
+    >(
+      `SELECT i.menu_item_id::text AS menu_item_id,
+              MAX(m.name) AS current_name,
+              MAX(i.name_snapshot) AS snapshot_name,
+              SUM(i.quantity)::int AS quantity_sold
+       FROM hq_sale_items i
+       JOIN hq_sales s ON s.id = i.hq_sale_id
+       LEFT JOIN master_menu_items m ON m.id = i.menu_item_id
+       WHERE s.outlet_id = $1
+         AND s.status = 'COMPLETED'
+         AND s.sold_at >= $2
+         AND s.sold_at < $3
+       GROUP BY i.menu_item_id
+       ORDER BY quantity_sold DESC, i.menu_item_id ASC
+       LIMIT $4`,
+      [filter.outletId, filter.from.toISOString(), filter.to.toISOString(), filter.limit],
+    );
+    return rows.map((row) => ({
+      menuItemId: row.menu_item_id,
+      currentName: row.current_name,
+      snapshotName: row.snapshot_name,
+      quantitySold: row.quantity_sold,
+    }));
   }
 }
