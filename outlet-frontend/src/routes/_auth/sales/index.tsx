@@ -31,6 +31,7 @@ function SalesPage() {
   const session = useSession()
   const canRead = hasPermission(session.user, 'sales.read')
   const range = Route.useSearch()
+  const navigate = Route.useNavigate()
 
   const pages = useInfiniteQuery({
     queryKey: salesKeys.list(range),
@@ -38,6 +39,25 @@ function SalesPage() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
   })
+
+  // Date filters drive the Zod-validated search params (AGENTS §4.2);
+  // `undefined` removes the bound, and whole-day bounds become UTC instants
+  // the backend re-validates.
+  function applyRange(next: { from?: string; to?: string }): void {
+    void navigate({
+      to: '.',
+      search: (prev) => ({ ...prev, ...next }),
+      replace: true,
+    })
+  }
+
+  function onFromChange(value: string): void {
+    applyRange(value ? { from: `${value}T00:00:00.000Z` } : { from: undefined })
+  }
+
+  function onToChange(value: string): void {
+    applyRange(value ? { to: `${value}T23:59:59.999Z` } : { to: undefined })
+  }
 
   if (!canRead) {
     return (
@@ -60,9 +80,42 @@ function SalesPage() {
       <h1 className="mb-1 text-2xl font-semibold text-[var(--sea-ink)]">
         Sales
       </h1>
-      <p className="mb-6 mt-1 text-sm text-[var(--sea-ink-soft)]">
+      <p className="mb-4 mt-1 text-sm text-[var(--sea-ink-soft)]">
         Local receipts only. Server-computed totals; snapshots are immutable.
       </p>
+
+      <form
+        className="mb-6 flex flex-wrap items-end gap-3"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <label className="text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
+          From
+          <input
+            type="date"
+            className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] px-3 py-1.5 text-sm font-normal normal-case tracking-normal text-[var(--sea-ink)]"
+            value={range.from ? range.from.slice(0, 10) : ''}
+            onChange={(event) => onFromChange(event.target.value)}
+          />
+        </label>
+        <label className="text-xs font-semibold uppercase tracking-wide text-[var(--sea-ink-soft)]">
+          To
+          <input
+            type="date"
+            className="mt-1 block rounded-lg border border-[var(--line)] bg-[var(--chip-bg)] px-3 py-1.5 text-sm font-normal normal-case tracking-normal text-[var(--sea-ink)]"
+            value={range.to ? range.to.slice(0, 10) : ''}
+            onChange={(event) => onToChange(event.target.value)}
+          />
+        </label>
+        {range.from || range.to ? (
+          <button
+            type="button"
+            className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-4 py-2 text-xs font-semibold text-[var(--sea-ink)]"
+            onClick={() => applyRange({ from: undefined, to: undefined })}
+          >
+            Clear dates
+          </button>
+        ) : null}
+      </form>
 
       {pages.isPending ? (
         <p
