@@ -54,6 +54,18 @@ export const envSchema = z.object({
   OUTLET_JWT_ACCESS_SECRET: z.string().min(32).optional(),
   OUTLET_JWT_REFRESH_SECRET: z.string().min(32).optional(),
 
+  ACCESS_TOKEN_TTL: positiveInt.default(900),
+  REFRESH_TOKEN_TTL: positiveInt.default(1_209_600),
+
+  /**
+   * Explicit override for the refresh cookie `Secure` flag. The local dev
+   * cluster terminates plain HTTP inside Compose, so it sets `false`;
+   * default is `true` only in production (PRD §9.1).
+   */
+  REFRESH_COOKIE_SECURE: z.enum(['true', 'false']).optional().transform((value) =>
+    value === undefined ? undefined : value === 'true',
+  ),
+
   // Offline sales grace period in hours (PRD §8.8, proposed 72h).
   OFFLINE_GRACE_HOURS: positiveInt.default(72),
   SYNC_MAX_BODY_BYTES: positiveInt.default(1_048_576),
@@ -106,6 +118,13 @@ function requireForProfile(ctx: z.RefinementCtx, env: Env, keys: ReadonlyArray<k
 /** Environment contract of the HTTP API entrypoint (`src/main.ts`). */
 export const apiEnvSchema = envSchema.superRefine((env, ctx) => {
   requireForProfile(ctx, env, API_REQUIRED);
+  if (env.REFRESH_TOKEN_TTL <= env.ACCESS_TOKEN_TTL) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['REFRESH_TOKEN_TTL'],
+      message: `must be greater than ACCESS_TOKEN_TTL (${env.ACCESS_TOKEN_TTL}s)`,
+    });
+  }
 });
 
 export type ApiEnv = WithRequired<Env, (typeof API_REQUIRED)[number]>;

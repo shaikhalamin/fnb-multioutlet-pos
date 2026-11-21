@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 import { SwaggerModule } from '@nestjs/swagger';
 import { loadAppConfig } from './config/app.config.js';
 import { parseApiEnv } from './config/env.schema.js';
@@ -27,6 +28,8 @@ async function bootstrap(): Promise<void> {
 
   const app = await NestFactory.create(AppModule, { logger, bufferLogs: true });
   app.setGlobalPrefix(config.apiPrefix);
+  // Refresh cookies (`outlet_rt`) are read on /auth/refresh|logout (PRD §9.1).
+  app.use(cookieParser());
   app.useGlobalPipes(makeGlobalValidationPipe());
   app.enableCors({ origin: config.corsOrigins, credentials: true });
   app.enableShutdownHooks();
