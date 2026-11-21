@@ -271,16 +271,17 @@ async function seedOutletKeys(dataSource: DataSource): Promise<void> {
           rotatedFromId: null,
         }),
       );
-      await manager.getRepository(AuditLogEntity).insert(
-        manager.getRepository(AuditLogEntity).create({
-          actorType: 'SYSTEM',
-          actorId: null,
-          action: 'outlet_key.issued',
-          entityType: 'outlet_api_key',
-          entityId: outlet.id,
-          metadata: { outletId: outlet.id, keyId, scopes: [...OUTLET_KEY_SCOPES], via: 'seed' },
-        }),
-      );
+      const auditRow = manager.getRepository(AuditLogEntity).create({
+        actorType: 'SYSTEM',
+        actorId: null,
+        action: 'outlet_key.issued',
+        entityType: 'outlet_api_key',
+        entityId: outlet.id,
+        metadata: { outletId: outlet.id, keyId, scopes: [...OUTLET_KEY_SCOPES], via: 'seed' },
+      });
+      // jsonb column typing is a deep-partial mismatch for TypeORM's insert;
+      // the row shape is exact by construction.
+      await manager.getRepository(AuditLogEntity).insert(auditRow as never);
     });
     // One-time reveal — copy into the outlet worker's environment
     // (root .env: OUTLET_<CODE>_HQ_KEY_ID / _SECRET) and keep out of logs.
