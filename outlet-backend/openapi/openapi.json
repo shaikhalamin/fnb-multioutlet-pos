@@ -298,6 +298,76 @@
         ]
       }
     },
+    "/inventory": {
+      "get": {
+        "operationId": "InventoryController_listBalances",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InventoryBalanceResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Local stock balances joined with catalog identity.",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
+    "/inventory/adjustments": {
+      "post": {
+        "operationId": "InventoryController_adjust",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjustInventoryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjustInventoryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "UNPROCESSABLE_ENTITY / ITEM_NOT_ASSIGNED / INSUFFICIENT_STOCK"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Audited stock adjustment (RESTOCK / WRITE_OFF / RECOUNT).",
+        "tags": [
+          "Inventory"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -624,6 +694,102 @@
           "unitPriceMinor",
           "currencyCode",
           "availableQuantity"
+        ]
+      },
+      "InventoryBalanceResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger"
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01"
+          },
+          "quantityOnHand": {
+            "type": "number",
+            "example": 30,
+            "description": "On-hand quantity (integer)."
+          },
+          "version": {
+            "type": "number",
+            "example": 4,
+            "description": "Balance row version; bumps on every mutation."
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "menuItemId",
+          "name",
+          "sku",
+          "quantityOnHand",
+          "version",
+          "updatedAt"
+        ]
+      },
+      "AdjustInventoryRequest": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+            "description": "Local catalog item to adjust."
+          },
+          "deltaQuantity": {
+            "type": "number",
+            "example": 50,
+            "description": "Signed quantity delta applied to on-hand stock (±1,000,000)."
+          },
+          "reason": {
+            "type": "string",
+            "example": "RESTOCK",
+            "enum": [
+              "RESTOCK",
+              "WRITE_OFF",
+              "RECOUNT"
+            ]
+          }
+        },
+        "required": [
+          "menuItemId",
+          "deltaQuantity",
+          "reason"
+        ]
+      },
+      "AdjustInventoryResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "quantityOnHand": {
+            "type": "number",
+            "example": 80,
+            "description": "On-hand quantity after the adjustment."
+          },
+          "version": {
+            "type": "number",
+            "example": 5
+          },
+          "updatedAt": {
+            "type": "string",
+            "example": "2026-11-20T04:00:00.000Z"
+          }
+        },
+        "required": [
+          "menuItemId",
+          "quantityOnHand",
+          "version",
+          "updatedAt"
         ]
       }
     }
