@@ -468,6 +468,14 @@ describeWithDeps('HQ sync surface (e2e)', () => {
     ).body.data;
     expect(BigInt(afterFill.highestContiguousSequence)).toBe(watermark + 3n);
     expect(afterFill.missingRanges).not.toContainEqual({ from: s1, to: s2 });
+
+    // Retire the throwaway: suspended outlets leave the ACTIVE report lists
+    // (Phase 4), so re-runs never accumulate never-reported noise.
+    await request(app.getHttpServer())
+      .patch(`/api/v1/outlets/${throwaway.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'SUSPENDED' })
+      .expect(200);
   });
 
   it('never serves CORS headers on machine sync routes (§9.2)', async () => {

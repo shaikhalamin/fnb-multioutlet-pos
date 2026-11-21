@@ -144,7 +144,13 @@ describeWithDeps('HQ audit surface (e2e)', () => {
 
   afterAll(async () => {
     if (!app) return;
-    // Throwaway users/outlets keep the shared dev DB tidy for re-runs.
+    // Throwaway users/outlets keep the shared dev DB tidy for re-runs — the
+    // outlet is suspended so it leaves the ACTIVE report lists.
+    await request(app.getHttpServer())
+      .patch(`/api/v1/outlets/${outletId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'SUSPENDED' })
+      .expect(200);
     await dataSource.query('DELETE FROM hq_refresh_sessions WHERE user_id = $1', [auditUserId]);
     await dataSource.query('DELETE FROM hq_user_roles WHERE user_id = $1', [auditUserId]);
     await dataSource.query('DELETE FROM hq_users WHERE id = $1', [auditUserId]);
