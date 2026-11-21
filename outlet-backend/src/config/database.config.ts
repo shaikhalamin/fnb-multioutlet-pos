@@ -1,5 +1,7 @@
 import type { DataSourceOptions } from 'typeorm';
+import { outletEntities } from '../database/entities/index.js';
 import { EnablePgcrypto1700000000000 } from '../database/migrations/1700000000000-enable-pgcrypto.js';
+import { OutletPhase2Core1720000000000 } from '../database/migrations/1720000000000-outlet-phase2-core.js';
 
 /**
  * TypeORM options shared by the runtime DI DataSource, the migration CLI and
@@ -10,9 +12,10 @@ export function buildDataSourceOptions(databaseUrl: string): DataSourceOptions {
   return {
     type: 'postgres',
     url: databaseUrl,
-    // Phase 1 registers HQ entities (users, outlets, menu, …).
-    entities: [],
-    migrations: [EnablePgcrypto1700000000000],
+    // Phase 2 registers outlet entities (users, catalog cache, inventory,
+    // sales, outbox, …).
+    entities: outletEntities,
+    migrations: [EnablePgcrypto1700000000000, OutletPhase2Core1720000000000],
     synchronize: false,
     migrationsTransactionMode: 'each',
     // Deterministic, bounded connection behaviour.
