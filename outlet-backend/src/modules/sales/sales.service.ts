@@ -110,10 +110,17 @@ export class SalesService {
       }
 
       // (4) Offline grace policy (PRD §8.8): a stale menu sync blocks new
-      // sales until sync succeeds (emergency override is Phase 3).
+      // sales until sync succeeds — unless a privileged, audited emergency
+      // override extends the effective expiry (Phase 3).
       const syncState = await this.sales.getSyncState(manager);
       const lastSyncAt = syncState?.lastSyncAt;
-      if (!lastSyncAt || Date.now() - lastSyncAt.getTime() > this.offlineGraceHours * 3_600_000) {
+      const overrideUntil = syncState?.graceOverriddenUntil ?? null;
+      const baseExpiry = lastSyncAt ? lastSyncAt.getTime() + this.offlineGraceHours * 3_600_000 : null;
+      const effectiveExpiry = Math.max(
+        baseExpiry ?? Number.NEGATIVE_INFINITY,
+        overrideUntil?.getTime() ?? Number.NEGATIVE_INFINITY,
+      );
+      if (!syncState || !Number.isFinite(effectiveExpiry) || Date.now() > effectiveExpiry) {
         throw new ApiException(
           'SYNC_TEMPORARILY_UNAVAILABLE',
           'Menu sync is stale; new sales are blocked until the catalog is refreshed.',
@@ -121,6 +128,7 @@ export class SalesService {
           {
             lastMenuSyncAt: lastSyncAt?.toISOString() ?? null,
             offlineGraceHours: this.offlineGraceHours,
+            graceOverriddenUntil: overrideUntil?.toISOString() ?? null,
           },
         );
       }

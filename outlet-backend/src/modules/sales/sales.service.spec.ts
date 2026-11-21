@@ -296,6 +296,58 @@ describe('SalesService.createSale', () => {
     ).rejects.toMatchObject({ status: 503, code: 'SYNC_TEMPORARILY_UNAVAILABLE' });
   });
 
+  it('AT-11 override leg: an audited emergency override rescues sales past the window', async () => {
+    const stale = new Date(NOW.getTime() - 80 * 3_600_000); // 80h: window long expired
+    const override = new Date(NOW.getTime() + 6 * 3_600_000); // manager extended +6h
+    const { service, salesRepo } = makeService({
+      getSyncState: vi.fn(async () => ({
+        outletId: OUTLET_ID,
+        lastAppliedRevision: '1',
+        lastSyncAt: stale,
+        snapshotId: null,
+        graceOverriddenUntil: override,
+      })),
+    });
+
+    vi.useFakeTimers({ now: NOW.getTime() });
+    try {
+      const sale = await service.createSale(
+        { items: [{ menuItemId: '97000000-0000-4000-8000-000000000001', quantity: 1 }] } as never,
+        ACTOR,
+      );
+      expect(sale.status).toBe('COMPLETED');
+      expect(salesRepo.insertSale).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets an expired override lapse — the 503 returns (§8.8)', async () => {
+    const stale = new Date(NOW.getTime() - 80 * 3_600_000);
+    const expiredOverride = new Date(NOW.getTime() - 3_600_000);
+    const { service } = makeService({
+      getSyncState: vi.fn(async () => ({
+        outletId: OUTLET_ID,
+        lastAppliedRevision: '1',
+        lastSyncAt: stale,
+        snapshotId: null,
+        graceOverriddenUntil: expiredOverride,
+      })),
+    });
+
+    vi.useFakeTimers({ now: NOW.getTime() });
+    try {
+      await expect(
+        service.createSale(
+          { items: [{ menuItemId: '97000000-0000-4000-8000-000000000001', quantity: 1 }] } as never,
+          ACTOR,
+        ),
+      ).rejects.toMatchObject({ status: 503, code: 'SYNC_TEMPORARILY_UNAVAILABLE' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('rejects unknown items with 422 ITEM_NOT_ASSIGNED', async () => {
     const { service } = makeService({ loadCatalogItems: vi.fn(async () => []) });
 

@@ -9,6 +9,9 @@ export const OUTLET_PERMISSIONS = [
   'inventory.read',
   'inventory.adjust',
   'sync.read',
+  // Privileged, audited emergency actions (PRD §8.8): OUTLET_MANAGER only —
+  // the cashier/clerk role lists below never include it.
+  'sync.override',
   'users.read',
   'users.write',
 ] as const;

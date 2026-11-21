@@ -314,6 +314,27 @@ export class OutboxRepository {
     return result.affected ?? 0;
   }
 
+  /** Re-arms a quarantined row for delivery after operator review (§8.5). */
+  async replayQuarantined(id: string): Promise<boolean> {
+    const result = await this.dataSource
+      .getRepository(OutboxEventEntity)
+      .createQueryBuilder()
+      .update(OutboxEventEntity)
+      .set({ status: 'PENDING', nextAttemptAt: null, leaseUntil: null })
+      .where('id = :id AND status = :status', { id, status: 'QUARANTINED' })
+      .execute();
+    return (result.affected ?? 0) > 0;
+  }
+
+  /** Quarantined rows with their terminal errors (operator diagnostics). */
+  async findQuarantinedSample(limit = 5): Promise<Array<{ id: string; sequenceNo: string; lastError: string | null }>> {
+    const rows = await this.dataSource.query<Array<{ id: string; sequence_no: string; last_error: string | null }>>(
+      'SELECT id::text AS id, sequence_no::text AS sequence_no, last_error FROM outbox_events WHERE status = \'QUARANTINED\' ORDER BY sequence_no ASC LIMIT $1',
+      [limit],
+    );
+    return rows.map((row) => ({ id: row.id, sequenceNo: row.sequence_no, lastError: row.last_error }));
+  }
+
   /** One append-only attempt row per send — status/duration/error, never secrets. */
   async appendAttemptLog(input: {
     outboxEventId: string;
