@@ -280,6 +280,40 @@ export class OutboxRepository {
     return result.affected ?? 0;
   }
 
+  // ---- Reconciliation (PRD §8.7) ----------------------------------------------
+
+  /**
+   * Outbox rows inside HQ-reported missing ranges that are worth replaying:
+   * already-DELIVERED rows re-deliver as terminal DUPLICATE, and pending/
+   * retry rows get another lease. Never fabricates events — only rows that
+   * exist locally are returned.
+   */
+  async findReleasableInRanges(
+    ranges: ReadonlyArray<{ from: string; to: string }>,
+  ): Promise<string[]> {
+    if (ranges.length === 0) return [];
+    const conditions = ranges.map((_, index) => `(sequence_no BETWEEN $${index * 2 + 1} AND $${index * 2 + 2})`).join(' OR ');
+    const params = ranges.flatMap((range) => [range.from, range.to]);
+    const rows = await this.dataSource.query<Array<{ id: string }>>(
+      `SELECT id::text AS id FROM outbox_events WHERE status IN ('PENDING', 'RETRY', 'DELIVERED') AND (${conditions})`,
+      params,
+    );
+    return rows.map((row) => row.id);
+  }
+
+  /** Makes rows eligible for the sweeper again (replay after reconciliation). */
+  async makeEligible(ids: string[], now = new Date()): Promise<number> {
+    if (ids.length === 0) return 0;
+    const result = await this.dataSource
+      .getRepository(OutboxEventEntity)
+      .createQueryBuilder()
+      .update(OutboxEventEntity)
+      .set({ status: 'RETRY', nextAttemptAt: now, leaseUntil: null })
+      .where({ id: In(ids) })
+      .execute();
+    return result.affected ?? 0;
+  }
+
   /** One append-only attempt row per send — status/duration/error, never secrets. */
   async appendAttemptLog(input: {
     outboxEventId: string;

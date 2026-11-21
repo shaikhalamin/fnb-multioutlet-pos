@@ -7,6 +7,7 @@ import { MenuPullProcessor } from './modules/sync/processors/menu-pull.processor
 import { JOB_NAMES, QUEUES, REPEAT_JOB_IDS } from './modules/sync/processors/queue-names.js';
 import { OutboxSweepProcessor } from './modules/sync/processors/outbox-sweep.processor.js';
 import { SyncDeliveryProcessor } from './modules/sync/processors/sync-delivery.processor.js';
+import { SyncHeartbeatProcessor, SyncReconcileProcessor } from './modules/sync/processors/sync-reconcile.processor.js';
 
 /** Env log level → NestJS LoggerService level. */
 function toNestLogLevel(level: string): 'fatal' | 'error' | 'warn' | 'log' | 'debug' | 'verbose' {
@@ -37,6 +38,8 @@ async function bootstrap(): Promise<void> {
   const sweeper = app.get(OutboxSweepProcessor);
   const delivery = app.get(SyncDeliveryProcessor);
   const menuPull = app.get(MenuPullProcessor);
+  const reconciler = app.get(SyncReconcileProcessor);
+  const heartbeat = app.get(SyncHeartbeatProcessor);
 
   logger.log('outlet_worker_started', {
     outletId: sync.outletId,
@@ -68,6 +71,9 @@ async function bootstrap(): Promise<void> {
         if (eventIds.length > 0) {
           await deliveryQueue.add(JOB_NAMES.deliver, { eventIds }, { attempts: 3, backoff: { type: 'exponential', delay: 2_000 } });
         }
+      } else if (job.name === JOB_NAMES.heartbeat) {
+        // Backlog/menu-revision report; failures are non-fatal by contract.
+        await heartbeat.beat();
       }
     },
     { connection, concurrency: 1 },
@@ -93,6 +99,12 @@ async function bootstrap(): Promise<void> {
   });
   workers.push(menuPullWorker);
 
+  const reconcileWorker = new Worker(QUEUES.syncReconcile, async () => reconciler.reconcile(), {
+    connection,
+    concurrency: 1,
+  });
+  workers.push(reconcileWorker);
+
   for (const worker of workers) {
     worker.on('error', (error) => logger.warn('sync_worker_error', { queue: worker.name, error: error.message }));
   }
@@ -103,16 +115,27 @@ async function bootstrap(): Promise<void> {
   const schedule = async (): Promise<void> => {
     const dispatchQueue = new Queue(QUEUES.outboxDispatch, { connection });
     const menuPullQueue = new Queue(QUEUES.menuPull, { connection });
-    queues.push(dispatchQueue, menuPullQueue);
+    const reconcileQueue = new Queue(QUEUES.syncReconcile, { connection });
+    queues.push(dispatchQueue, menuPullQueue, reconcileQueue);
     await dispatchQueue.upsertJobScheduler(
       REPEAT_JOB_IDS.sweep,
       { every: sync.outboxSweepIntervalMs },
       { name: JOB_NAMES.sweep, data: {}, opts: { removeOnComplete: { count: 20 } } },
     );
+    await dispatchQueue.upsertJobScheduler(
+      REPEAT_JOB_IDS.heartbeat,
+      { every: sync.heartbeatIntervalMs },
+      { name: JOB_NAMES.heartbeat, data: {}, opts: { removeOnComplete: { count: 20 } } },
+    );
     await menuPullQueue.upsertJobScheduler(
       REPEAT_JOB_IDS.pull,
       { every: sync.menuPullIntervalMs },
       { name: JOB_NAMES.pull, data: {}, opts: { removeOnComplete: { count: 20 } } },
+    );
+    await reconcileQueue.upsertJobScheduler(
+      REPEAT_JOB_IDS.reconcile,
+      { every: env.SYNC_RECONCILE_INTERVAL_MS },
+      { name: JOB_NAMES.reconcile, data: {}, opts: { removeOnComplete: { count: 20 } } },
     );
   };
   const scheduleWithRetry = async (): Promise<void> => {
@@ -131,13 +154,13 @@ async function bootstrap(): Promise<void> {
   };
   void scheduleWithRetry();
 
-  const heartbeat = setInterval(() => {
+  const heartbeatTimer = setInterval(() => {
     logger.log('worker_heartbeat', { uptimeSeconds: Math.floor(process.uptime()) });
   }, sync.heartbeatIntervalMs);
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.log('worker_stopping', { signal });
-    clearInterval(heartbeat);
+    clearInterval(heartbeatTimer);
     await Promise.allSettled(workers.map((worker) => worker.close()));
     await Promise.allSettled(queues.map((queue) => queue.close()));
     await app.close();

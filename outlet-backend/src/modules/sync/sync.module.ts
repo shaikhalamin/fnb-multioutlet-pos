@@ -5,6 +5,7 @@ import { HqSyncClient } from './clients/hq-sync.client.js';
 import { MenuPullProcessor } from './processors/menu-pull.processor.js';
 import { OutboxSweepProcessor } from './processors/outbox-sweep.processor.js';
 import { SyncDeliveryProcessor } from './processors/sync-delivery.processor.js';
+import { SyncHeartbeatProcessor, SyncReconcileProcessor } from './processors/sync-reconcile.processor.js';
 import { MenuApplyRepository } from './repositories/menu-apply.repository.js';
 import { MenuPullService } from './services/menu-pull.service.js';
 import { SyncController } from './sync.controller.js';
@@ -27,6 +28,8 @@ import { SyncService } from './sync.service.js';
     OutboxSweepProcessor,
     SyncDeliveryProcessor,
     MenuPullProcessor,
+    SyncReconcileProcessor,
+    SyncHeartbeatProcessor,
   ],
 })
 export class SyncModule {}

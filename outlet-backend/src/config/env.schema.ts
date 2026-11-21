@@ -89,6 +89,8 @@ export const envSchema = z.object({
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(100),
   OUTBOX_SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(5_000),
   HEARTBEAT_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  /** Checkpoint reconciliation cadence (hourly default, PRD §8.7). */
+  SYNC_RECONCILE_INTERVAL_MS: z.coerce.number().int().positive().default(3_600_000),
 });
 
 export type Env = z.infer<typeof envSchema>;
