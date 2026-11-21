@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { loadAppConfig } from './config/app.config.js';
 import { parseApiEnv } from './config/env.schema.js';
 import { JsonLogger } from './common/logging/logger.service.js';
@@ -26,7 +27,15 @@ async function bootstrap(): Promise<void> {
   const logger = new JsonLogger('HQ-API', { nodeEnv: config.nodeEnv }, !config.isProduction);
   logger.setMinLevel(toNestLogLevel(config.logLevel));
 
-  const app = await NestFactory.create(AppModule, { logger, bufferLogs: true });
+  // `bodyParser: false` + an explicit JSON parser lets the machine sync
+  // batch route use the full SYNC_MAX_BODY_BYTES budget (§8.5, default 1 MiB)
+  // instead of the Express 100 KiB default.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger,
+    bufferLogs: true,
+    bodyParser: false,
+  });
+  app.useBodyParser('json', { limit: config.syncMaxBodyBytes });
   app.setGlobalPrefix(config.apiPrefix);
   // Refresh cookies (`hq_rt`) are read on /auth/refresh|logout (PRD §9.1).
   app.use(cookieParser());
