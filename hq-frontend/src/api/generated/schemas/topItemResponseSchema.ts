@@ -8,6 +8,6 @@ import * as z from 'zod'
 export const topItemResponseSchema = z.object({
   rank: z.number().describe('1-based rank within the outlet report.').meta({ examples: [1] }),
   menuItemId: z.string().meta({ examples: ['9708835e-2e21-465a-87e9-5f8d56cd44ab'] }),
-  itemName: z.string().describe('Current master name; sale-time snapshot for items no longer in the master catalog.').meta({ examples: ['Chicken Burger'] }),
+  itemName: z.string().describe('Current master name; sale-time snapshot for ARCHIVED items or ids missing from the master catalog.').meta({ examples: ['Chicken Burger'] }),
   quantitySold: z.number().describe('Units sold in this window.').meta({ examples: [250] }),
 })

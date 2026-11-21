@@ -34,7 +34,11 @@ export const auditControllerListLogsQueryToSchema = z.string().optional().descri
 
 export const auditControllerListLogsStatus200Schema = z.array(auditLogResponseSchema)
 
+export const auditControllerListLogsStatus400Schema = z.unknown()
+
 export const auditControllerListLogsResponseSchema = auditControllerListLogsStatus200Schema
+
+export const auditControllerListLogsErrorSchema = auditControllerListLogsStatus400Schema
 
 export const auditControllerListLogsQuerySchema = z.object({
   limit: auditControllerListLogsQueryLimitSchema,

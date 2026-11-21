@@ -4,7 +4,7 @@
 */
 
 import type { RequestConfig, ResponseErrorConfig } from '../.kubb/client'
-import type { AuditControllerListLogsOptions, AuditControllerListLogsStatus200 } from '../types/AuditControllerListLogs'
+import type { AuditControllerListLogsOptions, AuditControllerListLogsStatus200, AuditControllerListLogsStatus400 } from '../types/AuditControllerListLogs'
 import { auditControllerListLogs } from '../clients/auditControllerListLogs'
 import { queryOptions } from '@tanstack/react-query'
 
@@ -14,7 +14,7 @@ type AuditControllerListLogsQueryKey = ReturnType<typeof auditControllerListLogs
 
 export function auditControllerListLogsQueryOptions({ query }: AuditControllerListLogsOptions = {}, config: Partial<Omit<RequestConfig, 'path' | 'query' | 'body' | 'headers' | 'cookies' | 'url' | 'throwOnError'>> = {}) {
   const queryKey = auditControllerListLogsQueryKey({ query })
-  return queryOptions<AuditControllerListLogsStatus200, ResponseErrorConfig<Error>, AuditControllerListLogsStatus200, typeof queryKey>({
+  return queryOptions<AuditControllerListLogsStatus200, ResponseErrorConfig<AuditControllerListLogsStatus400>, AuditControllerListLogsStatus200, typeof queryKey>({
    queryKey,
    queryFn: async ({ signal }) => {
       return auditControllerListLogs({ ...config, query, signal: config.signal ?? signal, throwOnError: true })

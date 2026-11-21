@@ -53,6 +53,8 @@ export type AuditControllerListLogsQuery = {
 
 export type AuditControllerListLogsStatus200 = AuditLogResponse[];
 
+export type AuditControllerListLogsStatus400 = unknown;
+
 export type AuditControllerListLogsOptions = {
   body?: never;
   path?: never;
@@ -62,6 +64,7 @@ export type AuditControllerListLogsOptions = {
 
 export type AuditControllerListLogsResponses = {
   '200': AuditControllerListLogsStatus200;
+  '400': AuditControllerListLogsStatus400;
 };
 
 /**

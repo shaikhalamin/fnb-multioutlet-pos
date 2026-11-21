@@ -16,7 +16,7 @@ export type TopItemResponse = {
    */
   menuItemId: string;
   /**
-   * @description Current master name; sale-time snapshot for items no longer in the master catalog.
+   * @description Current master name; sale-time snapshot for ARCHIVED items or ids missing from the master catalog.
    * @example Chicken Burger
    * @type string
    */
