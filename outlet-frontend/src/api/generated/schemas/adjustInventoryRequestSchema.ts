@@ -7,6 +7,6 @@ import * as z from 'zod'
 
 export const adjustInventoryRequestSchema = z.object({
   menuItemId: z.string().describe('Local catalog item to adjust.').meta({ examples: ['9708835e-2e21-465a-87e9-5f8d56cd44ab'] }),
-  deltaQuantity: z.number().describe('Signed quantity delta applied to on-hand stock (±1,000,000).').meta({ examples: [50] }),
+  deltaQuantity: z.number().describe('Signed, nonzero quantity delta applied to on-hand stock (±1,000,000).').meta({ examples: [50] }),
   reason: z.enum(['RESTOCK', 'WRITE_OFF', 'RECOUNT']).meta({ examples: ['RESTOCK'] }),
 })

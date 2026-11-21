@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsIn, IsInt, IsUUID, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsUUID, Max, Min, NotEquals } from 'class-validator';
 
 export const STOCK_ADJUSTMENT_REASONS = ['RESTOCK', 'WRITE_OFF', 'RECOUNT'] as const;
 export type StockAdjustmentReason = (typeof STOCK_ADJUSTMENT_REASONS)[number];
@@ -14,11 +14,12 @@ export class AdjustInventoryRequest {
 
   @ApiProperty({
     example: 50,
-    description: 'Signed quantity delta applied to on-hand stock (±1,000,000).',
+    description: 'Signed, nonzero quantity delta applied to on-hand stock (±1,000,000).',
   })
   @IsInt()
   @Min(-1_000_000)
   @Max(1_000_000)
+  @NotEquals(0, { message: 'deltaQuantity must be nonzero.' })
   deltaQuantity!: number;
 
   @ApiProperty({ example: 'RESTOCK', enum: STOCK_ADJUSTMENT_REASONS })

@@ -330,6 +330,18 @@ describeWithDeps('Outlet sales (e2e)', () => {
     expect(movement.request_id).toBeTruthy(); // FR-04: request ID recorded
   });
 
+  it('rejects a zero-delta adjustment with 400 VALIDATION_FAILED (no phantom audit row)', async () => {
+    const before = await stockOf(ITEM.burger);
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/inventory/adjustments')
+      .set('Authorization', `Bearer ${managerToken}`)
+      .send({ menuItemId: ITEM.burger, deltaQuantity: 0, reason: 'RECOUNT' })
+      .expect(400);
+    expect(response.body.error.code).toBe('VALIDATION_FAILED');
+    // Nothing was written: stock and version untouched.
+    expect(await stockOf(ITEM.burger)).toBe(before);
+  });
+
   it('blocks sales with 503 SYNC_TEMPORARILY_UNAVAILABLE once the grace window lapses (AT-11)', async () => {
     await sql(app)(
       "UPDATE menu_sync_state SET last_sync_at = now() - interval '73 hours'",

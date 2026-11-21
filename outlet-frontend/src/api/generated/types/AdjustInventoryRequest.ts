@@ -19,7 +19,7 @@ export type AdjustInventoryRequest = {
    */
   menuItemId: string;
   /**
-   * @description Signed quantity delta applied to on-hand stock (±1,000,000).
+   * @description Signed, nonzero quantity delta applied to on-hand stock (±1,000,000).
    * @example 50
    * @type number
    */
