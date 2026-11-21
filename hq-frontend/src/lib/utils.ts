@@ -29,3 +29,15 @@ export function formatMinor(
     ? `$${formatted}`
     : `${formatted} ${currencyCode}`
 }
+
+/**
+ * Renders an ISO 8601 UTC instant for display (`2026-11-20 04:02 UTC`).
+ * Reporting surfaces always disclose in UTC (PRD §10) so watermarks never
+ * drift with the viewer's locale.
+ */
+export function formatInstantUtc(instant: string | null | undefined): string {
+  if (!instant) return '—'
+  const date = new Date(instant)
+  if (Number.isNaN(date.getTime())) return '—'
+  return `${date.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+}

@@ -2,6 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router'
 import { hasPermission } from '#/lib/permissions'
 import { logout } from '#/features/auth/api'
 import { useSession } from '#/features/auth/session'
+import { defaultReportSearch } from '#/routes/_auth/reports'
 
 export default function Header() {
   const session = useSession()
@@ -51,6 +52,16 @@ export default function Header() {
                   activeProps={{ className: 'nav-link is-active' }}
                 >
                   Outlets
+                </Link>
+              ) : null}
+              {hasPermission(user, 'reports.read') ? (
+                <Link
+                  to="/reports"
+                  search={defaultReportSearch()}
+                  className="nav-link"
+                  activeProps={{ className: 'nav-link is-active' }}
+                >
+                  Reports
                 </Link>
               ) : null}
               {hasPermission(user, 'users.read') ? (

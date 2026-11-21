@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthDashboardRouteImport } from './routes/_auth/dashboard'
 import { Route as AuthMenuRouteImport } from './routes/_auth/menu'
+import { Route as AuthReportsRouteImport } from './routes/_auth/reports'
 import { Route as AuthUsersRouteImport } from './routes/_auth/users'
 import { Route as AuthOutletsIndexRouteImport } from './routes/_auth/outlets.index'
 import { Route as AuthOutletsOutletIdRouteImport } from './routes/_auth/outlets.$outletId'
@@ -42,6 +43,11 @@ const AuthMenuRoute = AuthMenuRouteImport.update({
   path: '/menu',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthReportsRoute = AuthReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthUsersRoute = AuthUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthDashboardRoute
   '/menu': typeof AuthMenuRoute
+  '/reports': typeof AuthReportsRoute
   '/users': typeof AuthUsersRoute
   '/outlets/$outletId': typeof AuthOutletsOutletIdRoute
   '/outlets/': typeof AuthOutletsIndexRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/dashboard': typeof AuthDashboardRoute
   '/menu': typeof AuthMenuRoute
+  '/reports': typeof AuthReportsRoute
   '/users': typeof AuthUsersRoute
   '/outlets/$outletId': typeof AuthOutletsOutletIdRoute
   '/outlets': typeof AuthOutletsIndexRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_auth/dashboard': typeof AuthDashboardRoute
   '/_auth/menu': typeof AuthMenuRoute
+  '/_auth/reports': typeof AuthReportsRoute
   '/_auth/users': typeof AuthUsersRoute
   '/_auth/outlets/$outletId': typeof AuthOutletsOutletIdRoute
   '/_auth/outlets/': typeof AuthOutletsIndexRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard'
     | '/menu'
+    | '/reports'
     | '/users'
     | '/outlets/$outletId'
     | '/outlets/'
@@ -103,6 +113,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/dashboard'
     | '/menu'
+    | '/reports'
     | '/users'
     | '/outlets/$outletId'
     | '/outlets'
@@ -113,6 +124,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/_auth/dashboard'
     | '/_auth/menu'
+    | '/_auth/reports'
     | '/_auth/users'
     | '/_auth/outlets/$outletId'
     | '/_auth/outlets/'
@@ -161,6 +173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMenuRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/reports': {
+      id: '/_auth/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof AuthReportsRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/users': {
       id: '/_auth/users'
       path: '/users'
@@ -188,6 +207,7 @@ declare module '@tanstack/react-router' {
 interface AuthRouteChildren {
   AuthDashboardRoute: typeof AuthDashboardRoute
   AuthMenuRoute: typeof AuthMenuRoute
+  AuthReportsRoute: typeof AuthReportsRoute
   AuthUsersRoute: typeof AuthUsersRoute
   AuthOutletsOutletIdRoute: typeof AuthOutletsOutletIdRoute
   AuthOutletsIndexRoute: typeof AuthOutletsIndexRoute
@@ -196,6 +216,7 @@ interface AuthRouteChildren {
 const AuthRouteChildren: AuthRouteChildren = {
   AuthDashboardRoute: AuthDashboardRoute,
   AuthMenuRoute: AuthMenuRoute,
+  AuthReportsRoute: AuthReportsRoute,
   AuthUsersRoute: AuthUsersRoute,
   AuthOutletsOutletIdRoute: AuthOutletsOutletIdRoute,
   AuthOutletsIndexRoute: AuthOutletsIndexRoute,
