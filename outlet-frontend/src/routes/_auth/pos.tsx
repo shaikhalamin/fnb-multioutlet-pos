@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { z } from 'zod'
 import { ApiError } from '#/api/axios'
 import type { SaleResponse } from '#/api/generated/types/SaleResponse'
 import { fetchMenu, submitSale } from '#/features/pos/api'
 import type { MenuItem } from '#/features/pos/api'
+import { mintIdempotencyKey, saleAttemptStore } from '#/features/pos/attempt'
 import { posKeys } from '#/features/pos/keys'
 import { useSession } from '#/features/auth/session'
 import { hasPermission } from '#/lib/permissions'
@@ -18,16 +19,13 @@ export const Route = createFileRoute('/_auth/pos')({ component: PosPage })
 const cartSchema = z.record(z.string().uuid(), z.number().int().min(1))
 
 /**
- * Financial-action discipline (AGENTS §4.4): the idempotency key lives in a
- * ref — minted on the first attempt of a sale, reused verbatim on every
- * retry/time-out, and cleared only on a committed response or explicit
- * abandonment. Never a second key for the same attempt.
+ * Financial-action discipline (AGENTS §4.4, outlet-AGENTS rule 4): the
+ * idempotency key and its cart lines live in the session-scoped attempt
+ * store — minted on the first attempt of a sale, reused verbatim on every
+ * retry/time-out (even across navigation away and back), and cleared only
+ * on a committed response or explicit abandonment. Never a second key for
+ * the same attempt.
  */
-type KeyRef = { current: string | null }
-
-function mintIdempotencyKey(register: string): string {
-  return `pos-${register}-${globalThis.crypto.randomUUID()}`
-}
 
 function errorFor(cause: unknown): string {
   if (cause instanceof ApiError) {
@@ -76,12 +74,22 @@ function PosPage() {
   })
 
   // Cart: menuItemId → quantity. Client state, but every financial truth
-  // (price/stock/total) renders from server data only.
-  const [cart, setCart] = useState<Record<string, number>>({})
+  // (price/stock/total) renders from server data only. A pending attempt
+  // restores its cart so a retry after navigation back to /pos replays the
+  // same key with the same lines.
+  const [cart, setCart] = useState<Record<string, number>>(() =>
+    Object.fromEntries(
+      (saleAttemptStore.get()?.lines ?? []).map((line) => [
+        line.menuItemId,
+        line.quantity,
+      ]),
+    ),
+  )
   const [error, setError] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<SaleResponse | null>(null)
-  const idempotencyKeyRef = useRef<string | null>(null) as KeyRef
-  const [keyPreview, setKeyPreview] = useState<string | null>(null)
+  const [keyPreview, setKeyPreview] = useState<string | null>(
+    () => saleAttemptStore.get()?.idempotencyKey ?? null,
+  )
 
   const byId = useMemo(() => {
     const map = new Map<string, MenuItem>()
@@ -101,23 +109,29 @@ function PosPage() {
 
   const checkout = useMutation({
     mutationFn: (lines: Array<{ menuItemId: string; quantity: number }>) => {
-      // One key per attempt: mint on first submit, keep stable on retries.
-      idempotencyKeyRef.current ??= mintIdempotencyKey('register')
-      setKeyPreview(idempotencyKeyRef.current)
-      return submitSale(idempotencyKeyRef.current, lines)
+      // One key per attempt: a pending attempt replays its frozen lines and
+      // key (identical request hash); a fresh attempt mints a new key.
+      const pending = saleAttemptStore.get()
+      const attempt = pending ?? {
+        idempotencyKey: mintIdempotencyKey('register'),
+        lines,
+      }
+      saleAttemptStore.set(attempt)
+      setKeyPreview(attempt.idempotencyKey)
+      return submitSale(attempt.idempotencyKey, attempt.lines)
     },
     onSuccess: (sale) => {
       setReceipt(sale)
       setCart({})
       setError(null)
       // Retire the attempt: the next sale is a new attempt with a new key.
-      idempotencyKeyRef.current = null
+      saleAttemptStore.clear()
       setKeyPreview(null)
       void queryClient.invalidateQueries({ queryKey: posKeys.menu() })
     },
     onError: (cause) => setError(errorFor(cause)),
     // No retry-on-error at the mutation layer: the human decides, and the
-    // same key ref guarantees the retry is idempotent.
+    // stable attempt key guarantees the retry is idempotent.
   })
 
   if (!canSell) {
@@ -135,9 +149,21 @@ function PosPage() {
 
   const items = menu.data ?? []
 
-  function addToCart(menuItemId: string): void {
+  function editCart(
+    apply: (current: Record<string, number>) => Record<string, number>,
+  ): void {
     setError(null)
-    setCart((current) => {
+    // Editing the cart after a failed attempt changes the attempted sale —
+    // retire the pending key so the next charge mints a fresh attempt.
+    if (saleAttemptStore.get()) {
+      saleAttemptStore.clear()
+      setKeyPreview(null)
+    }
+    setCart(apply)
+  }
+
+  function addToCart(menuItemId: string): void {
+    editCart((current) => {
       const next = { ...current, [menuItemId]: (current[menuItemId] ?? 0) + 1 }
       cartSchema.parse(next) // UX-only guard (AGENTS §4.2)
       return next
@@ -145,7 +171,7 @@ function PosPage() {
   }
 
   function setQuantity(menuItemId: string, quantity: number): void {
-    setCart((current) => {
+    editCart((current) => {
       const next = { ...current }
       if (quantity <= 0) delete next[menuItemId]
       else next[menuItemId] = quantity
@@ -165,7 +191,7 @@ function PosPage() {
   }
 
   function abandonAttempt(): void {
-    idempotencyKeyRef.current = null
+    saleAttemptStore.clear()
     setKeyPreview(null)
     setError(null)
   }
@@ -442,7 +468,7 @@ function PosPage() {
             >
               {checkout.isPending ? 'Charging…' : 'Charge sale'}
             </button>
-            {idempotencyKeyRef.current ? (
+            {keyPreview ? (
               <button
                 type="button"
                 className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-4 py-2.5 text-xs font-semibold text-[var(--sea-ink)]"
