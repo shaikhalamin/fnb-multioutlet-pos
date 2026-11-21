@@ -373,10 +373,29 @@ describeWithDeps('HQ sync surface (e2e)', () => {
   });
 
   it('AT-21: out-of-order delivery advances the checkpoint only contiguously', async () => {
+    // A THROWAWAY outlet keeps this test's watermark-derived sequences in an
+    // isolated sequence space: pushing watermark+1..+3 for a real outlet
+    // would burn sequence numbers its live worker allocates later (identity
+    // conflicts by design, §8.5) — the spec must not pollute real state.
+    const throwaway = (
+      await request(app.getHttpServer())
+        .post('/api/v1/outlets')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ code: `T${randomUUID().slice(0, 4)}`, name: 'AT-21 throwaway', timezone: 'UTC' })
+        .expect(201)
+    ).body.data as { id: string };
+    const key = (
+      await request(app.getHttpServer())
+        .post(`/api/v1/outlets/${throwaway.id}/api-keys`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({})
+        .expect(201)
+    ).body.data as IssuedKey;
+
     const before = (
       await request(app.getHttpServer())
         .get('/api/v1/sync/v1/checkpoint')
-        .set('Authorization', auth(keyA))
+        .set('Authorization', auth(key))
         .expect(200)
     ).body.data;
     const watermark = BigInt(before.highestContiguousSequence);
@@ -385,30 +404,30 @@ describeWithDeps('HQ sync surface (e2e)', () => {
     const s3 = (watermark + 3n).toString();
 
     // Highest first: accepted, but the watermark must not move past its gap.
-    await pushBatch(keyA, [saleEvent(outletA.id, s3)]).expect(200);
+    await pushBatch(key, [saleEvent(throwaway.id, s3)]).expect(200);
     const afterHigh = (
       await request(app.getHttpServer())
         .get('/api/v1/sync/v1/checkpoint')
-        .set('Authorization', auth(keyA))
+        .set('Authorization', auth(key))
         .expect(200)
     ).body.data;
     expect(BigInt(afterHigh.highestContiguousSequence)).toBe(watermark);
     expect(afterHigh.missingRanges).toContainEqual({ from: s1, to: s2 });
 
-    await pushBatch(keyA, [saleEvent(outletA.id, s1)]).expect(200);
+    await pushBatch(key, [saleEvent(throwaway.id, s1)]).expect(200);
     const afterOne = (
       await request(app.getHttpServer())
         .get('/api/v1/sync/v1/checkpoint')
-        .set('Authorization', auth(keyA))
+        .set('Authorization', auth(key))
         .expect(200)
     ).body.data;
     expect(BigInt(afterOne.highestContiguousSequence)).toBe(watermark + 1n);
 
-    await pushBatch(keyA, [saleEvent(outletA.id, s2)]).expect(200);
+    await pushBatch(key, [saleEvent(throwaway.id, s2)]).expect(200);
     const afterFill = (
       await request(app.getHttpServer())
         .get('/api/v1/sync/v1/checkpoint')
-        .set('Authorization', auth(keyA))
+        .set('Authorization', auth(key))
         .expect(200)
     ).body.data;
     expect(BigInt(afterFill.highestContiguousSequence)).toBe(watermark + 3n);

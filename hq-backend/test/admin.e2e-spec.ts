@@ -110,11 +110,14 @@ describeWithDeps('HQ admin surface (e2e)', () => {
       .get('/api/v1/outlets')
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    expect(outlets.body.data.map((outlet: { code: string }) => outlet.code).sort()).toEqual([
-      'A',
-      'B',
-      'C',
-    ]);
+    // Single-letter codes = the seeded demo outlets; the sync e2e provisions
+    // throwaway outlets (T####) for isolated AT-21 sequence pushes.
+    expect(
+      outlets.body.data
+        .map((outlet: { code: string }) => outlet.code)
+        .filter((code: string) => code.length === 1)
+        .sort(),
+    ).toEqual(['A', 'B', 'C']);
   });
 
   it('AT-01: assigns the burger to A and B only; C never sees it', async () => {
