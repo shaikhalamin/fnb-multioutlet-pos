@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { z } from 'zod';
 import type { Env } from '../../../config/env.schema.js';
@@ -30,6 +30,9 @@ import type { SyncEventV1 } from './generated/types/SyncEventV1.js';
 
 /** Request timeout for every HQ call (PRD §7.4: short timeouts). */
 const HQ_TIMEOUT_MS = 10_000;
+
+/** Test-only transport override; never registered in production DI. */
+export const HQ_SYNC_TRANSPORT = Symbol('HQ_SYNC_TRANSPORT');
 
 /**
  * Sanitized HQ sync failure: never carries the axios config (which would
@@ -74,6 +77,8 @@ export class HqSyncClient {
   constructor(
     config: ConfigService<Env, true>,
     /** Test hook: replaces the axios transport with a fake returning `Response`s. */
+    @Optional()
+    @Inject(HQ_SYNC_TRANSPORT)
     transportOverride?: Transport,
   ) {
     const keyId = config.get('HQ_OUTLET_KEY_ID', { infer: true });
