@@ -13,6 +13,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { MenuCacheModule } from './modules/menu-cache/menu-cache.module.js';
+import { SalesModule } from './modules/sales/sales.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
@@ -27,6 +28,7 @@ import { UsersModule } from './modules/users/users.module.js';
     UsersModule,
     MenuCacheModule,
     InventoryModule,
+    SalesModule,
     HealthModule,
   ],
   providers: [

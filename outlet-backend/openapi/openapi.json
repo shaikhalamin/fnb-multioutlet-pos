@@ -368,6 +368,163 @@
         ]
       }
     },
+    "/sales": {
+      "post": {
+        "operationId": "SalesController_createSale",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSaleRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED — missing/invalid Idempotency-Key or body"
+          },
+          "409": {
+            "description": "INSUFFICIENT_STOCK / IDEMPOTENCY_KEY_REUSED"
+          },
+          "422": {
+            "description": "ITEM_NOT_ASSIGNED / ITEM_INACTIVE"
+          },
+          "503": {
+            "description": "SYNC_TEMPORARILY_UNAVAILABLE — offline grace expired"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Create an atomic multi-item sale (requires an Idempotency-Key header).",
+        "tags": [
+          "Sales"
+        ]
+      },
+      "get": {
+        "operationId": "SalesController_listSales",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive lower bound on soldAt (ISO 8601 UTC).",
+            "schema": {
+              "example": "2026-11-01T00:00:00.000Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive upper bound on soldAt (ISO 8601 UTC).",
+            "schema": {
+              "example": "2026-11-30T23:59:59.999Z",
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 200,
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Opaque cursor from meta.nextCursor.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SaleSummaryResponse"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Local sale history (keyset pagination, optional from/to).",
+        "tags": [
+          "Sales"
+        ]
+      }
+    },
+    "/sales/{id}": {
+      "get": {
+        "operationId": "SalesController_getSale",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaleResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Receipt detail with immutable line snapshots and sync status.",
+        "tags": [
+          "Sales"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -790,6 +947,207 @@
           "quantityOnHand",
           "version",
           "updatedAt"
+        ]
+      },
+      "CreateSaleRequestLine": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+            "description": "Local catalog item UUID."
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2,
+            "minimum": 1,
+            "maximum": 100000,
+            "description": "Line quantity; duplicates are merged by menuItemId server-side."
+          }
+        },
+        "required": [
+          "menuItemId",
+          "quantity"
+        ]
+      },
+      "CreateSaleRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "1..100 distinct lines; duplicate menuItemIds are merged before validation.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateSaleRequestLine"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "SaleItemResponse": {
+        "type": "object",
+        "properties": {
+          "saleItemId": {
+            "type": "string",
+            "example": "64750166-32a4-46f8-9285-f536f5b03213"
+          },
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "name": {
+            "type": "string",
+            "example": "Chicken Burger",
+            "description": "Immutable name snapshot captured at sale time (FR-02)."
+          },
+          "sku": {
+            "type": "string",
+            "example": "BURGER-01",
+            "description": "Immutable SKU snapshot captured at sale time."
+          },
+          "quantity": {
+            "type": "number",
+            "example": 2
+          },
+          "unitPriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "Snapshot unit price, integer minor units, decimal string."
+          },
+          "subtotalMinor": {
+            "type": "string",
+            "example": "2400",
+            "description": "Line subtotal, integer minor units, decimal string."
+          }
+        },
+        "required": [
+          "saleItemId",
+          "menuItemId",
+          "name",
+          "sku",
+          "quantity",
+          "unitPriceMinor",
+          "subtotalMinor"
+        ]
+      },
+      "SaleResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0a44e56a-628e-492a-81e0-83f4a4d68f76"
+          },
+          "receiptNo": {
+            "type": "string",
+            "example": "A-000001",
+            "description": "Outlet-scoped display receipt."
+          },
+          "outletId": {
+            "type": "string",
+            "example": "11111111-1111-4111-8111-111111111111"
+          },
+          "status": {
+            "type": "string",
+            "example": "COMPLETED",
+            "enum": [
+              "COMPLETED"
+            ]
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SaleItemResponse"
+            }
+          },
+          "totalMinor": {
+            "type": "string",
+            "example": "3900",
+            "description": "Total, integer minor units, decimal string."
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "1",
+            "description": "Local catalog revision the sale was priced against, decimal string."
+          },
+          "soldAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z"
+          },
+          "syncStatus": {
+            "type": "string",
+            "example": "PENDING",
+            "enum": [
+              "PENDING",
+              "RETRY",
+              "DELIVERED",
+              "QUARANTINED"
+            ],
+            "description": "Resolved from the outbox row; separate from sale status (PRD §8.7)."
+          }
+        },
+        "required": [
+          "id",
+          "receiptNo",
+          "outletId",
+          "status",
+          "currencyCode",
+          "items",
+          "totalMinor",
+          "catalogRevision",
+          "soldAt",
+          "syncStatus"
+        ]
+      },
+      "SaleSummaryResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "0a44e56a-628e-492a-81e0-83f4a4d68f76"
+          },
+          "receiptNo": {
+            "type": "string",
+            "example": "A-000001"
+          },
+          "totalMinor": {
+            "type": "string",
+            "example": "3900",
+            "description": "Total, integer minor units, decimal string."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          },
+          "status": {
+            "type": "string",
+            "example": "COMPLETED",
+            "enum": [
+              "COMPLETED"
+            ]
+          },
+          "soldAt": {
+            "type": "string",
+            "example": "2026-11-20T04:02:03.000Z"
+          },
+          "lineCount": {
+            "type": "number",
+            "example": 3,
+            "description": "Number of merged sale lines."
+          }
+        },
+        "required": [
+          "id",
+          "receiptNo",
+          "totalMinor",
+          "currencyCode",
+          "status",
+          "soldAt",
+          "lineCount"
         ]
       }
     }

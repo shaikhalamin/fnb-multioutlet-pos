@@ -133,7 +133,9 @@ export class OutboxRepository {
       publishedAt: null,
       lastError: null,
     });
-    await repo.insert(row);
+    // jsonb column typing is a deep-partial mismatch for TypeORM's insert;
+    // the row shape is exact by construction.
+    await repo.insert(row as never);
     return row;
   }
 
