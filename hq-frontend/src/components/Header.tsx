@@ -60,7 +60,7 @@ export default function Header() {
               {hasPermission(user, 'reports.read') ? (
                 <Link
                   to="/reports"
-                  search={defaultReportSearch()}
+                  search={{ ...defaultReportSearch(), tab: 'revenue' }}
                   className="nav-link"
                   activeProps={{ className: 'nav-link is-active' }}
                 >

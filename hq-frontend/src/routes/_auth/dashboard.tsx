@@ -102,7 +102,11 @@ function DashboardPage() {
                 : 'Failed to load revenue.'}
             </p>
           ) : (
-            <Link to="/reports" search={window} className="nav-link text-xs">
+            <Link
+              to="/reports"
+              search={{ ...window, tab: 'revenue' }}
+              className="nav-link text-xs"
+            >
               Open reports with date filters →
             </Link>
           )}
@@ -169,7 +173,7 @@ function DashboardPage() {
           {canReadReports ? (
             <Link
               to="/reports"
-              search={window}
+              search={{ ...window, tab: 'revenue' }}
               className="btn-outline btn-sm no-underline"
             >
               Reports

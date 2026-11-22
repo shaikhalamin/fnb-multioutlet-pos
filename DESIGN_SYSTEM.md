@@ -181,6 +181,13 @@ lg:text-display-mega` (32 → 48 → 64 across mobile/tablet/desktop).
   outline is `border-muted-foreground` (≈ 4.8:1), not the input hairline: at
   18px `--hairline-strong` is ≈ 1.5:1 against the card and a control boundary
   needs 3:1 (WCAG 1.4.11).
+- Section tabs (HQ console): `components/SectionTabs.tsx` is the only in-page
+  tab pattern — a segmented control on a `--surface-strong` track with one pill
+  per section. The section on screen is the raised white pill (`--surface-card`,
+  `--hairline-strong` outline, the single `shadow-soft`, ink text); the others
+  are body-colored text. Tabs are real links carrying `aria-current="page"`,
+  with the active section in the URL. It is composed from utilities, so it adds
+  no class to `src/styles.css`; once the pills wrap (phones) each fills its row.
 - `components/ui/*` (shadcn primitives) consume the semantic tokens; `button`
   is pill-geometry. When adding components via
   `pnpm dlx shadcn@latest add <name>`, they inherit the palette — afterwards

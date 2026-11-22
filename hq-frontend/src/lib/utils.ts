@@ -61,6 +61,34 @@ export function minorToMajor(minor: string): string {
 }
 
 /**
+ * Parses a canonical minor-units decimal string ("1200") into a bigint, or
+ * null when the value is not canonical — the only way money enters
+ * arithmetic (AGENTS.md §4.3: bigint only, never `Number()`).
+ */
+export function minorToBigInt(minor: string | null | undefined): bigint | null {
+  const raw = minor?.trim() ?? ''
+  return /^(0|[1-9][0-9]*)$/.test(raw) ? BigInt(raw) : null
+}
+
+/**
+ * One part's share of a total, in basis points (0–10000) — the proportional
+ * width behind report bars. The division is bigint math; only its bounded
+ * result (no longer a money value) is returned as a number. Null when the
+ * total is zero or either side is not a canonical minor-units string.
+ */
+export function shareBps(
+  part: string | null | undefined,
+  total: string | null | undefined,
+): number | null {
+  const partMinor = minorToBigInt(part)
+  const totalMinor = minorToBigInt(total)
+  if (partMinor === null || totalMinor === null || totalMinor === 0n) {
+    return null
+  }
+  return Math.min(10_000, Number((partMinor * 10_000n) / totalMinor))
+}
+
+/**
  * Renders an ISO 8601 UTC instant for display (`2026-11-20 04:02 UTC`).
  * Reporting surfaces always disclose in UTC (PRD §10) so watermarks never
  * drift with the viewer's locale.

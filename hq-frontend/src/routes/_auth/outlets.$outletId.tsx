@@ -19,6 +19,7 @@ import { hasPermission } from '#/lib/permissions'
 import { formatMinor } from '#/lib/utils'
 import { outletKeys } from '#/features/outlets/keys'
 import { CopyValue } from '#/components/CopyValue'
+import { SectionTabs, sectionTabClass } from '#/components/SectionTabs'
 import { Checkbox } from '#/components/ui/checkbox'
 import { cn } from 'cn'
 
@@ -100,16 +101,13 @@ function OutletDetailPage() {
         </p>
       ) : null}
 
-      <nav
-        aria-label="Outlet sections"
-        className="mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline pb-3"
-      >
+      <SectionTabs label="Outlet sections" className="mb-6">
         <Link
           to="/outlets/$outletId"
           params={{ outletId }}
           search={{ tab: 'assignments' }}
           aria-current={tab === 'assignments' ? 'page' : undefined}
-          className={cn('nav-link', tab === 'assignments' && 'is-active')}
+          className={sectionTabClass(tab === 'assignments')}
         >
           Menu assignments
         </Link>
@@ -118,11 +116,11 @@ function OutletDetailPage() {
           params={{ outletId }}
           search={{ tab: 'settings' }}
           aria-current={tab === 'settings' ? 'page' : undefined}
-          className={cn('nav-link', tab === 'settings' && 'is-active')}
+          className={sectionTabClass(tab === 'settings')}
         >
           Settings
         </Link>
-      </nav>
+      </SectionTabs>
 
       {tab === 'assignments' ? (
         <AssignmentMatrix
