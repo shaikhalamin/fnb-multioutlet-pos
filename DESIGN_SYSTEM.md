@@ -157,6 +157,9 @@ lg:text-display-mega` (32 → 48 → 64 across mobile/tablet/desktop).
   single theme source.
 - Component classes live in `@layer components`, so plain utilities can
   override them per-usage (e.g. `text-input h-9 w-28`).
+- Element defaults (`a`, …) must live in `@layer base`. An unlayered rule
+  outranks every layer and silently overrides component classes — an unlayered
+  `a { color }` left link CTAs (`a.btn-primary`) with ink text on the ink pill.
 - `components/ui/*` (shadcn primitives) consume the semantic tokens; `button`
   is pill-geometry. When adding components via
   `pnpm dlx shadcn@latest add <name>`, they inherit the palette — afterwards

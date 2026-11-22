@@ -244,15 +244,20 @@ body {
   background: color-mix(in oklab, var(--ink) 8%, transparent);
 }
 
-a {
-  color: var(--ink);
-  text-decoration-color: var(--hairline-strong);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
+/* Element defaults must sit in `@layer base`: an unlayered rule outranks every
+   layer, so a bare `a { color }` silently overrides component classes (it left
+   `a.btn-primary` with ink text on the ink pill). */
+@layer base {
+  a {
+    color: var(--ink);
+    text-decoration-color: var(--hairline-strong);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+  }
 
-a:hover {
-  text-decoration-color: var(--ink);
+  a:hover {
+    text-decoration-color: var(--ink);
+  }
 }
 
 code {
