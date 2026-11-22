@@ -14,8 +14,6 @@ process.env.OPENAPI_EXPORT = 'true';
 // enough for deterministic runs on any machine.
 process.env.DATABASE_URL ??= 'postgresql://openapi-export:unused@localhost:5432/unused';
 process.env.REDIS_URL ??= 'redis://localhost:6379';
-process.env.OUTLET_ID ??= '00000000-0000-4000-8000-000000000000';
-process.env.OUTLET_CODE ??= 'EXPORT';
 process.env.OUTLET_JWT_ISSUER ??= 'openapi-export';
 process.env.OUTLET_JWT_AUDIENCE ??= 'openapi-export';
 process.env.OUTLET_JWT_ACCESS_SECRET ??= 'openapi-export-access-secret-0123456789abcdef';

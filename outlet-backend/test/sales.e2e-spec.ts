@@ -31,6 +31,10 @@ describeWithDeps('Outlet sales (e2e)', () => {
   let managerToken: string;
   let cashierToken: string;
   let clerkToken: string;
+  // Provisioned identity (seed CLI or setup wizard) — asserted from the
+  // `outlet_identity` row, never from the environment.
+  let outletId: string;
+  let outletCode: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -39,6 +43,12 @@ describeWithDeps('Outlet sales (e2e)', () => {
     app = moduleFixture.createNestApplication();
     configureE2eApp(app);
     await app.init();
+
+    const [identity] = await sql(app)<{ outlet_id: string; outlet_code: string }>(
+      'SELECT outlet_id, outlet_code FROM outlet_identity',
+    );
+    outletId = identity.outlet_id;
+    outletCode = identity.outlet_code;
 
     await ensureDemoCatalog(app);
     managerToken = await loginAs(app, SEEDED_USERS.manager.email, SEEDED_USERS.manager.password);
@@ -378,8 +388,8 @@ describeWithDeps('Outlet sales (e2e)', () => {
       .set('Authorization', `Bearer ${managerToken}`)
       .expect(200);
     const status = response.body.data;
-    expect(status.outletId).toBe(process.env.OUTLET_ID);
-    expect(status.outletCode).toBe('A');
+    expect(status.outletId).toBe(outletId);
+    expect(status.outletCode).toBe(outletCode);
     // Any revision ≥ 1: the Phase-3 worker advances the checkpoint from HQ.
     expect(BigInt(status.lastAppliedRevision)).toBeGreaterThanOrEqual(1n);
     expect(status.grace.expired).toBe(false);

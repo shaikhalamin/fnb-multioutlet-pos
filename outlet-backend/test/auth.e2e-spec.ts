@@ -2,7 +2,7 @@ import request from 'supertest';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppModule } from '../src/app.module.js';
-import { configureE2eApp, type E2eApp, SEEDED_USERS } from './helpers.js';
+import { configureE2eApp, type E2eApp, SEEDED_USERS, sql } from './helpers.js';
 
 /**
  * Outlet auth lifecycle against real PostgreSQL + Redis (PRD §17): login,
@@ -24,6 +24,9 @@ function cookieOf(response: request.Response, name: string): string | undefined 
 
 describeWithDeps('Outlet auth (e2e)', () => {
   let app: E2eApp;
+  // Provisioned identity (seed CLI or setup wizard) — asserted from the
+  // `outlet_identity` row, never from the environment.
+  let outletId: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -32,6 +35,9 @@ describeWithDeps('Outlet auth (e2e)', () => {
     app = moduleFixture.createNestApplication();
     configureE2eApp(app);
     await app.init();
+
+    const [identity] = await sql(app)<{ outlet_id: string }>('SELECT outlet_id FROM outlet_identity');
+    outletId = identity.outlet_id;
   });
 
   afterAll(async () => {
@@ -71,7 +77,7 @@ describeWithDeps('Outlet auth (e2e)', () => {
     expect(response.body.data.user.roleCodes).toContain('OUTLET_CASHIER');
     expect(response.body.data.user.permissions).toContain('sales.create');
     // PRD §9.1 login example: the user carries the provisioned outletId.
-    expect(response.body.data.user.outletId).toBe(process.env.OUTLET_ID);
+    expect(response.body.data.user.outletId).toBe(outletId);
     // The refresh token must never appear in the JSON body (PRD §9.1).
     expect(JSON.stringify(response.body)).not.toContain('refreshToken');
 

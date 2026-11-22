@@ -11,8 +11,10 @@ import { z } from 'zod';
  * enforced by `apiEnvSchema`/`workerEnvSchema`: the outlet API issues human
  * JWTs, while the worker never issues outlet user JWTs (PRD §3, §9.2) — so
  * neither entrypoint can be accidentally provisioned with the other's
- * credentials. HQ sync credentials are NOT environment inputs: they live in
- * the `hq_connection` row written by the setup wizard (PRD §8.7).
+ * credentials. Outlet identity and HQ sync credentials are NOT environment
+ * inputs: identity lives in the `outlet_identity` row and HQ credentials in
+ * the `hq_connection` row, both written by the setup wizard (PRD §8.7) — the
+ * dev seed CLI writes the same rows for local, UI-less development.
  */
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
@@ -41,12 +43,10 @@ export const envSchema = z.object({
   DATABASE_URL: postgresUrl,
   REDIS_URL: redisUrl,
 
-  // Outlet identity (PRD §6.2) is provisioned once — through the setup
-  // wizard (UI pairing with HQ) or, for local development, the seed CLI.
-  // Optional here because the runtime source of truth is the
-  // `outlet_identity` row; the dev seed still reads these when present.
-  OUTLET_ID: z.uuid().optional(),
-  OUTLET_CODE: z.string().min(1).max(8).optional(),
+  // Outlet identity (PRD §6.2) is NOT an environment input: it is
+  // provisioned once into the `outlet_identity` row — through the setup
+  // wizard (UI pairing with HQ) or the fixed-identity dev seed — and every
+  // runtime consumer resolves it there (IdentityService).
 
   // API profile: outlet user JWT issuance (Phase 2).
   OUTLET_JWT_ISSUER: z.string().min(1).optional(),

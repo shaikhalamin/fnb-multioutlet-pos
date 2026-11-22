@@ -15,8 +15,6 @@ loadEnvFileGaps();
 
 process.env.DATABASE_URL ??= 'postgresql://vitest:vitest@localhost:5432/vitest';
 process.env.REDIS_URL ??= 'redis://localhost:6379';
-process.env.OUTLET_ID ??= '22222222-2222-4222-8222-222222222222';
-process.env.OUTLET_CODE ??= 'T';
 process.env.OUTLET_JWT_ISSUER ??= 'vitest-placeholder';
 process.env.OUTLET_JWT_AUDIENCE ??= 'vitest-placeholder';
 process.env.OUTLET_JWT_ACCESS_SECRET ??= 'vitest-access-secret-placeholder-0123456789ab';

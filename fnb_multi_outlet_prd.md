@@ -1004,7 +1004,7 @@ GET /api/v1/reports/revenue-by-outlet?from=2026-11-01T00:00:00Z&to=2026-12-01T00
 | `NODE_ENV`, `PORT`, `DATABASE_URL` | `NODE_ENV`, `PORT`, `DATABASE_URL` | `VITE_API_BASE_URL` |
 | `REDIS_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | `REDIS_URL`, `OUTLET_JWT_ACCESS_SECRET`, `OUTLET_JWT_REFRESH_SECRET` | No machine secrets |
 | `HQ_JWT_ISSUER`, `HQ_JWT_AUDIENCE` | `OUTLET_JWT_ISSUER`, `OUTLET_JWT_AUDIENCE` | Build-time public config only |
-| `OUTLET_KEY_PEPPER`, `CORS_ORIGINS` | `OUTLET_ID`, `OUTLET_CODE` (dev seed only) | Frontend app version |
+| `OUTLET_KEY_PEPPER`, `CORS_ORIGINS` | `CORS_ORIGINS`, `SYNC_MAX_BODY_BYTES` | Frontend app version |
 | `LOG_LEVEL`, `SYNC_MAX_BODY_BYTES` | `MENU_PULL_INTERVAL_MS` | — |
 | `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL` | `OUTBOX_BATCH_SIZE`, `OUTBOX_SWEEP_INTERVAL_MS`, `OFFLINE_GRACE_HOURS` | — |
 | `APP_ENTRYPOINT` (`api`/`worker`), `HEARTBEAT_INTERVAL_MS` (worker) | `APP_ENTRYPOINT` (`api`/`worker`), `HEARTBEAT_INTERVAL_MS` (worker) | — |
@@ -1030,7 +1030,7 @@ services:
   hq-web:           # apps/hq-frontend static web
   outlet-a-db:      # separate postgres database + volume
   outlet-a-redis:   # separate redis queue
-  outlet-a-api:     # apps/outlet-backend, OUTLET_ID=A identity
+  outlet-a-api:     # apps/outlet-backend, identity via setup wizard
   outlet-a-worker:  # outlet sync worker, HQ key from secret
   outlet-a-web:     # apps/outlet-frontend static web
 ```

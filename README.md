@@ -145,9 +145,9 @@ disclose `dataAsOf` while they wait). The POS sync-status banner and
 `GET /api/v1/sync/status` show menu revision and outbox backlog locally.
 
 > Local, UI-less development: `outlet-backend` still ships a dev seed
-> (`pnpm seed` with `OUTLET_ID`/`OUTLET_CODE` in `.env`) that provisions demo
-> users/catalog directly — useful for backend work without the wizard. The
-> Compose cluster intentionally does **not** run it.
+> (`pnpm seed`) that provisions a fixed demo identity plus demo users/catalog
+> directly — useful for backend work without the wizard. The Compose cluster
+> intentionally does **not** run it.
 
 ### Reset / teardown
 
@@ -241,11 +241,10 @@ Sign in to the Outlet A POS at http://localhost:8081 with a seeded account:
   All API access goes through Kubb-generated typed clients (Axios + Zod +
   TanStack Query) from the exported OpenAPI contract.
 
-Seed (idempotent; identity, roles, demo users, fixed-UUID catalog with
-burger/pizza/cola at 50/40/100 stock, counters, fresh sync state) — the
+Seed (idempotent; fixed demo identity, roles, demo users, fixed-UUID catalog
+with burger/pizza/cola at 50/40/100 stock, counters, fresh sync state) — the
 UI-less local development path; the production path is the setup wizard
-(step 4 above), and the seed is a no-op when `OUTLET_ID`/`OUTLET_CODE` are
-absent:
+(step 4 above), and the seed never overwrites an existing identity row:
 
 ```bash
 cd outlet-backend && pnpm seed          # or: docker compose run --rm outlet-a-api node dist/database/seed.js

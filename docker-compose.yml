@@ -231,8 +231,8 @@ services:
       REDIS_URL: redis://outlet-a-redis:6379
       # Outlet identity is provisioned through the setup wizard (PRD §8.7) —
       # the terminal starts empty and pairs with an outlet created in the HQ
-      # console. The dev seed CLI still honours OUTLET_ID/OUTLET_CODE when
-      # present for local runs outside Compose.
+      # console. For UI-less local development outside Compose, `pnpm seed`
+      # provisions a fixed demo identity straight into the database.
       OUTLET_JWT_ISSUER: ${OUTLET_JWT_ISSUER:-fnb-outlet}
       OUTLET_JWT_AUDIENCE: ${OUTLET_JWT_AUDIENCE:-fnb-outlet-api}
       OUTLET_JWT_ACCESS_SECRET: ${OUTLET_JWT_ACCESS_SECRET:-dev-only-outlet-access-secret-0123456789}

@@ -11,9 +11,7 @@ import { AppModule } from '../src/app.module.js';
  * required environment is absent, e.g. plain `pnpm test` without services.
  * Inert auth placeholders come from vitest.setup.ts.
  */
-const hasDependencies = Boolean(
-  process.env.DATABASE_URL && process.env.REDIS_URL && process.env.OUTLET_ID && process.env.OUTLET_CODE,
-);
+const hasDependencies = Boolean(process.env.DATABASE_URL && process.env.REDIS_URL);
 const describeWithDeps = hasDependencies ? describe : describe.skip;
 
 describeWithDeps('Outlet API (e2e)', () => {

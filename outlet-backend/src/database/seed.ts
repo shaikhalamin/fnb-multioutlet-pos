@@ -1,5 +1,4 @@
 import { DataSource } from 'typeorm';
-import { loadEnvFileGaps } from '../config/env.schema.js';
 import { buildCliDataSource } from './data-source.js';
 import { CatalogItemEntity } from './entities/catalog-item.entity.js';
 import { InventoryBalanceEntity } from './entities/inventory-balance.entity.js';
@@ -19,9 +18,10 @@ import {
  * grace policy passes). Natural keys make re-runs no-ops; existing rows are
  * never overwritten.
  *
- * The production provisioning path is the setup wizard (UI pairing with
- * HQ): when OUTLET_ID/OUTLET_CODE are absent this seed is a no-op — the
- * terminal stays empty and unpaired, ready for the wizard.
+ * Outlet identity is never an environment input (PRD §3, §8.7): the seed
+ * provisions the fixed demo Outlet-A identity below into an empty terminal;
+ * an existing identity row — e.g. one written by the setup wizard — is kept
+ * as-is and only topped up with demo data.
  */
 
 const log = (msg: string, payload: Record<string, unknown> = {}): void => {
@@ -32,6 +32,8 @@ const log = (msg: string, payload: Record<string, unknown> = {}): void => {
 
 /** Fixed demo identity for the local outlet-A stack (mirrors PRD examples). */
 const DEFAULT_COMPANY_ID = '22222222-2222-4222-8222-222222222222';
+const DEMO_OUTLET_ID = '11111111-1111-4111-8111-111111111111';
+const DEMO_OUTLET_CODE = 'A';
 
 const DEMO_USERS: ReadonlyArray<{
   envPrefix: string;
@@ -87,17 +89,7 @@ const DEMO_CATALOG: ReadonlyArray<{
   },
 ];
 
-async function seedIdentity(dataSource: DataSource): Promise<{ outletId: string; outletCode: string } | null> {
-  loadEnvFileGaps();
-  const outletId = process.env.OUTLET_ID;
-  const outletCode = process.env.OUTLET_CODE;
-  if (!outletId || !outletCode) {
-    log('seed_skipped_no_identity', {
-      hint: 'Leave this terminal unpaired and provision it via the setup wizard (HQ → Outlets → create → /setup)',
-    });
-    return null;
-  }
-
+async function seedIdentity(dataSource: DataSource): Promise<{ outletId: string; outletCode: string }> {
   const repo = dataSource.getRepository(OutletIdentityEntity);
   const existing = await repo.findOne({ where: {} });
   if (existing) {
@@ -106,15 +98,15 @@ async function seedIdentity(dataSource: DataSource): Promise<{ outletId: string;
   }
   await repo.insert(
     repo.create({
-      outletId,
-      outletCode,
+      outletId: DEMO_OUTLET_ID,
+      outletCode: DEMO_OUTLET_CODE,
       companyId: process.env.SEED_OUTLET_COMPANY_ID ?? DEFAULT_COMPANY_ID,
       timezone: process.env.SEED_OUTLET_TIMEZONE ?? 'UTC',
       currencyCode: 'USD',
     }),
   );
-  log('seed_identity_created', { outletId, outletCode });
-  return { outletId, outletCode };
+  log('seed_identity_created', { outletId: DEMO_OUTLET_ID, outletCode: DEMO_OUTLET_CODE });
+  return { outletId: DEMO_OUTLET_ID, outletCode: DEMO_OUTLET_CODE };
 }
 
 async function seedUsers(
@@ -184,7 +176,6 @@ async function main(): Promise<void> {
   try {
     await dataSource.initialize();
     const identity = await seedIdentity(dataSource);
-    if (!identity) return;
     const roleIds = await ensurePermissionsAndRoles(dataSource.manager);
     await seedUsers(dataSource, roleIds);
     await seedCatalogAndSyncState(dataSource, identity.outletId);
