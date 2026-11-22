@@ -1,4 +1,4 @@
-import { Link, useNavigate } from '@tanstack/react-router'
+import { Link, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { hasPermission } from '#/lib/permissions'
 import { logout } from '#/features/auth/api'
 import { useSession } from '#/features/auth/session'
@@ -7,7 +7,10 @@ import { defaultReportSearch } from '#/routes/_auth/reports'
 export default function Header() {
   const session = useSession()
   const navigate = useNavigate()
+  const matchRoute = useMatchRoute()
   const user = session.user
+  // The signed-out CTA leads to /login; don't link the sign-in page to itself.
+  const onLoginPage = Boolean(matchRoute({ to: '/login' }))
 
   async function handleLogout() {
     await logout()
@@ -118,7 +121,13 @@ export default function Header() {
               Sign out
             </button>
           </div>
-        ) : null}
+        ) : onLoginPage ? null : (
+          <div className="ml-auto flex items-center gap-3">
+            <Link to="/login" className="btn-outline btn-sm no-underline">
+              Sign in
+            </Link>
+          </div>
+        )}
       </nav>
     </header>
   )

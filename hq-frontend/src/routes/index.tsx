@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { Link, createFileRoute } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import { ApiError } from '#/api/axios'
 import { healthControllerGetHealth } from '#/api/generated/clients/healthControllerGetHealth'
 import { healthControllerGetHealthStatus200Schema } from '#/api/generated/schemas/healthControllerGetHealthSchema'
+import { refreshSessionNow } from '#/features/auth/api'
+import { useSession } from '#/features/auth/session'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -108,6 +111,16 @@ function HealthPanel() {
 }
 
 function App() {
+  const session = useSession()
+  const user = session.user
+
+  useEffect(() => {
+    // The landing page is public, so the `_auth` layout never restores the
+    // session here — without this a signed-in visitor (live refresh cookie)
+    // would still see the signed-out header and hero CTA.
+    if (!user) void refreshSessionNow()
+  }, [user])
+
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
       <section className="rise-in relative overflow-hidden py-10 sm:py-16">
@@ -130,7 +143,16 @@ function App() {
             typed contracts and observable services.
           </p>
           <div className="flex flex-wrap gap-3">
-            <a href="/api/v1/docs" className="btn-primary no-underline">
+            {user ? (
+              <Link to="/dashboard" className="btn-primary no-underline">
+                Open dashboard
+              </Link>
+            ) : (
+              <Link to="/login" className="btn-primary no-underline">
+                Sign in
+              </Link>
+            )}
+            <a href="/api/v1/docs" className="btn-outline no-underline">
               API Documentation
             </a>
           </div>
