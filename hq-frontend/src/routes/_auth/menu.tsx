@@ -11,14 +11,15 @@ import { menuControllerUpdateCategory } from '#/api/generated/clients/menuContro
 import { menuControllerUpdateItem } from '#/api/generated/clients/menuControllerUpdateItem'
 import { useSession } from '#/features/auth/session'
 import { hasPermission } from '#/lib/permissions'
-import { formatMinor } from '#/lib/utils'
+import { formatMinor, majorToMinor, minorToMajor } from '#/lib/utils'
 
 import { menuKeys } from '#/features/menu/keys'
 import { useMenuItems } from '#/features/menu/queries'
 
 export const Route = createFileRoute('/_auth/menu')({ component: MenuPage })
 
-const MINOR_PATTERN = /^(0|[1-9][0-9]*)$/
+/** Operator-typed dollars: nonnegative, at most two decimals ("10", "10.5", "0.99"). */
+const MAJOR_AMOUNT_PATTERN = /^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$/
 
 const categorySchema = z.object({
   name: z.string().min(1, 'Name is required.').max(80),
@@ -35,11 +36,11 @@ const itemSchema = z.object({
   name: z.string().min(1, 'Name is required.').max(160),
   description: z.string().max(1_000).optional(),
   categoryId: z.string().uuid('Pick a category.'),
-  defaultPriceMinor: z
+  defaultPrice: z
     .string()
     .regex(
-      MINOR_PATTERN,
-      'Price must be a whole number of minor units (e.g. 1050 for $10.50).',
+      MAJOR_AMOUNT_PATTERN,
+      'Price must be a dollar amount with up to two decimals (e.g. 10.50).',
     ),
   currencyCode: z.literal('USD'),
 })
@@ -191,7 +192,7 @@ const emptyItem: ItemForm = {
   name: '',
   description: '',
   categoryId: '',
-  defaultPriceMinor: '',
+  defaultPrice: '',
   currencyCode: 'USD',
 }
 
@@ -207,12 +208,17 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
     void queryClient.invalidateQueries({ queryKey: menuKeys.items() })
 
   const saveItem = useMutation({
-    mutationFn: (input: { form: ItemForm; editingId: string | null }) => {
+    mutationFn: (input: {
+      form: ItemForm
+      /** `form.defaultPrice` (dollars) already converted to minor units. */
+      defaultPriceMinor: string
+      editingId: string | null
+    }) => {
       const body = {
         name: input.form.name,
         description: input.form.description || '',
         categoryId: input.form.categoryId,
-        defaultPriceMinor: input.form.defaultPriceMinor,
+        defaultPriceMinor: input.defaultPriceMinor,
       }
       return input.editingId
         ? menuControllerUpdateItem({ path: { id: input.editingId }, body })
@@ -256,7 +262,15 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
       setError(parsed.error.issues[0]?.message ?? 'Invalid item.')
       return
     }
-    saveItem.mutate({ form: parsed.data, editingId })
+    // The wire speaks minor units (PRD §1.3); the operator typed dollars.
+    const defaultPriceMinor = majorToMinor(parsed.data.defaultPrice)
+    if (defaultPriceMinor === null) {
+      setError(
+        'Price must be a dollar amount with up to two decimals (e.g. 10.50).',
+      )
+      return
+    }
+    saveItem.mutate({ form: parsed.data, defaultPriceMinor, editingId })
   }
 
   return (
@@ -344,7 +358,9 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                                 name: item.name,
                                 description: item.description,
                                 categoryId: item.categoryId,
-                                defaultPriceMinor: item.defaultPriceMinor,
+                                defaultPrice: minorToMajor(
+                                  item.defaultPriceMinor,
+                                ),
                                 currencyCode: item.currencyCode as 'USD',
                               })
                               setError(null)
@@ -431,13 +447,14 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
-            Default price (minor units)
+            Default price (USD)
             <input
-              value={form.defaultPriceMinor}
+              value={form.defaultPrice}
               onChange={(event) =>
-                setForm({ ...form, defaultPriceMinor: event.target.value })
+                setForm({ ...form, defaultPrice: event.target.value })
               }
-              placeholder="1000 = $10.00"
+              placeholder="10.50"
+              inputMode="decimal"
               className="form-input money font-normal"
             />
           </label>

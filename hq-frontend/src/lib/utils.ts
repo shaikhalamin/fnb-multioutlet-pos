@@ -31,6 +31,36 @@ export function formatMinor(
 }
 
 /**
+ * Parses an operator-typed major-unit amount ("3", "10.5", "0.99") into the
+ * canonical integer minor-units decimal string the API speaks ("300", "1050",
+ * "99"). Money inputs take dollars — humans must never be asked for minor
+ * units (a "$3" item typed as 3 stores $0.03). Pure string/BigInt math
+ * (AGENTS.md §4.3): never routed through `Number()`. Returns null when the
+ * text is not a nonnegative amount with at most two decimals.
+ */
+export function majorToMinor(input: string): string | null {
+  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,2}))?$/.exec(input.trim())
+  if (!match) return null
+  const [, whole = '0', fraction = ''] = match
+  const cents = (fraction + '00').slice(0, 2)
+  return (BigInt(whole) * 100n + BigInt(cents)).toString()
+}
+
+/**
+ * Renders an integer minor-units string as the plain major-unit amount the
+ * money inputs use ("1050" → "10.50", "99" → "0.99"), so seeding an edit form
+ * from stored data never reinterprets the value. Input values only — display
+ * surfaces keep `formatMinor`.
+ */
+export function minorToMajor(minor: string): string {
+  const raw = minor.trim()
+  if (!/^(0|[1-9][0-9]*)$/.test(raw)) return ''
+  const cents = raw.slice(-2).padStart(2, '0')
+  const whole = raw.slice(0, -2) || '0'
+  return `${whole}.${cents}`
+}
+
+/**
  * Renders an ISO 8601 UTC instant for display (`2026-11-20 04:02 UTC`).
  * Reporting surfaces always disclose in UTC (PRD §10) so watermarks never
  * drift with the viewer's locale.

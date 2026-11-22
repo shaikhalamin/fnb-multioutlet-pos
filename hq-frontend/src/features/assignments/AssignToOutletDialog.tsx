@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { FormEvent, RefObject } from 'react'
 import { cn } from 'cn'
-import { CircleCheckIcon, LoaderCircleIcon, SearchIcon } from 'lucide-react'
+import {
+  CircleCheckIcon,
+  LoaderCircleIcon,
+  RotateCcwIcon,
+  SearchIcon,
+} from 'lucide-react'
 import { ApiError } from '#/api/axios'
 import { assignmentsControllerAssignMany } from '#/api/generated/clients/assignmentsControllerAssignMany'
 import { assignmentsControllerListOutletMenu } from '#/api/generated/clients/assignmentsControllerListOutletMenu'
@@ -22,7 +27,7 @@ import {
 import { isAssignable, useMenuItems } from '#/features/menu/queries'
 import { outletKeys } from '#/features/outlets/keys'
 import { useOutlets } from '#/features/outlets/queries'
-import { formatMinor } from '#/lib/utils'
+import { formatMinor, majorToMinor } from '#/lib/utils'
 
 /**
  * Bulk outlet assignment (PRD FR-02) from the outlet details page: the outlet
@@ -149,10 +154,17 @@ export function AssignToOutletDialog({
   const [selected, setSelected] = useState<readonly string[]>(
     session.menuItemIds,
   )
-  /** Per-item override drafts in integer minor units; absent/empty = keep. */
+  /** Per-item override drafts in dollars ("10.50"); absent/empty = keep. */
   const [priceDrafts, setPriceDrafts] = useState<
     Partial<Record<string, string>>
   >({})
+  /**
+   * Ticked items whose override will be cleared back to the master default
+   * (the request line sends `priceOverrideMinor: null`). Without this the
+   * dialog could only set or keep an override — a stale one could never be
+   * removed, and it would keep masking the master default forever.
+   */
+  const [resetIds, setResetIds] = useState<ReadonlySet<string>>(() => new Set())
   const [search, setSearch] = useState('')
   const [result, setResult] = useState<AssignMenuItemsResponse | null>(null)
   const [failure, setFailure] = useState<Failure | null>(null)
@@ -206,6 +218,7 @@ export function AssignToOutletDialog({
       setResult(data)
       setFailure(null)
       setPriceDrafts({})
+      setResetIds(new Set())
       focusNext.current = 'success'
       // One atomic request moved the outlet's revision and its menu rows.
       void queryClient.invalidateQueries({ queryKey: outletKeys.list() })
@@ -265,7 +278,30 @@ export function AssignToOutletDialog({
       // An unticked item's draft must not resurface if it is ticked again.
       const { [itemId]: _dropped, ...rest } = priceDrafts
       setPriceDrafts(rest)
+      setResetIds((prev) => {
+        if (!prev.has(itemId)) return prev
+        const next = new Set(prev)
+        next.delete(itemId)
+        return next
+      })
     }
+  }
+
+  /** Arm "clear this override" — an armed item has no draft to send. */
+  function armReset(itemId: string) {
+    const { [itemId]: _dropped, ...rest } = priceDrafts
+    setPriceDrafts(rest)
+    setResetIds((prev) => new Set(prev).add(itemId))
+  }
+
+  /** Back to typing a price for an armed item. */
+  function disarmReset(itemId: string) {
+    setResetIds((prev) => {
+      if (!prev.has(itemId)) return prev
+      const next = new Set(prev)
+      next.delete(itemId)
+      return next
+    })
   }
 
   function selectAllVisible() {
@@ -277,12 +313,17 @@ export function AssignToOutletDialog({
     ])
   }
 
-  /** One request line per selected item; an empty draft sends no override. */
+  /**
+   * One request line per selected item; an empty draft sends no override, an
+   * armed reset sends `null` to clear it. The operator typed dollars — the
+   * wire speaks minor units (PRD §1.3).
+   */
   function buildLines(ids: readonly string[]): AssignMenuItemLine[] {
     return ids.map((id) => {
-      const price = priceDrafts[id]?.trim()
-      return price
-        ? { menuItemId: id, priceOverrideMinor: price }
+      if (resetIds.has(id)) return { menuItemId: id, priceOverrideMinor: null }
+      const minor = majorToMinor(priceDrafts[id] ?? '')
+      return minor
+        ? { menuItemId: id, priceOverrideMinor: minor }
         : { menuItemId: id }
     })
   }
@@ -290,13 +331,14 @@ export function AssignToOutletDialog({
   /** UX-only guard (AGENTS §4.2): the backend re-validates minor units. */
   function validateDrafts(): Failure | null {
     for (const id of selected) {
+      if (resetIds.has(id)) continue
       const price = priceDrafts[id]?.trim()
       if (!price) continue
-      if (/^(0|[1-9][0-9]*)$/.test(price) && price.length <= 19) continue
+      if (majorToMinor(price) !== null) continue
       const name = (items.data ?? []).find((item) => item.id === id)?.name
       return {
         title: 'Check the price fields.',
-        detail: `${name ?? 'One item'}: the price must be integer minor units (e.g. 1200 = $12.00), up to 19 digits. Leave it empty to keep the current price.`,
+        detail: `${name ?? 'One item'}: the price must be a dollar amount with up to two decimals (e.g. 10.50). Leave it empty to keep the current price.`,
         removableIds: [],
       }
     }
@@ -322,6 +364,7 @@ export function AssignToOutletDialog({
     const drop = new Set(failure.removableIds)
     const next = selected.filter((id) => !drop.has(id))
     setSelected(next)
+    setResetIds((prev) => new Set([...prev].filter((id) => !drop.has(id))))
     setFailure(null)
     focusNext.current = 'search'
     if (next.length > 0) assign.mutate({ outletId, items: buildLines(next) })
@@ -383,8 +426,9 @@ export function AssignToOutletDialog({
       >
         <DialogTitle>Assign items to {outlet?.name ?? 'an outlet'}</DialogTitle>
         <DialogDescription>
-          Set a price for each item, or leave it empty to keep its current one.
-          Everything commits together, in one catalog revision per item.
+          Set a price for each item, leave it empty to keep its current one, or
+          reset an outlet override back to the master default. Everything
+          commits together, in one catalog revision per item.
         </DialogDescription>
 
         {result ? (
@@ -575,22 +619,62 @@ export function AssignToOutletDialog({
                             </span>
                           </label>
                           {checked ? (
-                            <input
-                              value={priceDrafts[item.id] ?? ''}
-                              disabled={pending}
-                              onChange={(event) =>
-                                setPriceDrafts({
-                                  ...priceDrafts,
-                                  [item.id]: event.target.value,
-                                })
-                              }
-                              placeholder="keep"
-                              inputMode="numeric"
-                              autoComplete="off"
-                              aria-label={`Price override for ${item.name} in integer minor units; leave empty to keep ${formatMinor(currentPrice, item.currencyCode)}`}
-                              title={`Current price ${formatMinor(currentPrice, item.currencyCode)}${override !== null ? ' (outlet override)' : ''}. Enter integer minor units (e.g. 1200 = $12.00), or leave empty to keep it.`}
-                              className="form-input money h-9 w-28 shrink-0 px-2.5 py-1.5 text-sm font-normal disabled:opacity-50"
-                            />
+                            resetIds.has(item.id) ? (
+                              <button
+                                type="button"
+                                disabled={pending}
+                                onClick={() => disarmReset(item.id)}
+                                aria-label={`Override cleared for ${item.name}; it will use the master default ${formatMinor(item.defaultPriceMinor, item.currencyCode)}. Activate to type a price instead.`}
+                                title={`This assignment will use the master default ${formatMinor(item.defaultPriceMinor, item.currencyCode)}. Click to type a price instead.`}
+                                className="badge-pill badge-neutral normal-case tracking-normal shrink-0 rounded-full disabled:opacity-50"
+                              >
+                                <RotateCcwIcon
+                                  aria-hidden="true"
+                                  className="size-3.5"
+                                />
+                                <span className="money">
+                                  Default{' '}
+                                  {formatMinor(
+                                    item.defaultPriceMinor,
+                                    item.currencyCode,
+                                  )}
+                                </span>
+                              </button>
+                            ) : (
+                              <>
+                                <input
+                                  value={priceDrafts[item.id] ?? ''}
+                                  disabled={pending}
+                                  onChange={(event) =>
+                                    setPriceDrafts({
+                                      ...priceDrafts,
+                                      [item.id]: event.target.value,
+                                    })
+                                  }
+                                  placeholder="keep"
+                                  inputMode="decimal"
+                                  autoComplete="off"
+                                  aria-label={`Price override for ${item.name} in dollars; leave empty to keep ${formatMinor(currentPrice, item.currencyCode)}`}
+                                  title={`Current price ${formatMinor(currentPrice, item.currencyCode)}${override !== null ? ' (outlet override)' : ''}. Enter a dollar amount with up to two decimals (e.g. 10.50), or leave empty to keep it.`}
+                                  className="form-input money h-9 w-28 shrink-0 px-2.5 py-1.5 text-sm font-normal disabled:opacity-50"
+                                />
+                                {override !== null ? (
+                                  <button
+                                    type="button"
+                                    disabled={pending}
+                                    onClick={() => armReset(item.id)}
+                                    aria-label={`Clear the price override for ${item.name} and use the master default ${formatMinor(item.defaultPriceMinor, item.currencyCode)}`}
+                                    title={`Clear this outlet's override (${formatMinor(override, item.currencyCode)}) and use the master default ${formatMinor(item.defaultPriceMinor, item.currencyCode)}.`}
+                                    className="shrink-0 rounded-full p-1.5 text-body hover:bg-surface-strong hover:text-ink disabled:opacity-50"
+                                  >
+                                    <RotateCcwIcon
+                                      aria-hidden="true"
+                                      className="size-3.5"
+                                    />
+                                  </button>
+                                ) : null}
+                              </>
+                            )
                           ) : null}
                         </div>
                       </li>
