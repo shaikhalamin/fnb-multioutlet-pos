@@ -1,279 +1,43 @@
 #!/usr/bin/env bash
 # =============================================================================
-# setup_env — one-shot bootstrap for the local fnb-platform Compose cluster.
-#
-# Automates "Fresh clone → running system" (README steps 1–5):
-#   1. Create every .env from its .env.example (existing files are kept unless
-#      --force). Fresh random auth secrets are generated where the examples
-#      ship placeholders; the hq-backend pepper is synced with the root .env
-#      the containerized hq-api runs with.
-#   2. docker compose up --build -d  (HQ + Outlet A stacks) and wait for health.
-#   3. Seed HQ; when the Outlet A machine key is still a placeholder, run with
-#      SEED_ISSUE_OUTLET_KEYS=1, capture the one-time keyId/secret pair from
-#      the seed output, and wire it into the .env files automatically.
-#   4. Recreate outlet-a-worker so it picks up the wired key.
-#   5. Seed Outlet A (POS users + demo catalog).
-#
-# Usage:
-#   ./setup_env              full setup (env + build + start + seed + wire)
-#   ./setup_env --env-only   only create the .env files; no Docker involved
-#   ./setup_env --force      recreate .env files from the examples first
-#                             (backs up the old ones; see warning below)
-#
-# Idempotent: re-running keeps existing .env files, and both seeds are no-ops
-# for already-seeded data. The raw outlet key secret is printed exactly once
-# by the seed itself (PRD §9.2) and is never re-echoed by this script.
-#
-# WARNING: --force regenerates OUTLET_KEY_PEPPER. Keys already stored in an
-# existing hq-db volume were hashed with the OLD pepper and will be rejected
-# afterwards — rotate them via the HQ console or reset with
-# `docker compose down -v` before re-running.
+# setup_env — bootstrap the local Compose cluster.
+# Copy each .env.example to .env, build the images, start the stack
+# (migrations run automatically), then seed HQ and Outlet A.
+# Manual equivalent: README "Fresh clone → running system", steps 1-5.
 # =============================================================================
-set -Eeuo pipefail
+set -euo pipefail
+cd "$(dirname "$0")"
 
-ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR"
-
-# --- output helpers ----------------------------------------------------------
-if [[ -t 1 ]]; then
-  BOLD=$'\033[1m' GREEN=$'\033[32m' YELLOW=$'\033[33m' RED=$'\033[31m' RESET=$'\033[0m'
-else
-  BOLD="" GREEN="" YELLOW="" RED="" RESET=""
-fi
-info() { printf '%s\n' "${GREEN}==>${RESET} $*"; }
-step() { printf '\n%s\n' "${BOLD}== $* ==${RESET}"; }
-warn() { printf '%s\n' "${YELLOW}warning:${RESET} $*" >&2; }
-die()  { printf '%s\n' "${RED}error:${RESET} $*" >&2; exit 1; }
-
-# --- flags -------------------------------------------------------------------
-ENV_ONLY=0
-FORCE=0
-usage() {
-  sed -n '2,30p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
-  exit 0
-}
-while (($#)); do
-  case "$1" in
-    --env-only) ENV_ONLY=1 ;;
-    --force)    FORCE=1 ;;
-    -h|--help)  usage ;;
-    *)          die "unknown option: $1 (see ./setup_env --help)" ;;
-  esac
-  shift
+echo "==> Creating .env files (existing ones are kept)"
+for env in .env hq-backend/.env outlet-backend/.env hq-frontend/.env outlet-frontend/.env; do
+  [ -f "$env" ] || cp "${env}.example" "$env"
 done
 
-# --- helpers -----------------------------------------------------------------
-# Random 64-char hex secret (satisfies the backends' min-32-char Zod checks).
-gen_secret() {
-  if command -v openssl >/dev/null 2>&1; then
-    openssl rand -hex 32
-  else
-    head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'
-  fi
-}
+echo "==> Building images"
+docker compose build
 
-# read_env <file> <KEY> <default> — last assignment wins, like Compose/dotenv.
-read_env() {
-  local value
-  value="$(sed -n "s|^$2=||p" "$1" 2>/dev/null | tail -n1)"
-  printf '%s' "${value:-$3}"
-}
+echo "==> Starting stack (hq-migrate / outlet-a-migrate run before the APIs)"
+docker compose up -d
 
-# set_env_value <file> <KEY> <value> — replace the line, or append if missing.
-set_env_value() {
-  local file=$1 key=$2 value=$3 escaped
-  escaped=${value//\\/\\\\}
-  escaped=${escaped//&/\\&}
-  if grep -q "^${key}=" "$file"; then
-    sed -i "s|^${key}=.*|${key}=${escaped}|" "$file"
-  else
-    printf '%s=%s\n' "$key" "$value" >> "$file"
-  fi
-}
+echo "==> Seeding HQ (admin + demo outlets/items)"
+docker compose run --rm -T hq-api node dist/database/seed.js
 
-# create_env <example> <target> — copy, backing up an existing target (--force).
-create_env() {
-  local example=$1 target=$2
-  if [[ -f $target ]]; then
-    local backup
-    backup="${target}.backup-$(date +%Y%m%d-%H%M%S)"
-    cp "$target" "$backup"
-    info "backed up existing $target -> $backup"
-    rm "$target"
-  fi
-  cp "$example" "$target"
-}
-
-# wait_healthy <service> <timeout-seconds>
-wait_healthy() {
-  local service=$1 timeout=$2 waited=0 cid status
-  cid="$(docker compose ps -q "$service")"
-  if [[ -z $cid ]]; then
-    die "no container found for '$service' — check: docker compose ps"
-  fi
-  while :; do
-    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid")"
-    if [[ $status == healthy ]]; then
-      info "$service is healthy"
-      return 0
-    fi
-    if [[ $status == exited || $status == dead ]]; then
-      die "$service $status before becoming healthy — inspect: docker compose logs --tail=50 $service"
-    fi
-    if (( waited >= timeout )); then
-      die "timed out after ${timeout}s waiting for $service ($status) — inspect: docker compose logs --tail=50 $service"
-    fi
-    sleep 5
-    waited=$((waited + 5))
-  done
-}
-
-# --- 1. environment files ----------------------------------------------------
-step "1/5 Environment files (.env from .env.example)"
-
-if [[ -f .env && $FORCE -eq 0 ]]; then
-  info ".env exists — keeping it (use --force to recreate)"
-else
-  create_env .env.example .env
-  # Replace the placeholder auth secrets with fresh random values; the
-  # pre-filled placeholders work for loopback dev, but real randomness is free.
-  for key in JWT_ACCESS_SECRET JWT_REFRESH_SECRET OUTLET_KEY_PEPPER \
-             OUTLET_JWT_ACCESS_SECRET OUTLET_JWT_REFRESH_SECRET; do
-    set_env_value .env "$key" "$(gen_secret)"
-  done
-  info "created .env with generated auth secrets (JWT_*, *_PEPPER — never committed)"
-fi
-
-# hq-backend/.env — host-side dev + seed CLI (targets the Compose-published
-# datastores on localhost). The pepper MUST match the root .env value the
-# containerized hq-api runs with, or host-side key issuance would produce keys
-# the API rejects (README "Machine-key provisioning loop").
-if [[ -f hq-backend/.env && $FORCE -eq 0 ]]; then
-  info "hq-backend/.env exists — keeping it"
-else
-  create_env hq-backend/.env.example hq-backend/.env
-  set_env_value hq-backend/.env JWT_ACCESS_SECRET "$(gen_secret)"
-  set_env_value hq-backend/.env JWT_REFRESH_SECRET "$(gen_secret)"
-  pepper="$(read_env .env OUTLET_KEY_PEPPER "")"
-  if [[ $pepper != "" && $pepper != replace-with-random-pepper ]]; then
-    set_env_value hq-backend/.env OUTLET_KEY_PEPPER "$pepper"
-  fi
-  info "created hq-backend/.env (OUTLET_KEY_PEPPER synced with root .env)"
-fi
-
-# outlet-backend/.env — host-side dev + seed CLI.
-if [[ -f outlet-backend/.env && $FORCE -eq 0 ]]; then
-  info "outlet-backend/.env exists — keeping it"
-else
-  create_env outlet-backend/.env.example outlet-backend/.env
-  set_env_value outlet-backend/.env OUTLET_JWT_ACCESS_SECRET "$(gen_secret)"
-  set_env_value outlet-backend/.env OUTLET_JWT_REFRESH_SECRET "$(gen_secret)"
-  info "created outlet-backend/.env (HQ machine key wired later, after issuance)"
-fi
-
-# Frontend .env files are optional (same-origin /api/v1 everywhere) but are
-# created for completeness so every documented cp-step is covered.
-for app in hq-frontend outlet-frontend; do
-  if [[ -f $app/.env && $FORCE -eq 0 ]]; then
-    info "$app/.env exists — keeping it"
-  else
-    create_env "$app/.env.example" "$app/.env"
-    info "created $app/.env"
-  fi
-done
-
-if (( ENV_ONLY )); then
-  printf '\n'
-  info "environment files ready — Docker steps skipped (--env-only)."
-  info "continue with: docker compose up --build -d"
-  exit 0
-fi
-
-# --- 2. build and start ------------------------------------------------------
-step "2/5 Build and start the Compose stack (docker compose up --build -d)"
-command -v docker >/dev/null 2>&1 || die "docker not found in PATH"
-docker compose version >/dev/null 2>&1 || die "Docker Compose v2 required (got: $(docker compose version 2>&1 | head -n1))"
-
-docker compose up --build -d
-wait_healthy hq-api 300
-wait_healthy outlet-a-api 300
-
-# --- 3. seed HQ (+ issue the Outlet A machine key) ---------------------------
-step "3/5 Seed HQ (admin, demo outlets/items, outlet sync keys)"
-OUTLET_CODE="$(read_env .env OUTLET_A_CODE A)"
-KEY_PLACEHOLDER="replace-with-real-key-id"
-CURRENT_KEY_ID="$(read_env .env OUTLET_A_HQ_KEY_ID "$KEY_PLACEHOLDER")"
-
-SEED_LOG="$(mktemp)"
-trap 'if [[ -n "${SEED_LOG:-}" ]]; then rm -f "$SEED_LOG"; fi' EXIT
-
-issue_flags=()
-if [[ $CURRENT_KEY_ID == "$KEY_PLACEHOLDER" ]]; then
-  issue_flags=(-e SEED_ISSUE_OUTLET_KEYS=1)
-fi
-# -T: no pseudo-TTY because stdout is piped; output is streamed live via tee
-# and captured for the one-time key extraction below.
-docker compose run --rm -T ${issue_flags[@]+"${issue_flags[@]}"} \
-  hq-api node dist/database/seed.js 2>&1 | tee "$SEED_LOG"
-
-# --- 4. wire the outlet worker to HQ -----------------------------------------
-step "4/5 Wire the outlet worker to HQ (machine key)"
-if [[ $CURRENT_KEY_ID != "$KEY_PLACEHOLDER" ]]; then
-  info "OUTLET_A_HQ_KEY_ID already set in .env — skipping key issuance"
-else
-  # Single-line JSON events, e.g.:
-  #   {"time":"…","level":"warn","msg":"seed_outlet_key_issued","outletCode":"A","keyId":"ok_dev_…","secret":"…"}
-  issued_line="$(grep '"msg":"seed_outlet_key_issued"' "$SEED_LOG" \
-    | grep "\"outletCode\":\"$OUTLET_CODE\"" | tail -n1 || true)"
-  skipped_line="$(grep '"msg":"seed_outlet_key_skipped"' "$SEED_LOG" \
-    | grep "\"outletCode\":\"$OUTLET_CODE\"" | tail -n1 || true)"
-
-  if [[ -n $issued_line ]]; then
-    key_id="$(printf '%s' "$issued_line" | sed -n 's/.*"keyId":"\([^"]*\)".*/\1/p')"
-    key_secret="$(printf '%s' "$issued_line" | sed -n 's/.*"secret":"\([^"]*\)".*/\1/p')"
-    if [[ -z $key_id || -z $key_secret ]]; then
-      die "failed to parse keyId/secret from the seed output above — wire them into .env manually (OUTLET_A_HQ_KEY_ID/SECRET)"
-    fi
-    set_env_value .env OUTLET_A_HQ_KEY_ID "$key_id"
-    set_env_value .env OUTLET_A_HQ_KEY_SECRET "$key_secret"
-    info "wired OUTLET_A_HQ_KEY_ID/SECRET into .env (secret not re-printed — see the one-time reveal above)"
-    # Same pair for host-side worker runs, if the file still has its placeholder.
-    if [[ -f outlet-backend/.env ]] \
-       && [[ "$(read_env outlet-backend/.env HQ_OUTLET_KEY_ID "")" == replace-with-key-id-issued-by-hq ]]; then
-      set_env_value outlet-backend/.env HQ_OUTLET_KEY_ID "$key_id"
-      set_env_value outlet-backend/.env HQ_OUTLET_KEY_SECRET "$key_secret"
-      info "wired HQ_OUTLET_KEY_ID/SECRET into outlet-backend/.env"
-    fi
-    docker compose up -d outlet-a-worker
-  elif [[ -n $skipped_line ]]; then
-    warn "Outlet $OUTLET_CODE already holds an ACTIVE key at HQ — the raw secret is never shown twice (PRD §9.2)."
-    warn "If .env lost the pair, either rotate the key in the HQ console (Outlets → sync keys) and paste the new pair into .env, or reset everything with 'docker compose down -v' and re-run ./setup_env."
-    warn "POS sales work regardless — only menu pull / event push wait for the key."
-  else
-    warn "no key was issued for outlet '$OUTLET_CODE' — check the seed output above."
-  fi
-fi
-
-# --- 5. seed Outlet A --------------------------------------------------------
-step "5/5 Seed Outlet A (POS users + demo catalog)"
+echo "==> Seeding Outlet A (POS users + demo catalog)"
 docker compose run --rm -T outlet-a-api node dist/database/seed.js
 
-# --- summary -----------------------------------------------------------------
-HQ_WEB_PORT="$(read_env .env HQ_WEB_PORT 8080)"
-OUTLET_WEB_PORT="$(read_env .env OUTLET_A_WEB_PORT 8081)"
-HQ_API_PORT="$(read_env .env HQ_API_PORT 4000)"
-OUTLET_API_PORT="$(read_env .env OUTLET_A_API_PORT 5000)"
+cat <<'EOF'
 
-printf '\n'
-info "Setup complete."
-cat <<EOF
+Setup complete.
+  HQ console:   http://localhost:8080  (admin@fnb.local / Admin123!)
+  Outlet A POS: http://localhost:8081  (manager@outlet-a.local / Manager123!)
+  HQ API:       http://localhost:4000/api/v1  (Swagger: /api/v1/docs)
+  Outlet A API: http://localhost:5000/api/v1  (Swagger: /api/v1/docs)
 
-  ${BOLD}HQ console${RESET}     http://localhost:${HQ_WEB_PORT}    admin@fnb.local / Admin123!
-  ${BOLD}Outlet A POS${RESET}   http://localhost:${OUTLET_WEB_PORT}    manager@outlet-a.local / Manager123!
-  ${BOLD}HQ API${RESET}         http://localhost:${HQ_API_PORT}/api/v1      (Swagger: /api/v1/docs)
-  ${BOLD}Outlet A API${RESET}   http://localhost:${OUTLET_API_PORT}/api/v1      (Swagger: /api/v1/docs)
-
-  Sync from outlet -> HQ starts within a menu-pull cycle (~30s) once the
-  worker holds a valid key. Check status: docker compose ps / logs -f
-  outlet-a-worker. Reset everything: docker compose down -v (irreversible).
+To enable outlet -> HQ sync (optional — POS sales work without it), issue
+the outlet machine key, paste it into .env, and restart the worker:
+  docker compose run --rm -e SEED_ISSUE_OUTLET_KEYS=1 hq-api node dist/database/seed.js
+  # copy the printed outlet-A keyId/secret into .env:
+  #   OUTLET_A_HQ_KEY_ID=<keyId>
+  #   OUTLET_A_HQ_KEY_SECRET=<secret>
+  docker compose up -d outlet-a-worker
 EOF

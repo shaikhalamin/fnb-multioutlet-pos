@@ -21,15 +21,12 @@ runs inside the built images. They are only needed for
 
 ### One-shot alternative
 
-`./setup_env` automates steps 1–5 below: it creates every `.env` from its
-`.env.example` (generating random auth secrets, keeping existing files), builds
-and starts the stack, seeds HQ, captures the one-time outlet machine-key pair
-from the seed output and wires it into the `.env` files, recreates
-`outlet-a-worker`, and seeds Outlet A. It is idempotent — re-running keeps
-existing `.env` files and skips already-issued keys. `--env-only` does just the
-env copy; `--force` recreates the `.env` files (backing up the old ones — this
-regenerates `OUTLET_KEY_PEPPER`, so keys hashed into an existing database
-volume must be rotated or the volume reset with `docker compose down -v`).
+`./setup_env` runs steps 1, 2, 3 (without key issuance) and 5 in one go: it
+copies each `.env.example` to `.env` (existing files are kept), builds the
+images, starts the stack — the `hq-migrate` / `outlet-a-migrate` jobs apply the
+migrations automatically before the APIs start — and seeds HQ and Outlet A.
+Step 4 (wiring the outlet machine key) stays manual; the script prints the
+commands at the end.
 
 ### 1. Clone and configure
 
