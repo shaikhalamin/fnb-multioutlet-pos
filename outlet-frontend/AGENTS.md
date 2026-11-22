@@ -27,7 +27,7 @@ pnpm check          # Prettier --check
 
 1. All server calls go through **Kubb-generated** typed Axios clients + Zod schemas + TanStack Query hooks, generated from `outlet-backend`'s exported `openapi/openapi.json` (contract copied to `src/api/contracts/outlet.openapi.json`; output in `src/api/generated/`). Never hand-write `fetch`/`axios` calls or duplicate API types.
 2. The generated client must reuse the shared axios instance/interceptors in `src/api/axios.ts` (envelope unwrap, `X-Request-Id`, auth header, refresh-on-401, `ApiError` normalization). No other axios instances; never hand-edit `src/api/generated/`.
-3. This app talks **only** to its own local outlet backend. It never calls HQ and never sees the outlet machine key (PRD §2, §9.2).
+3. This app talks **only** to its own local outlet backend — it never calls HQ (PRD §2). The outlet machine key touches this app exactly once: the `/setup` wizard's pairing form POSTs the one-time secret to the local backend and it is never stored, logged, echoed, or re-displayed (PRD §9.2, FR-11); the setup routes are public only while the terminal is unprovisioned.
 
 ### Financial-action discipline (PRD §7.3, §11, §15) — the critical rules
 

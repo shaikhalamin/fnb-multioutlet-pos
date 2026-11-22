@@ -1,5 +1,11 @@
 # Phase 3 — Synchronization (outlet worker ⇄ HQ sync API, typed end to end)
 
+> **Historical record.** Implemented as written, with one later change: the
+> dev key-provisioning loop described in §V1 was replaced in Phase 4 by the
+> UI-driven setup wizard (HQ console issues the key; the outlet terminal
+> pairs itself and stores credentials in its `hq_connection` table — see the
+> root README §"Machine-key provisioning" and PRD FR-11).
+
 ## Context
 
 Phase 0–2 delivered: both backends' human surfaces (HQ auth/RBAC/users/outlets/menu/assignments/api-keys; outlet auth/RBAC/users/menu-read/inventory/atomic-idempotent-sales), the outlet outbox **write** path (`PENDING` rows only), offline-grace enforcement, both frontends, and the compose topology (`hq-sync` network: outlet-a-worker → hq-api only, outbound).
@@ -170,6 +176,8 @@ Existing scaffolding reused: worker env profile (`HQ_API_BASE_URL`, `HQ_OUTLET_K
 
 ### V1 — Dev key provisioning loop
 > Commit: `feat: wire outlet key provisioning into dev compose stack`
+
+> **Superseded (Phase 4):** outlet provisioning is now fully UI-driven — the HQ seed no longer issues keys (`SEED_ISSUE_OUTLET_KEYS` and the root `.env` `OUTLET_A_HQ_KEY_*` pair were removed). Keys are issued in the HQ console and paired into the terminal through its `/setup` wizard, which stores them in the outlet's `hq_connection` table; the worker needs no environment credentials. See the root README §"Machine-key provisioning" and PRD FR-11. The items below are the historical Phase-3 record.
 
 - HQ seed extension (`SEED_ISSUE_OUTLET_KEYS=1`, default off): issues a real scoped key for each seeded outlet through `ApiKeysService`, printing `keyId.secret` **once** to the operator (seed runs server-side; pepper from env) — makes the compose loop self-contained.
 - Root `.env.example` documents: run HQ seed with the flag → paste into `OUTLET_A_HQ_KEY_ID/SECRET` → `docker compose up -d outlet-a-worker`.

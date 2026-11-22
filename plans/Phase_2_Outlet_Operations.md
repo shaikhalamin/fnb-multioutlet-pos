@@ -1,4 +1,9 @@
 # Phase 2 — Outlet Operations (end-to-end: outlet-frontend → outlet-api → outlet PostgreSQL)
+> **Historical record.** Two details changed in Phase 4: the JWT
+> `outletId` claim is now pinned against the provisioned `outlet_identity`
+> row (not env `OUTLET_ID`), and the seed is a no-op without identity env —
+> production provisioning goes through the setup wizard (PRD FR-11).
+
 
 ## Context
 

@@ -37,10 +37,9 @@ pnpm openapi:export   # regenerate openapi/openapi.json after endpoint changes
 never sees it. Its `DATABASE_URL`/`REDIS_URL` target the root Compose
 datastores published on loopback (`localhost:15432` / `16379`), so bring
 those up first from the repo root (`docker compose up -d hq-db hq-redis` —
-see the root README quickstart). When issuing outlet keys host-side
-(`SEED_ISSUE_OUTLET_KEYS=1 pnpm seed`), `OUTLET_KEY_PEPPER` must equal the
-root `.env` value `hq-api` runs with; the Compose-native seed loop in the
-root README guarantees that match.
+see the root README quickstart). `OUTLET_KEY_PEPPER` must equal the root
+`.env` value `hq-api` runs with (the Compose seed run guarantees that match);
+the pepper hashes every outlet machine key issued via the console (PRD §9.2).
 
 ## Configuration
 
@@ -102,8 +101,9 @@ Machine-key routes under `/sync/v1/*` (`Authorization: OutletKey
 - `GET /outlets/:id/sync-status` — human projection (FR-10, `sync.read`).
 
 Identity comes exclusively from the key record; events claiming another
-outlet reject the entire request (AT-16). Dev key provisioning:
-`SEED_ISSUE_OUTLET_KEYS=1 pnpm seed` (see root README §Phase 3).
+outlet reject the entire request (AT-16). Keys are issued in the console
+only — the seed never mints one; the outlet terminal pairs itself through
+its `/setup` wizard (see root README §"Machine-key provisioning").
 
 ## Phase 4 — reporting, audit & hardening (PRD §10, §11, §18)
 

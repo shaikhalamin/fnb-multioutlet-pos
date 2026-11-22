@@ -21,12 +21,14 @@ runs inside the built images. They are only needed for
 
 ### One-shot alternative
 
-`./setup_env` runs steps 1, 2, 3 (without key issuance) and 5 in one go: it
-copies each `.env.example` to `.env` (existing files are kept), builds the
-images, starts the stack — the `hq-migrate` / `outlet-a-migrate` jobs apply the
-migrations automatically before the APIs start — and seeds HQ and Outlet A.
-Step 4 (wiring the outlet machine key) stays manual; the script prints the
-commands at the end.
+`./setup_env` runs steps 1–5 in one go: it copies each `.env.example` to `.env`
+(existing files are kept), builds the images, starts the stack — the
+`hq-migrate` / `outlet-a-migrate` jobs apply the migrations automatically
+before the APIs start — seeds HQ with key issuance, wires outlet A's printed
+keyId/secret pair into `.env` automatically, restarts `outlet-a-worker`, and
+seeds Outlet A. If outlet A already holds an ACTIVE key (re-run), no new pair
+is issued and the script says so — rotate via the HQ console if the secret was
+lost.
 
 ### 1. Clone and configure
 
@@ -86,76 +88,80 @@ docker compose up --build -d
 
 (All host ports are configurable via the root `.env`.)
 
-### 3. Seed HQ and issue the outlet machine key
+### 3. Seed HQ
 
-One idempotent command seeds the HQ admin, the demo outlets A/B/C with demo
-items, and issues the outlet sync keys:
+One idempotent command seeds the HQ admin plus the demo outlets A/B/C with
+demo items:
 
 ```bash
-docker compose run --rm -e SEED_ISSUE_OUTLET_KEYS=1 hq-api node dist/database/seed.js
+docker compose run --rm hq-api node dist/database/seed.js
 ```
 
 - HQ console login it creates: `admin@fnb.local` / `Admin123!` (override via
   `SEED_HQ_ADMIN_EMAIL` / `SEED_HQ_ADMIN_PASSWORD` on the seed run).
-- For each outlet the run prints a `seed_outlet_key_issued` warn line carrying
-  `keyId` + `secret` — **the raw secret is shown exactly once**; copy the pair
-  now. Outlets that already hold an ACTIVE key are skipped
-  (`seed_outlet_key_skipped`), so re-running the seed never rotates a key
-  away from you.
-- Running the seed through Compose (rather than host-side `pnpm seed`)
-  guarantees the `OUTLET_KEY_PEPPER` it hashes with is the exact value
-  `hq-api` runs with — the issuance check requires the match.
+- Machine keys are **never** seeded: issuing one is a deliberate admin action
+  in the console (shown once, PRD §9.2) — that's step 4 below.
 
-### 4. Wire the outlet worker to HQ
+### 4. Pair the outlet terminal with HQ (the UI flow)
 
-Paste the issued pair into the root `.env`:
+Outlet terminals start **unprovisioned** — identity and the HQ machine key
+arrive through the setup wizard, not environment variables (PRD §8.7, §9.2).
+The whole flow is demo-able from the two UIs:
 
-```dotenv
-OUTLET_A_HQ_KEY_ID=<printed keyId>
-OUTLET_A_HQ_KEY_SECRET=<printed secret>
-```
+1. **Create the outlet in HQ** — http://localhost:8080 → *Outlets* → fill the
+   create form (code/name/timezone). The pairing panel that appears shows the
+   **Outlet ID + code** with copy buttons.
+2. **Provision the terminal** — open http://localhost:8081/setup and paste the
+   **Outlet ID + code** (step 1 of the wizard), plus the first admin
+   account for that POS. The backend writes identity, receipt counters, the
+   sync checkpoint and the admin in one transaction and seals itself.
+3. **Issue the key in HQ** — the outlet's detail page → assign menu items →
+   *API keys → Issue key*. Copy the one-time **key ID + secret**.
+4. **Pair** — back in the wizard's step 2, paste the HQ base URL
+   (`http://hq-api:3000/api/v1` inside Compose — pre-filled) plus the key
+   pair and hit **Test & pair**. HQ validates the key live (a key minted for
+   another outlet is refused), the pairing is saved in the outlet's own
+   database, and the sync worker picks it up **without a restart**.
 
-then recreate the worker so it picks up the new environment:
+Until pairing the worker logs `awaiting_provisioning` once per cycle and its
+HQ calls are refused. **POS sales work regardless once the catalog has synced**
+— an outlet sale never depends on HQ (PRD §2); only menu pull / event push
+wait for the key. Key rotation later: HQ console → *Rotate* → outlet POS →
+*Sync* page → *Rotate the HQ key* (same live validation, no restart).
 
-```bash
-docker compose up -d outlet-a-worker
-```
-
-Until this step the worker runs but its HQ calls are answered `401`. **POS
-sales work regardless** — an outlet sale never depends on HQ (PRD §2); only
-menu pull / event push wait for the key.
-
-### 5. Seed Outlet A
-
-```bash
-docker compose run --rm outlet-a-api node dist/database/seed.js
-```
-
-Creates the local roles and users (`manager@outlet-a.local` / `Manager123!`,
-`cashier@outlet-a.local` / `Cashier123!`, `clerk@outlet-a.local` /
-`Clerk123!` — override via `SEED_OUTLET_<ROLE>_EMAIL/PASSWORD`) plus the demo
-catalog with stock. The seed pins the fixed demo outlet/item UUIDs, so the
-outlet's identity matches `OUTLET_A_ID` and the HQ seed.
-
-### 6. Log in and verify
+### 5. Log in and verify
 
 | URL | What |
 |---|---|
 | http://localhost:8080 | HQ console — `admin@fnb.local` / `Admin123!` |
-| http://localhost:8081 | Outlet A POS — `manager@outlet-a.local` / `Manager123!` |
+| http://localhost:8081 | Outlet A POS — the admin account you chose in the wizard |
 | http://localhost:4000/api/v1/docs | HQ Swagger UI (local dev cluster only) |
 | http://localhost:5000/api/v1/docs | Outlet A Swagger UI (local dev cluster only) |
 
-Quickest end-to-end check: sign in to the POS, ring up a sale, then watch it
-appear on the HQ dashboard within a few sync cycles (HQ reports disclose
-`dataAsOf` while they wait). The POS sync-status banner and
+Quickest end-to-end check: assign items to your outlet in HQ, wait one menu
+pull (~30s), stock the items on the POS *Inventory* page, ring up a sale,
+then watch it appear on the HQ dashboard within a few sync cycles (HQ reports
+disclose `dataAsOf` while they wait). The POS sync-status banner and
 `GET /api/v1/sync/status` show menu revision and outbox backlog locally.
+
+> Local, UI-less development: `outlet-backend` still ships a dev seed
+> (`pnpm seed` with `OUTLET_ID`/`OUTLET_CODE` in `.env`) that provisions demo
+> users/catalog directly — useful for backend work without the wizard. The
+> Compose cluster intentionally does **not** run it.
 
 ### Reset / teardown
 
 ```bash
 docker compose down        # stop the stack, keep all data volumes
 docker compose down -v     # also wipe both databases and queues (irreversible)
+```
+
+Reset only outlet A (to re-demo the pairing wizard; wipes its database):
+
+```bash
+docker rm -f fnb-platform-outlet-a-db-1
+docker volume rm fnb-platform_outlet-a-db-data
+docker compose up -d
 ```
 
 After `down -v`, repeat from step 2 (images are retained; re-seeding is
@@ -236,7 +242,10 @@ Sign in to the Outlet A POS at http://localhost:8081 with a seeded account:
   TanStack Query) from the exported OpenAPI contract.
 
 Seed (idempotent; identity, roles, demo users, fixed-UUID catalog with
-burger/pizza/cola at 50/40/100 stock, counters, fresh sync state):
+burger/pizza/cola at 50/40/100 stock, counters, fresh sync state) — the
+UI-less local development path; the production path is the setup wizard
+(step 4 above), and the seed is a no-op when `OUTLET_ID`/`OUTLET_CODE` are
+absent:
 
 ```bash
 cd outlet-backend && pnpm seed          # or: docker compose run --rm outlet-a-api node dist/database/seed.js
@@ -268,8 +277,11 @@ Network isolation (PRD §2):
 - `hq-internal` — HQ API/worker/web + HQ DB/Redis
 - `outlet-a-internal` — outlet A API/worker/web + outlet A DB/Redis
 - `hq-sync` — the only path between environments; the **outlet worker** uses
-  it to call the HQ sync API (`HQ_API_BASE_URL`). HQ has no route to any
-  outlet database, and outlet sales never depend on HQ reachability.
+  it to call the HQ sync API (base URL + machine key stored in the outlet's
+  `hq_connection` table — see the pairing flow in step 4). The outlet API
+  joins this network only for the setup wizard's one-time live key
+  validation. HQ has no route to any outlet database, and outlet sales never
+  depend on HQ reachability.
 
 Frontends are served by their own Nginx, which also reverse-proxies `/api/`
 to their backend so the browser stays same-origin (no CORS exposure).
@@ -284,29 +296,29 @@ per-event acks (`ACCEPTED` / `DUPLICATE` / `RETRYABLE_ERROR` /
 reconciliation, heartbeats, quarantine with manager replay, and the audited
 emergency offline-grace override.
 
-### Machine-key provisioning loop (PRD §9.2)
+### Machine-key provisioning (PRD §9.2)
 
-Outlets sync with HQ only after a real key is provisioned — steps 3–4 of
-[Fresh clone → running system](#fresh-clone--running-system-docker) above
-cover the Docker-native loop:
+Outlets sync with HQ only after a real key is provisioned — and provisioning
+is now fully UI-driven (step 4 of
+[Fresh clone → running system](#fresh-clone--running-system-docker) above):
 
-```bash
-docker compose run --rm -e SEED_ISSUE_OUTLET_KEYS=1 hq-api node dist/database/seed.js
-# → prints keyId + secret ONCE per outlet; paste into root .env, then:
-docker compose up -d outlet-a-worker
-```
+1. HQ console → *Outlets* → create the outlet → copy its **Outlet ID + code**
+   from the pairing panel.
+2. Outlet POS → `/setup` → paste ID + code + the first admin (step 1 of the
+   wizard; identity, counters and the admin commit in one transaction, then
+   the endpoint seals permanently).
+3. HQ console → the outlet's page → *API keys → Issue key* → copy the
+   one-time **key ID + secret**.
+4. Outlet POS → wizard step 2 → **Test & pair**. The outlet backend calls
+   HQ's checkpoint endpoint with the candidate key (refusing a key minted
+   for a different outlet), stores the pairing in its own `hq_connection`
+   table, and the worker reads it from there — no environment variables, no
+   restart. Later rotations use the same live validation via the POS *Sync*
+   page (`PUT /api/v1/sync/hq-connection`, `sync.manage`).
 
-Host-side alternative (requires Node/pnpm and an `hq-backend/.env` whose
-`OUTLET_KEY_PEPPER` matches the root `.env` value `hq-api` runs with):
-
-```bash
-SEED_ISSUE_OUTLET_KEYS=1 pnpm --dir hq-backend seed
-```
-
-`SEED_ISSUE_OUTLET_KEYS` is off by default; issuance is idempotent (outlets
-holding an ACTIVE, unexpired key are skipped). The seed pins well-known demo
-UUIDs for outlets A/B/C and the three demo items so the HQ seed, the outlet
-seed and root `.env` agree on identity.
+The HQ seed deliberately does **not** issue keys (issuing one is a deliberate
+admin action, FR-10); it pins well-known demo UUIDs for outlets A/B/C and the
+three demo items so the demo data stays consistent.
 
 ### What the loop guarantees (verified by drills + e2e)
 

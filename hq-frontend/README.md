@@ -41,10 +41,12 @@ public build-time config.
   bootstrap via `POST /auth/refresh` on load (PRD §9.1).
 - **Pages** — `/login`; protected `_auth` layout (permission-aware nav);
   `/dashboard` outlets overview; `/menu` categories + items CRUD with
-  archive; `/outlets` provisioning; `/outlets/$outletId` assignment matrix
-  with the live effective-price preview (FR-02) and the outlet key panel
-  (secret shown exactly once); `/users` staff management. Route hiding is
-  cosmetic — the backend enforces authorization.
+  archive; `/outlets` provisioning with a post-creation **pairing panel**
+  (copyable Outlet ID + code and the wizard walkthrough that pairs the
+  terminal — FR-11); `/outlets/$outletId` assignment matrix with the live
+  effective-price preview (FR-02), a copyable Outlet ID, and the outlet key
+  panel (secret shown exactly once); `/users` staff management. Route
+  hiding is cosmetic — the backend enforces authorization.
 - **Money** — decimal minor-unit strings end-to-end; formatted only at
   render via `formatMinor` (`src/lib/utils.ts`).
 

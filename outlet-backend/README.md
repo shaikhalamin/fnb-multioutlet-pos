@@ -37,22 +37,24 @@ never sees it. Its `DATABASE_URL`/`REDIS_URL` target the root Compose
 datastores published on loopback (`localhost:15433` / `16380`), so bring
 those up first from the repo root (`docker compose up -d outlet-a-db
 outlet-a-redis` — see the root README quickstart). The pinned `OUTLET_ID`
-matches the demo Outlet A identity in the root `.env`. Running the sync
-worker host-side additionally needs the HQ machine key pair issued by the
-HQ seed (root README quickstart, steps 3–4); the Docker flow wires it
-through Compose instead.
+matches the demo Outlet A identity. The sync worker needs **no HQ
+credentials from the environment**: it reads the `hq_connection` row its
+terminal saved through the setup wizard (or, host-side, that a `psql`
+insert created) and idles `awaiting_provisioning` until one exists — pair
+through http://localhost:8081/setup (root README quickstart, step 4).
 
 ## Configuration
 
 Config parse → Zod validation → module → typed access (PRD §14.1):
 
 - `src/config/env.schema.ts` — the Zod schema and `Env` type, plus
-  entrypoint profiles: both validate the outlet identity (`OUTLET_ID` UUID,
-  `OUTLET_CODE`), database/Redis URLs and the offline grace period; the
-  **api** profile additionally requires the `OUTLET_JWT_*` secrets, while
-  the **worker** profile requires `HQ_API_BASE_URL` and the HQ machine key
-  (`HQ_OUTLET_KEY_ID/SECRET`) — neither entrypoint can be provisioned with
-  the other's credentials (PRD §3, §9.2).
+  entrypoint profiles validating database/Redis URLs and the offline grace
+  period; the **api** profile additionally requires the `OUTLET_JWT_*`
+  secrets — neither entrypoint can be provisioned with the other's
+  credentials (PRD §3, §9.2). Outlet identity (`OUTLET_ID`/`OUTLET_CODE`)
+  is optional env read only by the dev seed: production identity and the HQ
+  machine key arrive through the setup wizard and live in the
+  `outlet_identity` / `hq_connection` tables.
 - `src/config/configuration.module.ts` — global `ConfigurationModule`
   (`ConfigModule.forRoot` with `isGlobal`, `cache`, the Zod `validate` hook
   and `envFilePath: ['.env.local', '.env']`; real environment variables
@@ -87,7 +89,7 @@ repository, transactions always owned by the service):
 
 | Module | Routes / role | Purpose |
 |---|---|---|
-| `auth` | `POST /auth/login\|refresh\|logout` | Rotating refresh sessions in the `outlet_rt` HttpOnly cookie; tokens carry the `outletId` claim re-checked against `OUTLET_ID` every request (PRD §9.1). |
+| `auth` | `POST /auth/login\|refresh\|logout` | Rotating refresh sessions in the `outlet_rt` HttpOnly cookie; tokens carry the `outletId` claim re-checked against the provisioned `outlet_identity` row every request (PRD §9.1). |
 | `users` | `GET/POST /users`, `PATCH /users/:id`, `GET /roles` | Local staff management (`users.read`/`users.write`). |
 | `menu-cache` | `GET /menu` | Active local catalog + effective prices + live stock, `meta.catalogRevision`/`lastCatalogSyncAt` via the envelope `withMeta` hook (PRD §7.3). |
 | `inventory` | `GET /inventory`, `POST /inventory/adjustments` | Row-locked, versioned, nonnegative balances; every movement audited with reason/actor/request ID (FR-04/FR-05). |
@@ -111,11 +113,17 @@ refresh sessions, catalog cache + sync state, balances/movements (with the
 idempotency keys, and the outbox (unique `(outlet_id, sequence_no)`, partial
 due-index, jsonb sale-id expression index).
 
-Seed (`pnpm seed`, idempotent): identity from `OUTLET_ID`/`OUTLET_CODE`,
-permission catalog + 3 default roles, demo staff (manager/cashier/clerk),
-a fixed-UUID catalog (BURGER-01 `"1000"`, PIZZA-01 `"1500"`, COLA-01
-`"300"`) at 50/40/100 stock simulating a completed sync
-(`applied_revision = 1`, fresh `last_sync_at`), and both counters at 1.
+Seed (`pnpm seed`, idempotent): with `OUTLET_ID`/`OUTLET_CODE` set —
+identity, permission catalog + 3 default roles, demo staff
+(manager/cashier/clerk), a fixed-UUID catalog (BURGER-01 `"1000"`,
+PIZZA-01 `"1500"`, COLA-01 `"300"`) at 50/40/100 stock simulating a
+completed sync (`applied_revision = 1`, fresh `last_sync_at`), and both
+counters at 1. Without identity env the seed is a no-op (log
+`seed_skipped_no_identity`) — the intended production path is the setup
+wizard (`POST /setup/identity` provisions identity, first admin, counters
+and the revision-0 checkpoint in one transaction; `POST
+/setup/hq-connection` then pairs with HQ, `PUT /sync/hq-connection`
+rotates the key later).
 
 Verification: `pnpm lint && pnpm test` (70 unit specs) and `pnpm test:e2e`
 (24 specs against the real outlet PostgreSQL/Redis covering AT-03…AT-08,

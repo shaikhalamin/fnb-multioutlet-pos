@@ -18,7 +18,7 @@ The outlet is the **operational authority**: sales, inventory balances, movement
 - The outlet sync worker initiates *all* HQ synchronization calls: it pulls menu changes and pushes events. HQ never connects to the outlet database.
 - The outlet never stores HQ-wide master catalog beyond items assigned to it.
 - Outlet users/roles/tokens are entirely local — never HQ tokens, never cross-replicated credentials.
-- The HQ outlet key (`HQ_OUTLET_KEY_ID`/`HQ_OUTLET_KEY_SECRET`) is a server-side machine secret used **only** by the worker; never in query strings, log messages, or frontend assets.
+- The HQ outlet key (base URL + `keyId`/`secret`) is a server-side machine secret stored in the outlet's own `hq_connection` table — written by the setup wizard (or the audited `PUT /sync/hq-connection` rotation) and read **only** by the worker; never in environment variables, query strings, log messages, or frontend assets.
 
 **Core reliability contract:** local sale + inventory movement + receipt allocation + outbox record commit **atomically** in the outlet PostgreSQL database; outbound delivery retries are expected; HQ achieves exactly-once business effects via unique keys — the outlet must never assume exactly-once transport.
 
@@ -32,17 +32,19 @@ The outlet is the **operational authority**: sales, inventory balances, movement
 | FR-06 | Transaction integrity and concurrency: each sale completes in one local PostgreSQL transaction (see §6.1); any error rolls back everything; BullMQ enqueue is **not** part of this transaction. |
 | FR-07 | Durable synchronization: outbox dispatcher publishes eligible event IDs to BullMQ; sync workers read durable DB records, authenticate HTTPS requests to HQ, retry safely; transient failures never discard an event; permanent failures enter a quarantined state for operator review. |
 | FR-09 | Outlet auth: own `auth/login`, `auth/refresh`, `auth/logout`; short-lived access JWT + rotating refresh token; refresh reuse revokes the session family and is auditable; machine sync uses the scoped outlet API key, not a human JWT. |
-| FR-10 | Observability: health checks, structured logs, local `/sync/status` (menu revision, last sync, pending/dead events). |
+| FR-10 | Observability: health checks, structured logs, local `/sync/status` (menu revision, last sync, pending/dead events, HQ pairing summary). |
+| FR-11 | First-run provisioning: the setup wizard saves the HQ-issued outlet ID + code and creates the first admin in one transaction (`POST /setup/identity`), then validates the one-time HQ machine key live and stores the pairing (`POST /setup/hq-connection`); both endpoints are public only while unprovisioned and seal permanently; later key rotation goes through the audited `PUT /sync/hq-connection` (`sync.manage`) with the same live validation. |
 
 **FR-06 acceptance:** two concurrent purchases of the last burger produce exactly one committed sale; a multi-item sale with any insufficient item creates zero movements, zero receipt increments and zero outbox messages; successful duplicate POST requests return the same sale and receipt without deducting stock again.
 
 ## 3. Outlet PostgreSQL schema (one database per outlet)
 
-The outlet identity is provisioned as immutable local configuration / DB seed and checked against every worker event.
+The outlet identity is provisioned once — through the setup wizard (UI pairing with HQ) or, for local development, a DB seed — and is checked against every worker event.
 
 | Table | Important fields | Constraints and purpose |
 |---|---|---|
-| `outlet_identity` | `outlet_id`, `outlet_code`, `company_id`, `timezone`, `currency_code` | Singleton configuration; seeded at provisioning. |
+| `outlet_identity` | `outlet_id`, `outlet_code`, `company_id` (nullable), `timezone` (nullable), `currency_code` (nullable) | Singleton configuration; written once at wizard provisioning (currency backfilled from the first menu pull). |
+| `hq_connection` | `outlet_id` (FK → `outlet_identity`), `hq_base_url`, `key_id`, `key_secret`, `last_validated_at`, `updated_at` | Singleton HQ pairing (wizard / rotation); the worker's sole credential source — raw secret lives only here. |
 | `outlet_users`, `outlet_roles`, `outlet_permissions`, `outlet_user_roles`, `outlet_role_permissions` | local identities/permissions | Outlet-only, not HQ tokens. |
 | `outlet_refresh_sessions` | `id`, `user_id`, `family_id`, `jti`, `expires_at`, `revoked_at` | Refresh-JWT rotation and family invalidation, keyed on `jti`. |
 | `catalog_items` | `menu_item_id`, `assignment_id`, `sku`, `name`, `description`, `category`, `effective_price_minor bigint`, `currency_code`, `active`, `hq_item_version`, `applied_revision` | Upsert by HQ ID; immutable identity, price/status updated by sync. |
@@ -106,13 +108,17 @@ type MoneyMinor = string;          // regex ^(0|[1-9][0-9]*)$
 | `POST` | `/auth/login` | Public with rate limit | Outlet login. |
 | `POST` | `/auth/refresh` | Refresh cookie/session | Rotate outlet refresh. |
 | `POST` | `/auth/logout` | Authenticated | Revoke. |
+| `GET` | `/setup/status` | Public | Terminal provisioning state (drives the setup wizard). |
+| `POST` | `/setup/identity` | Public while unprovisioned, then sealed | Wizard step 1: save the HQ-issued outlet ID + code and create the first admin (one transaction). |
+| `POST` | `/setup/hq-connection` | Public while unpaired, then sealed | Wizard step 2: validate the HQ machine key live and store the pairing. |
 | `GET` | `/menu` | `menu.read` | Active, locally assigned menu with effective prices only. |
 | `GET` | `/inventory` | `inventory.read` | Local balances. |
 | `POST` | `/inventory/adjustments` | `inventory.adjust` | Audited local restock/write-off. |
 | `POST` | `/sales` | `sales.create` | Multi-line atomic sale, idempotent. |
 | `GET` | `/sales/:id` | `sales.read` | View receipt and historical lines. |
 | `GET` | `/sales?from=&to=&cursor=` | `sales.read` | Local sale history. |
-| `GET` | `/sync/status` | `sync.read` | Menu revision, last sync, pending/dead events. |
+| `GET` | `/sync/status` | `sync.read` | Menu revision, last sync, pending/dead events, HQ pairing summary (key ID only). |
+| `PUT` | `/sync/hq-connection` | `sync.manage` | Rotate the stored HQ machine key (validated live before saving). |
 
 **Outlet menu response (after applying HQ revision 42):**
 
@@ -306,7 +312,7 @@ G. Lease expiry returns stalled work to eligible retry; the periodic scanner
 - **Reconciliation:** the worker calls the HQ checkpoint, compares accepted sequences with the local outbox, and selectively replays missing events. A daily reconciliation job compares local completed sale count, totals, and receipt range to HQ projections for an agreed UTC/date window; alert on mismatch; never auto-insert fabricated sales.
 - **Retention:** retain outbox delivered rows until reconciliation/archive policies guarantee safe replay; keep sales/receipt records per legal policy.
 - **Status:** keep `sale.status=COMPLETED` separate from `sale.sync_status=PENDING|DELIVERED|QUARANTINED`; sync is not a second sale-completion step.
-- **Bootstrapping:** the outlet is provisioned with ID, site code, HQ URL and a one-time key; perform a full catalog snapshot, provision inventory, then enable cashier sales.
+- **Bootstrapping:** a new terminal provisions itself through the setup wizard — paste the HQ-issued outlet ID + site code (creating the first admin in the same transaction), then paste the one-time machine key, which is validated live against HQ before the pairing is saved to `hq_connection`. The worker then performs a full catalog snapshot, staff provision inventory through the audited adjustment flow, and cashier sales begin.
 
 ## 7. Offline policy and critical consistency trade-off
 
@@ -347,7 +353,7 @@ G. Lease expiry returns stalled work to eligible retry; the periodic scanner
 
 ### 8.2 Machine sync identity
 
-The worker uses `Authorization: OutletKey <keyId>.<secret>` with `menu.pull` and `events.push` scopes bound to this outlet only. The key comes from server-side environment/secrets (`HQ_OUTLET_KEY_ID`, `HQ_OUTLET_KEY_SECRET`) — never in frontend code, query strings, or logs. Require TLS (mTLS where available); short request timeouts; body size caps.
+The worker uses `Authorization: OutletKey <keyId>.<secret>` with `menu.pull` and `events.push` scopes bound to this outlet only. The key comes from the `hq_connection` table (setup wizard / audited rotation route; re-read before every HQ call so rotation lands without a restart) — never from environment variables, frontend code, query strings, or logs. HQ derives `outletId` from the key record; a key minted for a different outlet is refused at pairing time. Require TLS (mTLS where available); short request timeouts; body size caps.
 
 ### 8.3 Outlet permission matrix
 
@@ -399,7 +405,7 @@ No frontend route hiding is sufficient authorization; always enforce backend gua
 
 ## 11. Configuration and deployment
 
-**Outlet backend environment variables (examples):** `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `OUTLET_JWT_ACCESS_SECRET`, `OUTLET_JWT_REFRESH_SECRET`, `OUTLET_JWT_ISSUER`, `OUTLET_JWT_AUDIENCE`, `HQ_API_BASE_URL`, `OUTLET_ID`, `OUTLET_CODE`, `HQ_OUTLET_KEY_ID`, `HQ_OUTLET_KEY_SECRET`, `MENU_PULL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_SWEEP_INTERVAL_MS`, `OFFLINE_GRACE_HOURS`.
+**Outlet backend environment variables (examples):** `NODE_ENV`, `PORT`, `DATABASE_URL`, `REDIS_URL`, `OUTLET_JWT_ACCESS_SECRET`, `OUTLET_JWT_REFRESH_SECRET`, `OUTLET_JWT_ISSUER`, `OUTLET_JWT_AUDIENCE`, `MENU_PULL_INTERVAL_MS`, `OUTBOX_BATCH_SIZE`, `OUTBOX_SWEEP_INTERVAL_MS`, `OFFLINE_GRACE_HOURS`. Outlet identity (`OUTLET_ID`, `OUTLET_CODE`) is an optional dev-seed input only; the HQ base URL and machine key are **not** environment variables — they arrive via the setup wizard and live in `hq_connection`.
 
 Runtime-validated config schema (Zod/Joi) so missing critical values fail startup; secrets from a managed secret store; `.env.example` placeholders only; CORS allows only the outlet UI origin; secure HTTP headers, HTTPS termination, trusted proxy settings. Multi-stage `Dockerfile` with distinct `api` and `worker` commands/targets, non-root, health checks, pinned base-image digest in production; no secrets in build layers. Versioned TypeORM migrations — never share a migration folder or database with HQ. Database migration is a single controlled release job.
 
@@ -519,7 +525,7 @@ outlet-backend/                      # Independent Outlet NestJS application
 └── nest-cli.json
 ```
 
-**Layered module rule:** controller handles HTTP DTOs and guards; service owns business rules and transaction orchestration; repository encapsulates TypeORM queries and locking. A worker calls application services, not controllers. Repositories cannot make HTTP calls. Cross-module contracts use explicit interfaces and dependency injection. Use the global `ValidationPipe` with whitelist + reject unknown fields + transformation; `class-validator`/DTOs on server. Do not trust frontend validation as a security control. The typed **machine client** for HQ sync endpoints adds the outlet key from server-side environment/secrets via a request interceptor — never in frontend code.
+**Layered module rule:** controller handles HTTP DTOs and guards; service owns business rules and transaction orchestration; repository encapsulates TypeORM queries and locking. A worker calls application services, not controllers. Repositories cannot make HTTP calls. Cross-module contracts use explicit interfaces and dependency injection. Use the global `ValidationPipe` with whitelist + reject unknown fields + transformation; `class-validator`/DTOs on server. Do not trust frontend validation as a security control. The typed **machine client** for HQ sync endpoints resolves the outlet key server-side from the `hq_connection` table (setup wizard / rotation route; re-read before every call so rotation lands without a restart) — never from environment variables, never in frontend code.
 
 ## 15. Roadmap phases (outlet-backend scope)
 

@@ -23,15 +23,15 @@ pnpm openapi:export   # rebuild openapi/openapi.json → consumed by outlet-fron
 
 ## Module map (PRD §5, §18)
 
-`auth`, `users`, `menu-cache`, `inventory`, `sales`, `receipts`, `outbox`, `sync` (with `services/`, `repositories/`, `processors/`, `clients/`), `local-reporting` — under `src/modules/<name>/`. Entities in `src/database/entities/` matching PRD §6.2 tables exactly. Queues: `menu-pull`, `outbox-dispatch`, `sync-delivery`, `sync-reconcile`.
+`auth`, `users`, `identity` (identity + HQ-connection singletons), `setup` (first-run provisioning wizard), `menu-cache`, `inventory`, `sales`, `receipts`, `outbox`, `sync` (with `services/`, `repositories/`, `processors/`, `clients/`), `local-reporting` — under `src/modules/<name>/`. Entities in `src/database/entities/` matching PRD §6.2 tables exactly. Queues: `menu-pull`, `outbox-dispatch`, `sync-delivery`, `sync-reconcile`.
 
 ## Strict rules
 
 ### Endpoints and DTOs (PRD §7.3)
 
-1. Human routes exactly as listed: `/auth/*`, `GET /menu`, `GET /inventory`, `POST /inventory/adjustments`, `POST /sales`, `GET /sales/:id`, `GET /sales`, `GET /sync/status`. Permissions: `menu.read`, `inventory.read`, `inventory.adjust`, `sales.create`, `sales.read`, `sync.read` — `@ApiSecurity('bearer-jwt')`.
+1. Human routes exactly as listed: `/auth/*`, `GET /setup/status`, `POST /setup/identity`, `POST /setup/hq-connection` (both setup writes public ONLY while unprovisioned, then permanently sealed — PRD §8.7/§9.2 provisioning channel), `GET /menu`, `GET /inventory`, `POST /inventory/adjustments`, `POST /sales`, `GET /sales/:id`, `GET /sales`, `GET /sync/status`, `PUT /sync/hq-connection`. Permissions: `menu.read`, `inventory.read`, `inventory.adjust`, `sales.create`, `sales.read`, `sync.read`, `sync.manage` — guarded routes carry `@ApiSecurity('bearer-jwt')`.
 2. DTO names per PRD §7.1 (`CreateSaleRequest`, `SaleResponse`, …). `CreateSaleRequest` contains **only** `items: [{ menuItemId, quantity }]` — any price/total/receipt/outletId field in it is a defect. Response DTOs include the immutable snapshots the sale captured.
-3. Outlet identity comes from server-side identity config/claims — never from request JSON (PRD §3, §15).
+3. Outlet identity comes from the provisioned `outlet_identity` row / server-side claims — never from request JSON for business routes (PRD §3, §15). The one deliberate exception is the sealed setup wizard, which writes that singleton identity (plus the first admin and the `hq_connection` pairing) exactly once.
 
 ### The sale transaction (PRD FR-06, §8.6) — the most protected code in this repo
 
@@ -50,11 +50,11 @@ pnpm openapi:export   # rebuild openapi/openapi.json → consumed by outlet-fron
 
 11. Every committed sale emits exactly one immutable `sale.completed` event matching `src/contracts/sync-event-v1.schema.json`: `eventId = outbox row id`, per-outlet contiguous `sequenceNo` allocated in the sale transaction, `sum(subtotal) = totalMinor`, `quantity × unitPrice = subtotal`.
 12. Dispatcher: periodic scanner leases due rows (`FOR UPDATE SKIP LOCKED`) → enqueue only event IDs to BullMQ → processor loads the durable row and sends an authenticated HTTPS batch. Mark `DELIVERED` only on HQ `ACCEPTED` or hash-identical `DUPLICATE`; on timeout/429/5xx set `RETRY` with capped exponential backoff + jitter (honor `Retry-After`); on permanent conflict set `QUARANTINED` and alert — **never delete**. Never mark delivered before HQ ack. Expired leases return to eligible state; the periodic scanner is mandatory even when BullMQ scheduling works.
-13. The HQ machine client lives under `src/modules/sync/clients/`, reads the key from server-side env (`HQ_OUTLET_KEY_ID`/`HQ_OUTLET_KEY_SECRET`) via a request interceptor, and is **backend-only** — the key never reaches a browser bundle, query string, or log (PRD §7.4, §9.2).
+13. The HQ machine client lives under `src/modules/sync/clients/`, reads the key from the DB-backed `HqCredentialsProvider` (`hq_connection` singleton written by the setup wizard / rotation route — no environment variables), re-reads it before every HQ call (rotation lands without a restart), and is **backend-only** — the key never reaches a browser bundle, query string, or log (PRD §7.4, §9.2).
 14. Reconciliation: compare HQ checkpoint against local outbox; replay only missing events; highest **contiguous** sequence, not `MAX(sequenceNo)` (PRD §8.7).
 
 ### Invariants
 
 15. `sale.status = COMPLETED` is separate from `sync_status = PENDING | DELIVERED | QUARANTINED` — sync is not a second completion step.
 16. Inventory is per-outlet and per-assigned-item; movements are append-only with reason/actor/request ID; `CHECK (quantity_on_hand >= 0)` and friends stay in the schema (PRD §6.2).
-17. Config via `ConfigService<Env, true>` only; `APP_ENTRYPOINT=api|worker` selects the validation profile — the worker profile requires the HQ key config and never holds JWT signing secrets (PRD §14.1).
+17. Config via `ConfigService<Env, true>` only; `APP_ENTRYPOINT=api|worker` selects the validation profile — the worker profile never holds JWT signing secrets, and neither profile carries HQ credentials (they live in `hq_connection`, rule 13; the worker boots unpaired and idles until the wizard pairs the terminal) (PRD §14.1).

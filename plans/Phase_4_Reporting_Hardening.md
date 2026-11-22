@@ -131,7 +131,7 @@ No new outlet runtime features: reports are HQ-only, audit stays write-only, met
 ### V1 — End-to-end reporting/staleness + security sweep
 > Commit: `docs: document Phase 4 verification results`
 
-1. Full `docker compose up -d` + seeds (+ HQ re-seed for `audit.read`) + key provisioning (Phase 3 loop).
+1. Full `docker compose up -d` + seeds (+ HQ re-seed for `audit.read`) + key provisioning (Phase 3 loop — since superseded by the setup-wizard pairing flow, PRD FR-11).
 2. **AT-20 drill:** POS sales at outlet A while `hq-api` is stopped → restart → before backlog drains, HQ reports page shows A stale/provisional with old `dataAsOf` → after drain, totals match SQL `SUM(total_minor)` on `hq-db` exactly; B-with-no-sales renders "never reported", never "0 sales".
 3. **AT-02/AT-19 regression through reporting:** price override sale then HQ price change → report revenue reflects sold snapshots, not new prices.
 4. **Security sweep:** forged tokens rejected on both APIs; §9.3 matrix spot-checks via curl; `hq-frontend` bundle greps clean of secrets; `/sync/v1/*` unreachable from the browser (no CORS).

@@ -22,7 +22,7 @@ Each application additionally has its own `AGENTS.md` with project-specific rule
 3. **An outlet sale must never depend on an HQ request.** No outlet business transaction may make a synchronous HTTP call to HQ (PRD §2, §14.2).
 4. **No cross-database FKs or shared tables.** HQ ↔ outlet references are UUIDs validated against the owning authority (PRD §6, "Entity rules").
 5. **Never replicate** user password hashes, refresh tokens, or outlet inventory balances into HQ master-menu tables (PRD §2).
-6. **Secrets never cross into frontends.** HQ API keys, JWT signing keys, and the outlet machine key exist only in backend env/secret stores — never in `VITE_*`, browser bundles, query strings, or logs (PRD §7.4, §9.2, §14.1).
+6. **Secrets never cross into frontends.** HQ API keys, JWT signing keys, and the outlet machine key exist only in backend secret stores — env/secret-manager on HQ; the outlet's own `hq_connection` table for the machine key (written by the sealed setup wizard or the audited rotation route, PRD FR-11) — never in `VITE_*`, browser bundles, query strings, or logs (PRD §7.4, §9.2, §14.1).
 7. Data authority is fixed (PRD §8.1): HQ owns the master catalog/assignments/prices; the outlet owns sales, inventory, receipts, and its outbox; HQ reporting is a read projection that discloses lag.
 
 ---

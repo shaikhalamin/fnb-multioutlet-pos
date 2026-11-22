@@ -50,6 +50,11 @@ differs.
 - **Login + protected shell** — `/login` (Zod-validated form,
   `error.code`-driven messages), silent-refresh bootstrap, `_auth` layout
   with permission-gated navigation and logout.
+- **Setup wizard** (`/setup`, public only while unprovisioned) — first-run
+  terminal pairing (PRD §8.7/FR-11): step 1 pastes the HQ-issued outlet ID +
+  code and creates the first admin; step 2 pastes the one-time HQ machine key
+  and live-validates it ("Test & pair"). Redirects to `/login` once paired;
+  the landing page shows a "Set up this terminal" CTA while unprovisioned.
 - **POS** (`features/pos`) — menu grid (`formatMinor` string money, live
   stock), quantity-stepper cart, checkout with **one idempotency key per
   sale attempt** held in a ref across retries until response or
@@ -61,13 +66,18 @@ differs.
 - **Sales history** (`features/sales`) — Zod-validated `from/to` search
   params, keyset pagination via envelope `meta.nextCursor`, receipt detail
   with immutable snapshots and reprint.
-- **Sync banner** (`features/sync-status`) — 30s poll of
-  `GET /sync/status`: menu revision, last sync, pending uploads, escalating
-  grace-expiry warning. Purely informational — a local sale is never
-  blocked by the banner.
+- **Sync banner + Sync page** (`features/sync-status`, `/sync`) — 30s poll
+  of `GET /sync/status`: menu revision, last sync, pending uploads,
+  escalating grace-expiry warning (banner, purely informational — a local
+  sale is never blocked by it); the `/sync` page adds the full
+  checkpoint/outbox picture plus the manager-only HQ-connection card
+  (stored key ID, never the secret) with the audited rotate-key form
+  (`PUT /sync/hq-connection`, `sync.manage`).
 - **Users** (`features/users`) — manager-only local staff management
   (list/create/edit) over the Phase-2 backend endpoints.
 
-Machine sync credentials live only in the outlet worker — never in this
-app. Frontend permission gating is UX only; the backend re-validates
-everything (AGENTS §4.2).
+Machine sync credentials live only in the outlet backend's `hq_connection`
+table — this app touches them exactly once: the wizard's pairing form POSTs
+the one-time secret and never stores, logs, echoes or re-displays it
+(PRD §9.2/FR-11). Frontend permission gating is UX only; the backend
+re-validates everything (AGENTS §4.2).
