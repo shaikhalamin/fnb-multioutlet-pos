@@ -41,10 +41,27 @@ const connectionSchema = z.object({
   keySecret: z.string().min(16, 'Paste the one-time key secret from HQ.'),
 })
 
+/**
+ * HQ also shows the key as one combined `keyId.secret` value — pasting that
+ * blob into either field is the easy mistake that HQ answers with a 401.
+ * Key IDs are `ok_<env>_<hex>` and secrets are base64url; neither contains a
+ * dot, so a dot in either field always means the combined form and the first
+ * dot splits it unambiguously. Both fields are (re)filled so the operator
+ * sees exactly what will be sent.
+ */
+function splitCombinedKey(
+  value: string,
+): { keyId: string; keySecret: string } | null {
+  const trimmed = value.trim()
+  const dot = trimmed.indexOf('.')
+  if (dot <= 0 || dot === trimmed.length - 1) return null
+  return { keyId: trimmed.slice(0, dot), keySecret: trimmed.slice(dot + 1) }
+}
+
 /** Stable backend error codes (PRD §12) → human-friendly pairing messages. */
 const SETUP_ERROR_MESSAGES: Record<string, string> = {
   UNAUTHENTICATED:
-    'HQ rejected this key — check the key ID and the one-time secret (a key for another outlet is refused).',
+    'HQ rejected this key — copy the key ID and the secret separately from the HQ console (each has its own copy button there) and check nothing extra came along with the paste.',
   SYNC_TEMPORARILY_UNAVAILABLE:
     'HQ is unreachable at that URL. Check the address and that HQ is running.',
   FORBIDDEN: 'This terminal is already provisioned — setup is sealed.',
@@ -54,6 +71,16 @@ const SETUP_ERROR_MESSAGES: Record<string, string> = {
 
 function setupErrorMessage(cause: unknown): string {
   if (cause instanceof ApiError) {
+    // The backend tags the cross-outlet refusal with the key's real outlet
+    // (details.keyOutletId) — surface it distinctly instead of the generic
+    // "rejected" message, which sends the operator hunting for typos.
+    if (
+      cause.code === 'UNAUTHENTICATED' &&
+      cause.details &&
+      'keyOutletId' in cause.details
+    ) {
+      return 'HQ accepted this key, but it was issued for a different outlet. Open THIS outlet’s page in the HQ console and issue a new key there.'
+    }
     const friendly = SETUP_ERROR_MESSAGES[cause.code]
     return friendly ? friendly : `${cause.code}: ${cause.message}`
   }
@@ -303,8 +330,11 @@ function SetupPage() {
                 In HQ: open this outlet’s page →{' '}
                 <span className="font-medium">API keys → Issue key</span>, copy
                 the one-time <span className="font-medium">key ID</span> and{' '}
-                <span className="font-medium">secret</span>, then pair below. HQ
-                checks the key live before anything is saved.
+                <span className="font-medium">secret</span> (each has its own
+                copy button there), then pair below. Pasting the combined{' '}
+                <span className="font-medium">keyId.secret</span> value into
+                either field splits it automatically. HQ checks the key live
+                before anything is saved.
               </p>
               <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
                 HQ base URL
@@ -326,12 +356,21 @@ function SetupPage() {
                 <input
                   required
                   value={connectionForm.keyId}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const combined = splitCombinedKey(event.target.value)
+                    if (combined) {
+                      setConnectionForm({
+                        ...connectionForm,
+                        keyId: combined.keyId,
+                        keySecret: combined.keySecret,
+                      })
+                      return
+                    }
                     setConnectionForm({
                       ...connectionForm,
                       keyId: event.target.value.trim(),
                     })
-                  }
+                  }}
                   className="form-input font-normal"
                   placeholder="ok_dev_…"
                 />
@@ -343,12 +382,21 @@ function SetupPage() {
                   required
                   autoComplete="off"
                   value={connectionForm.keySecret}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const combined = splitCombinedKey(event.target.value)
+                    if (combined) {
+                      setConnectionForm({
+                        ...connectionForm,
+                        keyId: combined.keyId,
+                        keySecret: combined.keySecret,
+                      })
+                      return
+                    }
                     setConnectionForm({
                       ...connectionForm,
                       keySecret: event.target.value.trim(),
                     })
-                  }
+                  }}
                   className="form-input font-normal"
                   placeholder="one-time secret"
                 />

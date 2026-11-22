@@ -7,6 +7,7 @@ import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
 import { TanStackDevtools } from '@tanstack/react-devtools'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
+import { Toaster } from '../components/Toaster'
 
 // Side effect: attaches envelope/auth/refresh interceptors to the generated
 // client's axios instance exactly once (AGENTS.md §4.1).
@@ -56,6 +57,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <Header />
         {children}
         <Footer />
+        <Toaster />
         <TanStackDevtools
           config={{
             position: 'bottom-right',

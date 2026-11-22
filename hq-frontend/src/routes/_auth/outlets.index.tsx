@@ -9,6 +9,7 @@ import { outletsControllerListOutlets } from '#/api/generated/clients/outletsCon
 import type { OutletResponse } from '#/api/generated/types/OutletResponse'
 import { useSession } from '#/features/auth/session'
 import { hasPermission } from '#/lib/permissions'
+import { useCopyAction } from '#/components/CopyValue'
 
 import { outletKeys } from '#/features/outlets/keys'
 
@@ -22,30 +23,18 @@ const outletSchema = z.object({
   timezone: z.string().min(1, 'Timezone is required.'),
 })
 
-/** One freshly created outlet + which of its two copy values was just copied. */
-type JustCreated = { outlet: OutletResponse; copied: 'id' | 'code' | null }
+/** The outlet just created, kept around for the pairing panel. */
+type JustCreated = OutletResponse
 
 /**
  * Post-creation pairing panel: surfaces the HQ-issued Outlet ID + code for
- * copying and walks the operator through pairing the terminal (PRD §8.7
- * bootstrap) — setup wizard step 1 here, step 2 after issuing a key on the
- * outlet's detail page.
+ * copying (each copy confirms with a toast) and walks the operator through
+ * pairing the terminal (PRD §8.7 bootstrap) — setup wizard step 1 here,
+ * step 2 after issuing a key on the outlet's detail page.
  */
-function PairingPanel({
-  created,
-  onCopied,
-}: {
-  created: JustCreated
-  onCopied: (which: 'id' | 'code') => void
-}) {
-  const { outlet } = created
-
-  async function copy(which: 'id' | 'code') {
-    await navigator.clipboard.writeText(
-      which === 'id' ? outlet.id : outlet.code,
-    )
-    onCopied(which)
-  }
+function PairingPanel({ outlet }: { outlet: JustCreated }) {
+  const idCopy = useCopyAction('Outlet ID')
+  const codeCopy = useCopyAction('Outlet code')
 
   return (
     <section className="card-panel mt-6 p-6" aria-live="polite">
@@ -53,21 +42,21 @@ function PairingPanel({
       <div className="mb-4 flex flex-wrap gap-3">
         <button
           type="button"
-          onClick={() => void copy('id')}
+          onClick={() => void idCopy.copy(outlet.id)}
           className="btn-outline btn-sm"
           title="Copy the Outlet ID"
         >
           Outlet ID: <span className="money">{outlet.id}</span>
-          {created.copied === 'id' ? ' ✓ copied' : ''}
+          {idCopy.copied ? ' ✓ copied' : ''}
         </button>
         <button
           type="button"
-          onClick={() => void copy('code')}
+          onClick={() => void codeCopy.copy(outlet.code)}
           className="btn-outline btn-sm"
           title="Copy the outlet code (receipt prefix)"
         >
           Code: <span className="money">{outlet.code}</span>
-          {created.copied === 'code' ? ' ✓ copied' : ''}
+          {codeCopy.copied ? ' ✓ copied' : ''}
         </button>
       </div>
       <ol className="m-0 list-decimal pl-5 text-sm text-body">
@@ -120,7 +109,7 @@ function OutletsPage() {
     onSuccess: (outlet) => {
       setForm({ code: '', name: '', timezone: 'UTC' })
       setError(null)
-      setJustCreated({ outlet, copied: null })
+      setJustCreated(outlet)
       void queryClient.invalidateQueries({ queryKey: outletKeys.list() })
     },
     onError: (cause) =>
@@ -146,14 +135,7 @@ function OutletsPage() {
       <p className="kicker mb-2">Sites</p>
       <h1 className="mb-6 font-display text-display-md text-ink">Outlets</h1>
 
-      {justCreated ? (
-        <PairingPanel
-          created={justCreated}
-          onCopied={(which) =>
-            setJustCreated({ ...justCreated, copied: which })
-          }
-        />
-      ) : null}
+      {justCreated ? <PairingPanel outlet={justCreated} /> : null}
 
       <section className="card-panel p-6">
         {outlets.isPending ? (

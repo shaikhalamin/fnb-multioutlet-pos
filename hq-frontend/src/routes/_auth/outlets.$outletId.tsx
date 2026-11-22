@@ -17,6 +17,7 @@ import { useSession } from '#/features/auth/session'
 import { hasPermission } from '#/lib/permissions'
 import { formatMinor } from '#/lib/utils'
 import { outletKeys } from '#/features/outlets/keys'
+import { CopyValue, useCopyAction } from '#/components/CopyValue'
 
 export const Route = createFileRoute('/_auth/outlets/$outletId')({
   component: OutletDetailPage,
@@ -30,6 +31,7 @@ function OutletDetailPage() {
   const queryClient = useQueryClient()
   const canAssign = hasPermission(session.user, 'assignments.write')
   const canManageKeys = hasPermission(session.user, 'keys.manage')
+  const idCopy = useCopyAction('Outlet ID')
 
   const outlets = useQuery({
     queryKey: outletKeys.list(),
@@ -98,9 +100,10 @@ function OutletDetailPage() {
             type="button"
             className="underline decoration-dotted"
             title="Copy the Outlet ID for the terminal's setup wizard"
-            onClick={() => void navigator.clipboard.writeText(outlet.id)}
+            onClick={() => void idCopy.copy(outlet.id)}
           >
-            ID <span className="money">{outlet.id}</span> (copy)
+            ID <span className="money">{outlet.id}</span> (
+            {idCopy.copied ? 'copied ✓' : 'copy'})
           </button>
         </p>
       ) : null}
@@ -339,7 +342,6 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
     queryFn: () => apiKeysControllerList({ path: { outletId } }),
   })
   const [issued, setIssued] = useState<IssuedKey | null>(null)
-  const [copied, setCopied] = useState(false)
 
   const invalidate = () =>
     void queryClient.invalidateQueries({ queryKey: outletKeys.keys(outletId) })
@@ -349,7 +351,6 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
     onSuccess: (result) => {
       // The raw secret exists only in this one-time view (PRD §9.2).
       setIssued({ keyId: result.keyId, secret: result.secret })
-      setCopied(false)
       invalidate()
     },
   })
@@ -361,7 +362,6 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
       }),
     onSuccess: (result) => {
       setIssued({ keyId: result.keyId, secret: result.secret })
-      setCopied(false)
       invalidate()
     },
   })
@@ -370,12 +370,6 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
       apiKeysControllerRevoke({ path: { outletId, keyId } }),
     onSuccess: invalidate,
   })
-
-  async function copySecret(): Promise<void> {
-    if (!issued) return
-    await navigator.clipboard.writeText(`${issued.keyId}.${issued.secret}`)
-    setCopied(true)
-  }
 
   return (
     <section className="card-panel p-6">
@@ -393,28 +387,39 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
           className="mb-4 rounded-xl border border-hairline bg-canvas-soft p-4"
           role="alert"
         >
-          <p className="kicker m-0 mb-2">
+          <p className="kicker m-0 mb-1">
             One-time secret — store it now, it will not be shown again
           </p>
-          <code className="money block break-all rounded-lg bg-surface-card px-3 py-2 text-xs">
-            {issued.keyId}.{issued.secret}
-          </code>
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void copySecret()}
-              className="btn-primary btn-sm"
-            >
-              {copied ? 'Copied ✓' : 'Copy full key'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIssued(null)}
-              className="btn-outline btn-sm"
-            >
-              Dismiss
-            </button>
+          <p className="m-0 mb-3 text-xs text-body">
+            The terminal&apos;s setup wizard asks for the{' '}
+            <span className="font-medium text-ink">key ID</span> and the{' '}
+            <span className="font-medium text-ink">secret</span> as two separate
+            values — copy each row into its own field there.
+          </p>
+          <div className="flex flex-col gap-3">
+            <CopyValue
+              label="Key ID"
+              value={issued.keyId}
+              buttonLabel="Copy key ID"
+            />
+            <CopyValue
+              label="Key secret (shown once)"
+              value={issued.secret}
+              buttonLabel="Copy secret"
+            />
+            <CopyValue
+              label="Combined keyId.secret (worker Authorization header)"
+              value={`${issued.keyId}.${issued.secret}`}
+              buttonLabel="Copy combined"
+            />
           </div>
+          <button
+            type="button"
+            onClick={() => setIssued(null)}
+            className="btn-outline btn-sm mt-3"
+          >
+            Dismiss — I stored it
+          </button>
         </div>
       ) : null}
 
