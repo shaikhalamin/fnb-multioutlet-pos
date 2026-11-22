@@ -1,27 +1,27 @@
-import bcrypt from 'bcrypt';
 import { DataSource } from 'typeorm';
 import { loadEnvFileGaps } from '../config/env.schema.js';
-import { DEFAULT_OUTLET_ROLES, OUTLET_PERMISSIONS } from '../common/rbac/permissions.js';
 import { buildCliDataSource } from './data-source.js';
 import { CatalogItemEntity } from './entities/catalog-item.entity.js';
 import { InventoryBalanceEntity } from './entities/inventory-balance.entity.js';
-import { MenuSyncStateEntity } from './entities/menu-sync-state.entity.js';
 import { OutletIdentityEntity } from './entities/outlet-identity.entity.js';
-import { OutletPermissionEntity } from './entities/outlet-permission.entity.js';
-import { OutletRoleEntity } from './entities/outlet-role.entity.js';
-import { OutletRolePermissionEntity } from './entities/outlet-role-permission.entity.js';
-import { OutletUserEntity } from './entities/outlet-user.entity.js';
-import { OutletUserRoleEntity } from './entities/outlet-user-role.entity.js';
-import { OutboxCounterEntity } from './entities/outbox-counter.entity.js';
-import { ReceiptCounterEntity } from './entities/receipt-counter.entity.js';
+import {
+  ensureCounters,
+  ensurePermissionsAndRoles,
+  ensureSyncState,
+  ensureUserWithRoles,
+} from '../modules/setup/provisioning.js';
 
 /**
- * Idempotent outlet seed (PRD §6.2 bootstrap): provisioned identity, the
+ * Idempotent DEV seed (PRD §6.2 bootstrap): provisioned identity, the
  * permission catalog + default roles, demo staff accounts, and a local
  * catalog snapshot that simulates a completed menu sync (fixed well-known
  * item UUIDs, `applied_revision = 1`, fresh `last_sync_at` so the offline
  * grace policy passes). Natural keys make re-runs no-ops; existing rows are
- * never overwritten. The Phase-3 pull worker reconciles the catalog with HQ.
+ * never overwritten.
+ *
+ * The production provisioning path is the setup wizard (UI pairing with
+ * HQ): when OUTLET_ID/OUTLET_CODE are absent this seed is a no-op — the
+ * terminal stays empty and unpaired, ready for the wizard.
  */
 
 const log = (msg: string, payload: Record<string, unknown> = {}): void => {
@@ -87,18 +87,21 @@ const DEMO_CATALOG: ReadonlyArray<{
   },
 ];
 
-async function seedIdentity(dataSource: DataSource): Promise<{ outletId: string; outletCode: string }> {
+async function seedIdentity(dataSource: DataSource): Promise<{ outletId: string; outletCode: string } | null> {
   loadEnvFileGaps();
   const outletId = process.env.OUTLET_ID;
   const outletCode = process.env.OUTLET_CODE;
   if (!outletId || !outletCode) {
-    throw new Error('OUTLET_ID and OUTLET_CODE are required to seed the outlet identity');
+    log('seed_skipped_no_identity', {
+      hint: 'Leave this terminal unpaired and provision it via the setup wizard (HQ → Outlets → create → /setup)',
+    });
+    return null;
   }
 
   const repo = dataSource.getRepository(OutletIdentityEntity);
-  const existing = await repo.findOne({ where: { outletId } });
+  const existing = await repo.findOne({ where: {} });
   if (existing) {
-    log('seed_identity_exists', { outletId });
+    log('seed_identity_exists', { outletId: existing.outletId });
     return { outletId: existing.outletId, outletCode: existing.outletCode };
   }
   await repo.insert(
@@ -114,74 +117,26 @@ async function seedIdentity(dataSource: DataSource): Promise<{ outletId: string;
   return { outletId, outletCode };
 }
 
-async function seedPermissionsAndRoles(dataSource: DataSource): Promise<Map<string, string>> {
-  const permissionsRepo = dataSource.getRepository(OutletPermissionEntity);
-  const rolesRepo = dataSource.getRepository(OutletRoleEntity);
-  const rolePermsRepo = dataSource.getRepository(OutletRolePermissionEntity);
-  const permissionIds = new Map<string, string>();
-
-  for (const code of OUTLET_PERMISSIONS) {
-    const existing = await permissionsRepo.findOne({ where: { code } });
-    if (existing) {
-      permissionIds.set(code, existing.id);
-      continue;
-    }
-    const saved = await permissionsRepo.save(permissionsRepo.create({ code, description: '' }));
-    permissionIds.set(code, saved.id);
-  }
-  log('seed_permissions_ready', { count: permissionIds.size });
-
-  const roleIds = new Map<string, string>();
-  for (const role of DEFAULT_OUTLET_ROLES) {
-    let entity = await rolesRepo.findOne({ where: { code: role.code } });
-    if (!entity) {
-      entity = await rolesRepo.save(rolesRepo.create({ code: role.code, name: role.name }));
-      log('seed_role_created', { code: role.code, roleId: entity.id });
-    }
-    roleIds.set(role.code, entity.id);
-
-    // Keep role → permission membership aligned with the catalog.
-    for (const permission of role.permissions) {
-      const permissionId = permissionIds.get(permission);
-      if (!permissionId) continue;
-      const existing = await rolePermsRepo.findOne({ where: { roleId: entity.id, permissionId } });
-      if (!existing) {
-        await rolePermsRepo.save(rolePermsRepo.create({ roleId: entity.id, permissionId }));
-      }
-    }
-  }
-  return roleIds;
-}
-
-async function seedUsers(dataSource: DataSource, roleIds: Map<string, string>): Promise<void> {
-  const usersRepo = dataSource.getRepository(OutletUserEntity);
-  const userRolesRepo = dataSource.getRepository(OutletUserRoleEntity);
-
+async function seedUsers(
+  dataSource: DataSource,
+  roleIds: Map<string, string>,
+): Promise<void> {
   for (const demo of DEMO_USERS) {
     const email = (process.env[`SEED_OUTLET_${demo.envPrefix}_EMAIL`] ?? demo.defaultEmail).toLowerCase();
     const password = process.env[`SEED_OUTLET_${demo.envPrefix}_PASSWORD`] ?? demo.defaultPassword;
-
-    const existing = await usersRepo
-      .createQueryBuilder('user')
-      .where('lower(user.email) = :email', { email })
-      .getOne();
-    if (existing) {
-      log('seed_user_exists', { email });
-      continue;
-    }
-
-    const user = await usersRepo.save(
-      usersRepo.create({ email, passwordHash: await bcrypt.hash(password, 12), status: 'ACTIVE' }),
-    );
     const roleId = roleIds.get(demo.roleCode);
     if (!roleId) throw new Error(`role missing from seed catalog: ${demo.roleCode}`);
-    await userRolesRepo.save(userRolesRepo.create({ userId: user.id, roleId }));
-    log('seed_user_created', { email, role: demo.roleCode });
-    if (!process.env[`SEED_OUTLET_${demo.envPrefix}_PASSWORD`]) {
-      log('seed_user_default_password', {
-        warning: `SEED_OUTLET_${demo.envPrefix}_PASSWORD not set; local development default credentials in use`,
-        email,
-      });
+    const { created } = await ensureUserWithRoles(dataSource.manager, { email, password, roleId });
+    if (created) {
+      log('seed_user_created', { email, role: demo.roleCode });
+      if (!process.env[`SEED_OUTLET_${demo.envPrefix}_PASSWORD`]) {
+        log('seed_user_default_password', {
+          warning: `SEED_OUTLET_${demo.envPrefix}_PASSWORD not set; local development default credentials in use`,
+          email,
+        });
+      }
+    } else {
+      log('seed_user_exists', { email });
     }
   }
 }
@@ -189,7 +144,6 @@ async function seedUsers(dataSource: DataSource, roleIds: Map<string, string>): 
 async function seedCatalogAndSyncState(dataSource: DataSource, outletId: string): Promise<void> {
   const itemsRepo = dataSource.getRepository(CatalogItemEntity);
   const balancesRepo = dataSource.getRepository(InventoryBalanceEntity);
-  const syncStateRepo = dataSource.getRepository(MenuSyncStateEntity);
 
   for (const item of DEMO_CATALOG) {
     const existing = await itemsRepo.findOne({ where: { menuItemId: item.menuItemId } });
@@ -220,46 +174,22 @@ async function seedCatalogAndSyncState(dataSource: DataSource, outletId: string)
     }
   }
 
-  // Fresh checkpoint: simulates a completed menu sync so the offline grace
-  // policy passes (PRD §8.8); the Phase-3 pull worker keeps it current.
-  const syncState = await syncStateRepo.findOne({ where: { outletId } });
-  if (!syncState) {
-    await syncStateRepo.insert(
-      syncStateRepo.create({
-        outletId,
-        lastAppliedRevision: '1',
-        lastSyncAt: new Date(),
-        snapshotId: null,
-      }),
-    );
-    log('seed_sync_state_created', { outletId });
-  }
-}
-
-async function seedCounters(dataSource: DataSource, outletId: string, outletCode: string): Promise<void> {
-  const receiptsRepo = dataSource.getRepository(ReceiptCounterEntity);
-  const outboxRepo = dataSource.getRepository(OutboxCounterEntity);
-
-  if (!(await receiptsRepo.findOne({ where: { outletId } }))) {
-    await receiptsRepo.insert(receiptsRepo.create({ outletId, nextNumber: '1', prefix: outletCode }));
-    log('seed_receipt_counter_created', { outletId, prefix: outletCode });
-  }
-  if (!(await outboxRepo.findOne({ where: { outletId } }))) {
-    await outboxRepo.insert(outboxRepo.create({ outletId, nextSequence: '1' }));
-    log('seed_outbox_counter_created', { outletId });
-  }
+  // Fresh checkpoint at revision 1: simulates a completed menu sync so the
+  // offline grace policy passes (PRD §8.8); the pull worker keeps it current.
+  await ensureSyncState(dataSource.manager, outletId, '1');
 }
 
 async function main(): Promise<void> {
   const dataSource = buildCliDataSource();
   try {
     await dataSource.initialize();
-    const { outletId, outletCode } = await seedIdentity(dataSource);
-    const roleIds = await seedPermissionsAndRoles(dataSource);
+    const identity = await seedIdentity(dataSource);
+    if (!identity) return;
+    const roleIds = await ensurePermissionsAndRoles(dataSource.manager);
     await seedUsers(dataSource, roleIds);
-    await seedCatalogAndSyncState(dataSource, outletId);
-    await seedCounters(dataSource, outletId, outletCode);
-    log('seed_completed', { outletId, outletCode });
+    await seedCatalogAndSyncState(dataSource, identity.outletId);
+    await ensureCounters(dataSource.manager, identity.outletId, identity.outletCode);
+    log('seed_completed', identity);
   } finally {
     await dataSource.destroy();
   }

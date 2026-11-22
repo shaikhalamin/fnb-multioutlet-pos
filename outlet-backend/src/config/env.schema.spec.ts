@@ -14,13 +14,6 @@ const validApiEnv = {
   OUTLET_JWT_REFRESH_SECRET: 'dev-refresh-secret-0123456789abcdef0123456789',
 } satisfies Record<string, string | undefined>;
 
-const validWorkerEnv = {
-  ...validApiEnv,
-  HQ_API_BASE_URL: 'http://localhost:4000/api/v1',
-  HQ_OUTLET_KEY_ID: 'ok_live_123',
-  HQ_OUTLET_KEY_SECRET: 'dev-secret',
-};
-
 describe('apiEnvSchema', () => {
   it('parses a valid environment with defaults applied', () => {
     const result = safeParseEnv(apiEnvSchema, validApiEnv);
@@ -32,9 +25,18 @@ describe('apiEnvSchema', () => {
     }
   });
 
-  it('fails when the outlet identity is missing', () => {
-    const { OUTLET_ID: _omitted, ...withoutIdentity } = validApiEnv;
+  it('boots without outlet identity — the terminal awaits setup-wizard provisioning', () => {
+    const { OUTLET_ID: _id, OUTLET_CODE: _code, ...withoutIdentity } = validApiEnv;
     const result = safeParseEnv(apiEnvSchema, withoutIdentity);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.env.OUTLET_ID).toBeUndefined();
+      expect(result.env.OUTLET_CODE).toBeUndefined();
+    }
+  });
+
+  it('still validates the identity shape when provided (dev seed path)', () => {
+    const result = safeParseEnv(apiEnvSchema, { ...validApiEnv, OUTLET_ID: 'not-a-uuid' });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.issues.some((issue) => issue.path === 'OUTLET_ID')).toBe(true);
@@ -45,16 +47,11 @@ describe('apiEnvSchema', () => {
     const result = safeParseEnv(apiEnvSchema, { ...validApiEnv, DATABASE_URL: 'mysql://localhost/fnb' });
     expect(result.ok).toBe(false);
   });
-
-  it('does not require the HQ machine key (the API never calls HQ)', () => {
-    const result = safeParseEnv(apiEnvSchema, validApiEnv);
-    expect(result.ok).toBe(true);
-  });
 });
 
 describe('workerEnvSchema', () => {
   it('parses a valid worker environment with sync defaults', () => {
-    const result = safeParseEnv(workerEnvSchema, validWorkerEnv);
+    const result = safeParseEnv(workerEnvSchema, validApiEnv);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.env.MENU_PULL_INTERVAL_MS).toBe(30_000);
@@ -64,29 +61,17 @@ describe('workerEnvSchema', () => {
     }
   });
 
-  it('requires the HQ machine key configuration', () => {
-    const { HQ_OUTLET_KEY_SECRET: _omitted, ...withoutSecret } = validWorkerEnv;
-    const result = safeParseEnv(workerEnvSchema, withoutSecret);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.issues.some((issue) => issue.path === 'HQ_OUTLET_KEY_SECRET')).toBe(true);
-    }
-  });
-
-  it('rejects non-http HQ API base URLs', () => {
-    const result = safeParseEnv(workerEnvSchema, { ...validWorkerEnv, HQ_API_BASE_URL: 'ftp://hq/api' });
-    expect(result.ok).toBe(false);
-  });
-
-  it('boots without outlet JWT secrets (PRD §3, §9.2 least privilege)', () => {
+  it('boots unpaired: no HQ credentials in the environment anymore (setup wizard owns them)', () => {
     const {
       OUTLET_JWT_ISSUER: _a,
       OUTLET_JWT_AUDIENCE: _b,
       OUTLET_JWT_ACCESS_SECRET: _c,
       OUTLET_JWT_REFRESH_SECRET: _d,
-      ...workerEnv
-    } = validWorkerEnv;
-    const result = safeParseEnv(workerEnvSchema, workerEnv);
+      OUTLET_ID: _e,
+      OUTLET_CODE: _f,
+      ...unpairedWorkerEnv
+    } = validApiEnv;
+    const result = safeParseEnv(workerEnvSchema, unpairedWorkerEnv);
     expect(result.ok).toBe(true);
   });
 });

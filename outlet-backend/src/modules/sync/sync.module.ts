@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module.js';
 import { OutboxModule } from '../outbox/outbox.module.js';
+import { SetupModule } from '../setup/setup.module.js';
 import { HqSyncClient } from './clients/hq-sync.client.js';
 import { MenuPullProcessor } from './processors/menu-pull.processor.js';
 import { OutboxSweepProcessor } from './processors/outbox-sweep.processor.js';
@@ -14,11 +15,13 @@ import { SyncService } from './sync.service.js';
 /**
  * Sync-facing surface (PRD §7.3, §8): local status reads, the Phase-3 menu
  * pull/apply service, the typed HQ machine client and the dispatcher
- * processors. BullMQ queue/worker instances are plain providers wired on the
- * worker entrypoint (`worker-main.ts`), never part of the sale path.
+ * processors. `SetupModule` supplies the validate-then-save connection
+ * logic reused by the authenticated rotation route. BullMQ queue/worker
+ * instances are plain providers wired on the worker entrypoint
+ * (`worker-main.ts`), never part of the sale path.
  */
 @Module({
-  imports: [OutboxModule, AuditModule],
+  imports: [OutboxModule, AuditModule, SetupModule],
   controllers: [SyncController],
   providers: [
     SyncService,

@@ -14,9 +14,11 @@ import { DatabaseModule } from './database/database.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { HealthModule } from './modules/health/health.module.js';
+import { IdentityModule } from './modules/identity/identity.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { MenuCacheModule } from './modules/menu-cache/menu-cache.module.js';
 import { SalesModule } from './modules/sales/sales.module.js';
+import { SetupModule } from './modules/setup/setup.module.js';
 import { SyncModule } from './modules/sync/sync.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 
@@ -38,7 +40,10 @@ import { UsersModule } from './modules/users/users.module.js';
     }),
     DatabaseModule,
     AuditModule,
+    // Global: identity + HQ connection singletons consumed across modules.
+    IdentityModule,
     AuthModule,
+    SetupModule,
     UsersModule,
     MenuCacheModule,
     InventoryModule,

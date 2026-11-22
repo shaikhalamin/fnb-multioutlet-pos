@@ -2,8 +2,11 @@ import { Column, Entity, PrimaryColumn } from 'typeorm';
 
 /**
  * Singleton row describing this outlet's provisioned identity (PRD §6.2):
- * immutable local configuration seeded at provisioning and checked against
- * every worker event. The outlet never re-derives its identity from requests.
+ * immutable local configuration written once at provisioning (setup wizard
+ * or dev seed) and checked against every worker event. The outlet never
+ * re-derives its identity from requests. The informational columns are
+ * nullable because wizard provisioning knows only the HQ-issued ID and
+ * code; currency is backfilled from the first menu pull.
  */
 @Entity({ name: 'outlet_identity' })
 export class OutletIdentityEntity {
@@ -15,12 +18,12 @@ export class OutletIdentityEntity {
   outletCode!: string;
 
   /** Owning company UUID (HQ-side reference; no cross-database FK). */
-  @Column({ name: 'company_id', type: 'uuid' })
-  companyId!: string;
+  @Column({ name: 'company_id', type: 'uuid', nullable: true })
+  companyId!: string | null;
 
-  @Column({ name: 'timezone', type: 'text' })
-  timezone!: string;
+  @Column({ name: 'timezone', type: 'text', nullable: true })
+  timezone!: string | null;
 
-  @Column({ name: 'currency_code', type: 'text' })
-  currencyCode!: string;
+  @Column({ name: 'currency_code', type: 'text', nullable: true })
+  currencyCode!: string | null;
 }

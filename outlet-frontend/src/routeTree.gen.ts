@@ -12,8 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AuthInventoryRouteImport } from './routes/_auth/inventory'
 import { Route as AuthPosRouteImport } from './routes/_auth/pos'
+import { Route as AuthSyncRouteImport } from './routes/_auth/sync'
 import { Route as AuthUsersRouteImport } from './routes/_auth/users'
 import { Route as AuthSalesIndexRouteImport } from './routes/_auth/sales/index'
 import { Route as AuthSalesSaleIdRouteImport } from './routes/_auth/sales.$saleId'
@@ -32,6 +34,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthInventoryRoute = AuthInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -40,6 +47,11 @@ const AuthInventoryRoute = AuthInventoryRouteImport.update({
 const AuthPosRoute = AuthPosRouteImport.update({
   id: '/pos',
   path: '/pos',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthSyncRoute = AuthSyncRouteImport.update({
+  id: '/sync',
+  path: '/sync',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthUsersRoute = AuthUsersRouteImport.update({
@@ -61,8 +73,10 @@ const AuthSalesSaleIdRoute = AuthSalesSaleIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/inventory': typeof AuthInventoryRoute
   '/pos': typeof AuthPosRoute
+  '/sync': typeof AuthSyncRoute
   '/users': typeof AuthUsersRoute
   '/sales/$saleId': typeof AuthSalesSaleIdRoute
   '/sales/': typeof AuthSalesIndexRoute
@@ -70,8 +84,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/inventory': typeof AuthInventoryRoute
   '/pos': typeof AuthPosRoute
+  '/sync': typeof AuthSyncRoute
   '/users': typeof AuthUsersRoute
   '/sales/$saleId': typeof AuthSalesSaleIdRoute
   '/sales': typeof AuthSalesIndexRoute
@@ -81,8 +97,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/_auth/inventory': typeof AuthInventoryRoute
   '/_auth/pos': typeof AuthPosRoute
+  '/_auth/sync': typeof AuthSyncRoute
   '/_auth/users': typeof AuthUsersRoute
   '/_auth/sales/$saleId': typeof AuthSalesSaleIdRoute
   '/_auth/sales/': typeof AuthSalesIndexRoute
@@ -92,8 +110,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/setup'
     | '/inventory'
     | '/pos'
+    | '/sync'
     | '/users'
     | '/sales/$saleId'
     | '/sales/'
@@ -101,8 +121,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/setup'
     | '/inventory'
     | '/pos'
+    | '/sync'
     | '/users'
     | '/sales/$saleId'
     | '/sales'
@@ -111,8 +133,10 @@ export interface FileRouteTypes {
     | '/'
     | '/_auth'
     | '/login'
+    | '/setup'
     | '/_auth/inventory'
     | '/_auth/pos'
+    | '/_auth/sync'
     | '/_auth/users'
     | '/_auth/sales/$saleId'
     | '/_auth/sales/'
@@ -122,6 +146,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
+  SetupRoute: typeof SetupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -147,6 +172,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/inventory': {
       id: '/_auth/inventory'
       path: '/inventory'
@@ -159,6 +191,13 @@ declare module '@tanstack/react-router' {
       path: '/pos'
       fullPath: '/pos'
       preLoaderRoute: typeof AuthPosRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/sync': {
+      id: '/_auth/sync'
+      path: '/sync'
+      fullPath: '/sync'
+      preLoaderRoute: typeof AuthSyncRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/users': {
@@ -188,6 +227,7 @@ declare module '@tanstack/react-router' {
 interface AuthRouteChildren {
   AuthInventoryRoute: typeof AuthInventoryRoute
   AuthPosRoute: typeof AuthPosRoute
+  AuthSyncRoute: typeof AuthSyncRoute
   AuthUsersRoute: typeof AuthUsersRoute
   AuthSalesSaleIdRoute: typeof AuthSalesSaleIdRoute
   AuthSalesIndexRoute: typeof AuthSalesIndexRoute
@@ -196,6 +236,7 @@ interface AuthRouteChildren {
 const AuthRouteChildren: AuthRouteChildren = {
   AuthInventoryRoute: AuthInventoryRoute,
   AuthPosRoute: AuthPosRoute,
+  AuthSyncRoute: AuthSyncRoute,
   AuthUsersRoute: AuthUsersRoute,
   AuthSalesSaleIdRoute: AuthSalesSaleIdRoute,
   AuthSalesIndexRoute: AuthSalesIndexRoute,
@@ -207,6 +248,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
+  SetupRoute: SetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

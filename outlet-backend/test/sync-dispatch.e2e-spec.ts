@@ -360,19 +360,17 @@ describeWithDeps('Outlet sync dispatch (e2e)', () => {
   // ---- helpers ------------------------------------------------------------------
 
   function makeDeliveryProcessor(baseUrl: string): SyncDeliveryProcessor {
-    const config = {
-      get: (key: string) =>
-        key === 'OUTBOX_BATCH_SIZE'
-          ? 100
-          : key === 'HQ_API_BASE_URL'
-            ? baseUrl
-            : key === 'HQ_OUTLET_KEY_ID'
-              ? 'e2e-key-id'
-              : key === 'HQ_OUTLET_KEY_SECRET'
-                ? 'e2e-key-secret'
-                : undefined,
+    const credentials = {
+      hqApiBaseUrl: baseUrl,
+      keyId: 'e2e-key-id',
+      keySecret: 'e2e-key-secret',
     };
-    const client = new HqSyncClient(config as unknown as ConfigService<never, true>);
+    const provider = {
+      refresh: async () => credentials,
+      get: () => credentials,
+    };
+    const config = { get: (key: string) => (key === 'OUTBOX_BATCH_SIZE' ? 100 : undefined) };
+    const client = new HqSyncClient(provider as never);
     return new SyncDeliveryProcessor(
       outbox,
       client,

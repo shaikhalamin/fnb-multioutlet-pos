@@ -85,6 +85,17 @@ export class SyncOutboxStatus {
   lastErrorSample!: SyncOutboxErrorSample[] | null;
 }
 
+export class SyncHqConnectionStatus {
+  @ApiProperty({ example: 'http://hq-api:3000/api/v1', description: 'Stored HQ sync API base URL.' })
+  hqApiBaseUrl!: string;
+
+  @ApiProperty({ example: 'ok_dev_0123456789abcdef', description: 'Stored machine key ID (the secret is never returned).' })
+  keyId!: string;
+
+  @ApiProperty({ example: '2026-11-22T10:00:00.000Z', description: 'When HQ last accepted the stored key.' })
+  lastValidatedAt!: string;
+}
+
 export class SyncStatusResponse {
   @ApiProperty({ example: '11111111-1111-4111-8111-111111111111' })
   outletId!: string;
@@ -108,6 +119,13 @@ export class SyncStatusResponse {
 
   @ApiProperty({ type: SyncOutboxStatus })
   outbox!: SyncOutboxStatus;
+
+  @ApiPropertyOptional({
+    type: SyncHqConnectionStatus,
+    nullable: true,
+    description: 'The stored HQ connection (key ID only); null before pairing.',
+  })
+  hqConnection!: SyncHqConnectionStatus | null;
 }
 
 export class ExtendGraceRequest {

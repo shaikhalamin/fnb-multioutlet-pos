@@ -2,12 +2,13 @@ import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { DataSource } from 'typeorm';
 import { ApiException } from '../../common/exceptions/api.exception.js';
-import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import type { Env } from '../../config/env.schema.js';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { MenuSyncStateEntity } from '../../database/entities/menu-sync-state.entity.js';
-import { OutletIdentityEntity } from '../../database/entities/outlet-identity.entity.js';
 import { OutletAuditService } from '../audit/outlet-audit.service.js';
+// Value imports (not `import type`): classes are injection tokens.
+import { IdentityRepository } from '../identity/identity.repository.js';
+import { IdentityService } from '../identity/identity.service.js';
 // Value import (not `import type`): the class is an injection token.
 import { OutboxRepository } from '../outbox/outbox.repository.js';
 import type {
@@ -22,29 +23,30 @@ import type {
  * Status reads are answered entirely from this outlet's own tables — no HQ
  * call is ever made (an outlet's status read never depends on HQ
  * reachability, PRD §2, §8.1). The emergency grace override and quarantine
- * replay are manager-only and audited.
+ * replay are manager-only and audited. The HQ connection summary exposes
+ * the stored key ID only — never the secret.
  */
 @Injectable()
 export class SyncService {
   private readonly offlineGraceHours: number;
-  private readonly outletId: string;
 
   constructor(
     @Inject(DATA_SOURCE) private readonly dataSource: DataSource,
     private readonly outbox: OutboxRepository,
     private readonly audit: OutletAuditService,
+    private readonly identities: IdentityRepository,
+    private readonly identity: IdentityService,
     config: ConfigService<Env, true>,
   ) {
     this.offlineGraceHours = config.get('OFFLINE_GRACE_HOURS', { infer: true });
-    this.outletId = config.get('OUTLET_ID', { infer: true });
   }
 
   async getStatus(): Promise<SyncStatusResponse> {
-    const identityRepo = this.dataSource.getRepository(OutletIdentityEntity);
+    const provisioned = await this.identity.requireIdentity();
     const syncStateRepo = this.dataSource.getRepository(MenuSyncStateEntity);
-    const [identity, syncState, counts, oldestPendingAt, lastPublishedAt, quarantinedSample] = await Promise.all([
-      identityRepo.findOne({ where: { outletId: this.outletId } }),
+    const [syncState, connection, counts, oldestPendingAt, lastPublishedAt, quarantinedSample] = await Promise.all([
       syncStateRepo.findOne({ where: {} }),
+      this.identities.findConnection(),
       this.outbox.countByStatus(),
       this.outbox.oldestPendingAt(),
       this.outbox.lastPublishedAt(),
@@ -61,8 +63,8 @@ export class SyncService {
     const graceExpiresAt = Number.isFinite(effective) ? new Date(effective) : null;
 
     return {
-      outletId: this.outletId,
-      outletCode: identity?.outletCode ?? '',
+      outletId: provisioned.outletId,
+      outletCode: provisioned.outletCode,
       lastAppliedRevision: syncState?.lastAppliedRevision ?? '0',
       lastMenuSyncAt: syncState?.lastSyncAt?.toISOString() ?? null,
       grace: {
@@ -85,6 +87,13 @@ export class SyncService {
               }))
             : null,
       },
+      hqConnection: connection
+        ? {
+            hqApiBaseUrl: connection.hqBaseUrl,
+            keyId: connection.keyId,
+            lastValidatedAt: connection.lastValidatedAt.toISOString(),
+          }
+        : null,
     };
   }
 
@@ -97,6 +106,7 @@ export class SyncService {
     request: ExtendGraceRequest,
     actor: { id: string; email: string },
   ): Promise<GraceOverrideResponse> {
+    const { outletId } = await this.identity.requireIdentity();
     const until = new Date(Date.now() + request.hours * 3_600_000);
     await this.dataSource.transaction(async (manager) => {
       const updated = await manager
@@ -104,7 +114,7 @@ export class SyncService {
         .createQueryBuilder()
         .update(MenuSyncStateEntity)
         .set({ graceOverriddenUntil: until })
-        .where('outlet_id = :outletId', { outletId: this.outletId })
+        .where('outlet_id = :outletId', { outletId })
         .execute();
       if ((updated.affected ?? 0) === 0) {
         throw new ApiException('NOT_FOUND', 'Menu sync state missing for this outlet.', 404);
@@ -114,7 +124,7 @@ export class SyncService {
           actorType: 'USER',
           actorId: actor.id,
           action: 'sync.grace_override',
-          entityId: this.outletId,
+          entityId: outletId,
           metadata: {
             hours: request.hours,
             reason: request.reason,

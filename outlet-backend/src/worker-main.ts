@@ -3,6 +3,7 @@ import { Queue, Worker, type ConnectionOptions } from 'bullmq';
 import { parseWorkerEnv } from './config/env.schema.js';
 import { hqSyncConfig } from './config/hq-sync.config.js';
 import { JsonLogger } from './common/logging/logger.service.js';
+import { HqCredentialsProvider } from './modules/identity/hq-credentials.provider.js';
 import { MenuPullProcessor } from './modules/sync/processors/menu-pull.processor.js';
 import { JOB_NAMES, QUEUES, REPEAT_JOB_IDS } from './modules/sync/processors/queue-names.js';
 import { OutboxSweepProcessor } from './modules/sync/processors/outbox-sweep.processor.js';
@@ -24,11 +25,7 @@ async function bootstrap(): Promise<void> {
   const env = parseWorkerEnv();
   const sync = hqSyncConfig(env);
 
-  const logger = new JsonLogger(
-    'OUTLET-Worker',
-    { nodeEnv: env.NODE_ENV, outletCode: env.OUTLET_CODE },
-    env.NODE_ENV !== 'production',
-  );
+  const logger = new JsonLogger('OUTLET-Worker', { nodeEnv: env.NODE_ENV }, env.NODE_ENV !== 'production');
   logger.setMinLevel(toNestLogLevel(env.LOG_LEVEL));
 
   const { AppModule } = await import('./app.module.js');
@@ -41,12 +38,15 @@ async function bootstrap(): Promise<void> {
   const reconciler = app.get(SyncReconcileProcessor);
   const heartbeat = app.get(SyncHeartbeatProcessor);
 
+  // HQ credentials live in the `hq_connection` singleton (setup wizard /
+  // rotation surface) — the worker reads them per call and may start
+  // unpaired. The key ID is not secret; the secret is never logged (§9.2).
+  const credentials = app.get(HqCredentialsProvider);
+  const pairing = await credentials.refresh().catch(() => null);
   logger.log('outlet_worker_started', {
-    outletId: sync.outletId,
-    outletCode: sync.outletCode,
-    // Key ID is not secret; the secret is never logged (PRD §9.2).
-    hqKeyId: sync.hqKeyId,
-    hqApiBaseUrl: sync.hqApiBaseUrl,
+    hqPaired: pairing !== null,
+    hqKeyId: pairing?.keyId ?? null,
+    hqApiBaseUrl: pairing?.hqApiBaseUrl ?? null,
     queues: Object.values(QUEUES).join(','),
     menuPullIntervalMs: sync.menuPullIntervalMs,
     outboxSweepIntervalMs: sync.outboxSweepIntervalMs,

@@ -15,8 +15,6 @@ export type AppConfig = {
   corsOrigins: string[];
   swaggerEnabled: boolean;
   openApiExport: boolean;
-  outletId: string;
-  outletCode: string;
   offlineGraceHours: number;
   syncMaxBodyBytes: number;
 };
@@ -33,8 +31,6 @@ export function loadAppConfig(env: ApiEnv = parseApiEnv()): AppConfig {
     corsOrigins: env.CORS_ORIGINS,
     swaggerEnabled: env.SWAGGER_ENABLED,
     openApiExport: env.OPENAPI_EXPORT,
-    outletId: env.OUTLET_ID,
-    outletCode: env.OUTLET_CODE,
     offlineGraceHours: env.OFFLINE_GRACE_HOURS,
     syncMaxBodyBytes: env.SYNC_MAX_BODY_BYTES,
   };

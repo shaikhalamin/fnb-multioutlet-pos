@@ -78,7 +78,6 @@ function makeService(
   const config = new ConfigService<Env, true>({
     REFRESH_TOKEN_TTL: 3_600,
     ACCESS_TOKEN_TTL: 900,
-    OUTLET_ID: '11111111-1111-4111-8111-111111111111',
   });
   const jwts = makeJwtMocks();
   const service = new AuthService(
@@ -86,6 +85,7 @@ function makeService(
     jwts.refresh as never,
     { findActiveUserWithPermissions: overrides.loadIdentity ?? (async () => identity), findByEmail: async () => null } as never,
     store as never,
+    { requireIdentity: async () => ({ outletId: '11111111-1111-4111-8111-111111111111' }) } as never,
     config,
   );
   return { service, jwts, store };

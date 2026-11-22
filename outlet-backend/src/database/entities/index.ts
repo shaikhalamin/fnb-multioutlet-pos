@@ -1,4 +1,5 @@
 export { OutletIdentityEntity } from './outlet-identity.entity.js';
+export { HqConnectionEntity } from './hq-connection.entity.js';
 export { OutletUserEntity, type OutletUserStatus } from './outlet-user.entity.js';
 export { OutletRoleEntity } from './outlet-role.entity.js';
 export { OutletPermissionEntity } from './outlet-permission.entity.js';
@@ -22,6 +23,7 @@ export { SyncAttemptLogEntity } from './sync-attempt-log.entity.js';
 export { OutletAuditLogEntity, type OutletAuditActorType } from './outlet-audit-log.entity.js';
 
 import { OutletIdentityEntity } from './outlet-identity.entity.js';
+import { HqConnectionEntity } from './hq-connection.entity.js';
 import { OutletUserEntity } from './outlet-user.entity.js';
 import { OutletRoleEntity } from './outlet-role.entity.js';
 import { OutletPermissionEntity } from './outlet-permission.entity.js';
@@ -47,6 +49,7 @@ import { OutletAuditLogEntity } from './outlet-audit-log.entity.js';
  */
 export const outletEntities = [
   OutletIdentityEntity,
+  HqConnectionEntity,
   OutletUserEntity,
   OutletRoleEntity,
   OutletPermissionEntity,

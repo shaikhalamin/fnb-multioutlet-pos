@@ -78,7 +78,6 @@ function makeService(
     transaction: vi.fn(async (fn: (manager: unknown) => Promise<unknown>) => fn({ manager: true })),
   };
   const config = new ConfigService<Env, true>({
-    OUTLET_ID,
     OFFLINE_GRACE_HOURS: 72,
   });
   const service = new SalesService(
@@ -86,6 +85,7 @@ function makeService(
     salesRepo as unknown as SalesRepository,
     collaborators.receiptCounters as unknown as ReceiptCounterRepository,
     collaborators.outbox as unknown as OutboxRepository,
+    { requireIdentity: vi.fn(async () => ({ outletId: OUTLET_ID, outletCode: 'A' })) } as never,
     config,
   );
   return { service, salesRepo, dataSource, ...collaborators };

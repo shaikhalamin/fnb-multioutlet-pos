@@ -17,16 +17,20 @@ const identity: AuthenticatedUser = {
 
 function makeStrategy(
   loadIdentity: (id: string) => Promise<AuthenticatedUser | null> = async () => identity,
+  outletIdentity: { outletId: string } | null = { outletId: OUTLET_ID },
 ): JwtStrategy {
   const config = new ConfigService<Env, true>({
     OUTLET_JWT_ISSUER: 'fnb-outlet',
     OUTLET_JWT_AUDIENCE: 'fnb-outlet-api',
     OUTLET_JWT_ACCESS_SECRET: 'unit-test-access-secret-0123456789abcdef',
-    OUTLET_ID,
   });
-  return new JwtStrategy(config, {
-    findActiveUserWithPermissions: loadIdentity,
-  } as never);
+  return new JwtStrategy(
+    config,
+    {
+      findActiveUserWithPermissions: loadIdentity,
+    } as never,
+    { findIdentity: async () => outletIdentity } as never,
+  );
 }
 
 describe('JwtStrategy outlet identity assertion (PRD §3)', () => {
@@ -52,6 +56,13 @@ describe('JwtStrategy outlet identity assertion (PRD §3)', () => {
     await expect(strategy.validate({ sub: 'user-1', jti: 'jti-1' })).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
+  });
+
+  it('rejects everything on an unprovisioned terminal (no identity row)', async () => {
+    const strategy = makeStrategy(async () => identity, null);
+    await expect(
+      strategy.validate({ sub: 'user-1', jti: 'jti-1', outletId: OUTLET_ID }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
   it('rejects when the user no longer exists or is inactive', async () => {

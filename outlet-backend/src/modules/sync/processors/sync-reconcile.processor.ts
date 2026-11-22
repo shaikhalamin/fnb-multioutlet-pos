@@ -46,7 +46,9 @@ export class SyncReconcileProcessor {
         requeued,
       };
     } catch (error) {
-      if (error instanceof HqSyncError) {
+      if (error instanceof HqSyncError && error.code === 'HQ_NOT_PROVISIONED') {
+        this.logger.log('awaiting_provisioning', {});
+      } else if (error instanceof HqSyncError) {
         this.logger.warn('sync_reconcile_unavailable', { code: error.code, status: error.status });
       } else {
         this.logger.warn('sync_reconcile_unavailable', {
@@ -88,9 +90,13 @@ export class SyncHeartbeatProcessor {
       });
       return true;
     } catch (error) {
-      this.logger.warn('sync_heartbeat_failed', {
-        code: error instanceof HqSyncError ? error.code : 'HQ_UNREACHABLE',
-      });
+      if (error instanceof HqSyncError && error.code === 'HQ_NOT_PROVISIONED') {
+        this.logger.log('awaiting_provisioning', {});
+      } else {
+        this.logger.warn('sync_heartbeat_failed', {
+          code: error instanceof HqSyncError ? error.code : 'HQ_UNREACHABLE',
+        });
+      }
       return false;
     }
   }

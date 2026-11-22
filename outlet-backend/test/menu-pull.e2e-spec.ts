@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import type { DataSource } from 'typeorm';
 import { DataSource as PgDataSource } from 'typeorm';
 import { buildDataSourceOptions } from '../src/config/database.config.js';
-import type { ConfigService } from '@nestjs/config';
 import type { CatalogChangesResponse } from '../src/modules/sync/clients/generated/types/CatalogChangesResponse.js';
 import type { CatalogChangeEntry } from '../src/modules/sync/clients/generated/types/CatalogChangeEntry.js';
 import type { MenuSnapshotResponse } from '../src/modules/sync/clients/generated/types/MenuSnapshotResponse.js';
@@ -62,12 +61,15 @@ describeWithDeps('MenuPullService (real PostgreSQL)', () => {
         return snapshot;
       },
     } as unknown as HqSyncClient;
-    const config = { get: (key: string) => (key === 'OUTLET_ID' ? outletId : undefined) };
+    const identity = {
+      findIdentity: async () => ({ outletId, outletCode: 'T' }),
+      requireIdentity: async () => ({ outletId, outletCode: 'T' }),
+    };
     return new MenuPullService(
       dataSource,
       hq,
       new MenuApplyRepository(dataSource),
-      config as unknown as ConfigService<never, true>,
+      identity as never,
     );
   }
 

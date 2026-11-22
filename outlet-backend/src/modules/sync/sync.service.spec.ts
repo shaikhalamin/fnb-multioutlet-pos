@@ -11,6 +11,7 @@ function makeService(overrides: {
   syncState?: Record<string, unknown> | null;
   latestAudit?: Record<string, unknown> | null;
   quarantined?: Array<{ id: string; sequenceNo: string; lastError: string | null }>;
+  hqConnection?: Record<string, unknown> | null;
 }) {
   const outbox = {
     countByStatus: vi.fn().mockResolvedValue({ PENDING: 1, RETRY: 1, DELIVERED: 5, QUARANTINED: 1 }),
@@ -31,7 +32,7 @@ function makeService(overrides: {
     if (entity.name === 'MenuSyncStateEntity') {
       return { findOne: vi.fn().mockResolvedValue(overrides.syncState ?? null) };
     }
-    return { findOne: vi.fn().mockResolvedValue({ outletCode: 'A' }) };
+    return { findOne: vi.fn().mockResolvedValue(null) };
   };
   const dataSource = {
     getRepository: vi.fn((entity: { name: string }) => repoFor(entity)),
@@ -49,14 +50,33 @@ function makeService(overrides: {
       }),
     ),
   };
-  const config = { get: (key: string) => (key === 'OFFLINE_GRACE_HOURS' ? 72 : key === 'OUTLET_ID' ? OUTLET_ID : undefined) };
+  const config = { get: (key: string) => (key === 'OFFLINE_GRACE_HOURS' ? 72 : undefined) };
+  const identities = {
+    findIdentity: vi.fn().mockResolvedValue({ outletId: OUTLET_ID, outletCode: 'A' }),
+    findConnection: vi.fn().mockResolvedValue(
+      overrides.hqConnection === undefined
+        ? {
+            hqBaseUrl: 'http://hq-api:3000/api/v1',
+            keyId: 'ok_dev_0123456789abcdef',
+            keySecret: 'never-in-status',
+            lastValidatedAt: new Date('2026-11-22T10:00:00Z'),
+          }
+        : overrides.hqConnection,
+    ),
+  };
+  const identity = {
+    findIdentity: vi.fn().mockResolvedValue({ outletId: OUTLET_ID, outletCode: 'A' }),
+    requireIdentity: vi.fn().mockResolvedValue({ outletId: OUTLET_ID, outletCode: 'A' }),
+  };
   const service = new SyncService(
     dataSource as unknown as DataSource,
     outbox as unknown as OutboxRepository,
     audit as unknown as OutletAuditService,
+    identities as never,
+    identity as never,
     config as unknown as ConfigService<never, true>,
   );
-  return { service, outbox, audit, dataSource };
+  return { service, outbox, audit, dataSource, identities };
 }
 
 describe('SyncService.getStatus', () => {

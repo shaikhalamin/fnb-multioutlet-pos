@@ -4,6 +4,7 @@
 */
 
 import type { SyncGraceStatus } from './SyncGraceStatus'
+import type { SyncHqConnectionStatus } from './SyncHqConnectionStatus'
 import type { SyncOutboxStatus } from './SyncOutboxStatus'
 
 export type SyncStatusResponse = {
@@ -31,4 +32,9 @@ export type SyncStatusResponse = {
   lastMenuSyncAt: string | null;
   grace: SyncGraceStatus;
   outbox: SyncOutboxStatus;
+  /**
+   * @description The stored HQ connection (key ID only); null before pairing.
+   * @type object | undefined
+   */
+  hqConnection?: SyncHqConnectionStatus | null;
 };

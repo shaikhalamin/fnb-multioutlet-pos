@@ -1,7 +1,9 @@
 import { syncControllerExtendGrace } from '#/api/generated/clients/syncControllerExtendGrace'
 import { syncControllerGetStatus } from '#/api/generated/clients/syncControllerGetStatus'
 import { syncControllerReplayEvent } from '#/api/generated/clients/syncControllerReplayEvent'
+import { syncControllerUpdateHqConnection } from '#/api/generated/clients/syncControllerUpdateHqConnection'
 import { graceOverrideResponseSchema } from '#/api/generated/schemas/graceOverrideResponseSchema'
+import { hqConnectionResponseSchema } from '#/api/generated/schemas/hqConnectionResponseSchema'
 import { replayOutboxEventResponseSchema } from '#/api/generated/schemas/replayOutboxEventResponseSchema'
 import { syncStatusResponseSchema } from '#/api/generated/schemas/syncStatusResponseSchema'
 
@@ -32,6 +34,12 @@ export type SyncStatus = {
       lastError: string | null
     }> | null
   }
+  /** The stored HQ pairing — key ID only, the secret never crosses the wire (PRD §9.2). */
+  hqConnection: {
+    hqApiBaseUrl: string
+    keyId: string
+    lastValidatedAt: string
+  } | null
 }
 
 /** `GET /sync/status` — purely local; a down HQ never affects it (PRD §2). */
@@ -46,7 +54,25 @@ export async function fetchSyncStatus(): Promise<SyncStatus> {
       ...parsed.outbox,
       lastErrorSample: parsed.outbox.lastErrorSample ?? null,
     },
+    hqConnection: parsed.hqConnection ?? null,
   }
+}
+
+/**
+ * `PUT /sync/hq-connection` (PRD FR-10 switch-worker-secret step): rotates
+ * the stored HQ machine key. The backend validates the candidate key against
+ * HQ before saving; the new secret exists only in the request body.
+ */
+export async function updateHqConnection(input: {
+  hqApiBaseUrl: string
+  keyId: string
+  keySecret: string
+}): Promise<{ keyId: string; lastValidatedAt: string }> {
+  const data = await syncControllerUpdateHqConnection({
+    body: input,
+    throwOnError: true,
+  })
+  return hqConnectionResponseSchema.parse(data)
 }
 
 /**

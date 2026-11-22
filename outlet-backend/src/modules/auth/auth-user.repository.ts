@@ -1,5 +1,4 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { DataSource } from 'typeorm';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { OutletRoleEntity } from '../../database/entities/outlet-role.entity.js';
@@ -7,23 +6,20 @@ import { OutletUserEntity } from '../../database/entities/outlet-user.entity.js'
 import { OutletUserRoleEntity } from '../../database/entities/outlet-user-role.entity.js';
 import { OutletRolePermissionEntity } from '../../database/entities/outlet-role-permission.entity.js';
 import { OutletPermissionEntity } from '../../database/entities/outlet-permission.entity.js';
+import { OutletIdentityEntity } from '../../database/entities/outlet-identity.entity.js';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
-import type { Env } from '../../config/env.schema.js';
 
 /**
  * Identity lookups shared by the auth flow and the global JWT guard. Loads a
  * user together with role codes and the effective permission set (union over
  * all roles) so authorization always reflects current DB state (PRD §9.1).
- * `outletId` on the identity is the provisioned outlet from validated env
- * configuration (PRD §9.1 login example, §3): this database belongs to
- * exactly one outlet and identity never comes from request JSON.
+ * `outletId` on the identity is the provisioned `outlet_identity` row (PRD
+ * §9.1 login example, §3): this database belongs to exactly one outlet and
+ * identity never comes from request JSON.
  */
 @Injectable()
 export class AuthUserRepository {
-  constructor(
-    @Inject(DATA_SOURCE) private readonly dataSource: DataSource,
-    private readonly config: ConfigService<Env, true>,
-  ) {}
+  constructor(@Inject(DATA_SOURCE) private readonly dataSource: DataSource) {}
 
   async findByEmail(email: string): Promise<OutletUserEntity | null> {
     return this.dataSource
@@ -41,16 +37,17 @@ export class AuthUserRepository {
     const user = await this.dataSource.getRepository(OutletUserEntity).findOne({ where: { id: userId } });
     if (!user || user.status !== 'ACTIVE') return null;
 
-    const [roleCodes, permissions] = await Promise.all([
+    const [roleCodes, permissions, identity] = await Promise.all([
       this.loadRoleCodes(userId),
       this.loadPermissions(userId),
+      this.dataSource.getRepository(OutletIdentityEntity).findOne({ where: {} }),
     ]);
     return {
       id: user.id,
       email: user.email,
       roleCodes,
       permissions,
-      outletId: this.config.get('OUTLET_ID', { infer: true }),
+      outletId: identity?.outletId ?? '',
     };
   }
 

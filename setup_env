@@ -2,8 +2,10 @@
 # =============================================================================
 # setup_env — bootstrap the local Compose cluster.
 # Copy each .env.example to .env, build the images, start the stack
-# (migrations run automatically), then seed HQ and Outlet A.
-# Manual equivalent: README "Fresh clone → running system", steps 1-5.
+# (migrations run automatically) and seed HQ (admin + demo menu/outlets).
+# Outlet terminals start UNPROVISIONED on purpose: pair them from the UI —
+# HQ console → Outlets → create → issue key → outlet /setup wizard
+# (PRD §8.7, §9.2). Manual equivalent: README "Fresh clone → running system".
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -19,25 +21,27 @@ docker compose build
 echo "==> Starting stack (hq-migrate / outlet-a-migrate run before the APIs)"
 docker compose up -d
 
-echo "==> Seeding HQ (admin + demo outlets/items)"
+echo "==> Seeding HQ (admin + demo menu/items + demo outlets)"
 docker compose run --rm -T hq-api node dist/database/seed.js
-
-echo "==> Seeding Outlet A (POS users + demo catalog)"
-docker compose run --rm -T outlet-a-api node dist/database/seed.js
 
 cat <<'EOF'
 
-Setup complete.
-  HQ console:   http://localhost:8080  (admin@fnb.local / Admin123!)
-  Outlet A POS: http://localhost:8081  (manager@outlet-a.local / Manager123!)
+Setup complete. Pair the outlet terminal from the UI (the demo flow):
+  1. HQ console:    http://localhost:8080  (admin@fnb.local / Admin123!)
+     Outlets → create an outlet (or use a seeded demo outlet) → copy its
+     Outlet ID + code from the pairing panel.
+  2. Outlet A POS:  http://localhost:8081/setup
+     Step 1: paste the Outlet ID + code, choose the first admin account.
+  3. HQ console: the outlet's page → API keys → Issue key → copy the
+     one-time key ID + secret.
+  4. Outlet A POS step 2: paste the key pair → "Test & pair".
+     The worker picks it up from the terminal's database (no restart).
+
   HQ API:       http://localhost:4000/api/v1  (Swagger: /api/v1/docs)
   Outlet A API: http://localhost:5000/api/v1  (Swagger: /api/v1/docs)
 
-To enable outlet -> HQ sync (optional — POS sales work without it), issue
-the outlet machine key, paste it into .env, and restart the worker:
-  docker compose run --rm -e SEED_ISSUE_OUTLET_KEYS=1 hq-api node dist/database/seed.js
-  # copy the printed outlet-A keyId/secret into .env:
-  #   OUTLET_A_HQ_KEY_ID=<keyId>
-  #   OUTLET_A_HQ_KEY_SECRET=<secret>
-  docker compose up -d outlet-a-worker
+Check outlet -> HQ sync: docker compose logs -f outlet-a-worker
+Reset outlet A to re-demo (wipes its database volume):
+  docker rm -f fnb-platform-outlet-a-db-1 && \
+  docker volume rm fnb-platform_outlet-a-db-data && docker compose up -d
 EOF

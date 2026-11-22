@@ -9,9 +9,10 @@ import { z } from 'zod';
  * The schema is the superset understood by both outlet entrypoints (`api`,
  * `worker`). Profile-specific secrets are optional in the base schema and
  * enforced by `apiEnvSchema`/`workerEnvSchema`: the outlet API issues human
- * JWTs but never talks to HQ, while the worker authenticates with the HQ
- * machine key and never issues outlet user JWTs (PRD §3, §9.2) — so neither
- * entrypoint can be accidentally provisioned with the other's credentials.
+ * JWTs, while the worker never issues outlet user JWTs (PRD §3, §9.2) — so
+ * neither entrypoint can be accidentally provisioned with the other's
+ * credentials. HQ sync credentials are NOT environment inputs: they live in
+ * the `hq_connection` row written by the setup wizard (PRD §8.7).
  */
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
@@ -31,9 +32,6 @@ const postgresUrl = z
 const redisUrl = z
   .url()
   .refine((value) => value.startsWith('redis'), { message: 'must be a redis:// or rediss:// URL' });
-const httpUrl = z
-  .url()
-  .refine((value) => value.startsWith('http'), { message: 'must be an http:// or https:// URL' });
 
 export const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
@@ -43,10 +41,12 @@ export const envSchema = z.object({
   DATABASE_URL: postgresUrl,
   REDIS_URL: redisUrl,
 
-  // Outlet identity is provisioned (PRD §6.2) and immutable locally; both
-  // entrypoints need it to scope every query and event to this outlet.
-  OUTLET_ID: z.uuid(),
-  OUTLET_CODE: z.string().min(1).max(8),
+  // Outlet identity (PRD §6.2) is provisioned once — through the setup
+  // wizard (UI pairing with HQ) or, for local development, the seed CLI.
+  // Optional here because the runtime source of truth is the
+  // `outlet_identity` row; the dev seed still reads these when present.
+  OUTLET_ID: z.uuid().optional(),
+  OUTLET_CODE: z.string().min(1).max(8).optional(),
 
   // API profile: outlet user JWT issuance (Phase 2).
   OUTLET_JWT_ISSUER: z.string().min(1).optional(),
@@ -88,10 +88,10 @@ export const envSchema = z.object({
   OPENAPI_EXPORT: booleanFlag,
 
   // Worker profile: outlet-initiated HQ synchronization (PRD §8, §9.2). The
-  // key secret is server-side only and must never reach any frontend.
-  HQ_API_BASE_URL: httpUrl.optional(),
-  HQ_OUTLET_KEY_ID: z.string().min(1).optional(),
-  HQ_OUTLET_KEY_SECRET: z.string().min(1).optional(),
+  // HQ base URL + machine key live in the `hq_connection` row written by the
+  // setup wizard / rotation surface — never in environment variables and
+  // never in any frontend. The worker boots unpaired and idles
+  // (`awaiting_provisioning`) until that row exists.
 
   MENU_PULL_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
   OUTBOX_BATCH_SIZE: z.coerce.number().int().min(1).max(100).default(100),
@@ -114,8 +114,7 @@ const API_REQUIRED = [
   'OUTLET_JWT_REFRESH_SECRET',
 ] as const satisfies ReadonlyArray<keyof Env>;
 
-/** HQ machine credentials the sync worker requires; enforced by `workerEnvSchema`. */
-const WORKER_REQUIRED = ['HQ_API_BASE_URL', 'HQ_OUTLET_KEY_ID', 'HQ_OUTLET_KEY_SECRET'] as const satisfies ReadonlyArray<keyof Env>;
+/** HQ machine credentials were removed from the environment: the worker reads them from the `hq_connection` row (setup wizard / rotation surface). */
 
 function requireForProfile(ctx: z.RefinementCtx, env: Env, keys: ReadonlyArray<keyof Env>): void {
   for (const key of keys) {
@@ -142,14 +141,14 @@ export type ApiEnv = WithRequired<Env, (typeof API_REQUIRED)[number]>;
 /**
  * Environment contract of the sync worker entrypoint (`src/worker-main.ts`):
  * the worker is the sole initiator of all HQ communication using the machine
- * key and never issues outlet user JWTs, so it requires the HQ sync
- * credentials instead of the API auth secrets (PRD §3, §9.2).
+ * key and never issues outlet user JWTs (PRD §3, §9.2). Its HQ credentials
+ * are no longer environment inputs — they arrive through the setup wizard
+ * and live in `hq_connection`, so the worker has no additional required
+ * keys beyond the base schema; it boots unpaired and idles until then.
  */
-export const workerEnvSchema = envSchema.superRefine((env, ctx) => {
-  requireForProfile(ctx, env, WORKER_REQUIRED);
-});
+export const workerEnvSchema = envSchema;
 
-export type WorkerEnv = WithRequired<Env, (typeof WORKER_REQUIRED)[number]>;
+export type WorkerEnv = Env;
 
 /** Slice needed by the migration CLI/job, which touches only the database. */
 export const databaseEnvSchema = z.object({

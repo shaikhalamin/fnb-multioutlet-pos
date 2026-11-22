@@ -6,6 +6,8 @@ import type { AuthenticatedUser } from './authenticated-user.js';
 import type { Env } from '../../config/env.schema.js';
 // Value import (not `import type`): the class is an injection token.
 import { AuthUserRepository } from '../../modules/auth/auth-user.repository.js';
+// Value import (not `import type`): the class is an injection token.
+import { IdentityService } from '../../modules/identity/identity.service.js';
 
 /** Claims carried by the short-lived outlet access token (PRD §9.1). */
 export type AccessTokenPayload = {
@@ -21,15 +23,14 @@ export type AccessTokenPayload = {
  * `iss`/`aud`/`exp`), re-loads the user's status and effective permissions
  * from the outlet database (claims alone never authorize anything), and
  * asserts the token's `outletId` claim equals this deployment's provisioned
- * `OUTLET_ID` — a token minted for any other outlet is dead here (PRD §3).
+ * identity row — a token minted for any other outlet is dead here (PRD §3).
  */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-  private readonly outletId: string;
-
   constructor(
     config: ConfigService<Env, true>,
     private readonly authUsers: AuthUserRepository,
+    private readonly identity: IdentityService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -49,14 +50,15 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       audience: config.get('OUTLET_JWT_AUDIENCE', { infer: true }),
       algorithms: ['HS256'],
     });
-    this.outletId = config.get('OUTLET_ID', { infer: true });
   }
 
   /** What passport attaches to `request.user` for guarded routes. */
   async validate(payload: AccessTokenPayload): Promise<AuthenticatedUser> {
-    // Outlet identity is server-side configuration (PRD §3, §15): a valid
-    // signature for a different outlet must not authorize anything here.
-    if (payload.outletId !== this.outletId) throw new UnauthorizedException();
+    // Outlet identity is server-side state (PRD §3, §15): a valid signature
+    // for a different outlet — or an unprovisioned terminal — authorizes
+    // nothing here.
+    const identity = await this.identity.findIdentity();
+    if (!identity || payload.outletId !== identity.outletId) throw new UnauthorizedException();
     const user = await this.authUsers.findActiveUserWithPermissions(payload.sub);
     // Deleted or disabled accounts lose access immediately (PRD §9.1).
     if (!user) throw new UnauthorizedException();

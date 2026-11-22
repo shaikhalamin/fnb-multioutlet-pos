@@ -6,6 +6,8 @@ import bcrypt from 'bcrypt';
 import { ApiException } from '../../common/exceptions/api.exception.js';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import type { Env } from '../../config/env.schema.js';
+// Value import (not `import type`): the class is an injection token.
+import { IdentityService } from '../identity/identity.service.js';
 import { AuthUserRepository } from './auth-user.repository.js';
 import { ACCESS_JWT_SERVICE, REFRESH_JWT_SERVICE } from './auth.providers.js';
 import { RefreshSessionRepository } from './refresh-session.repository.js';
@@ -37,18 +39,17 @@ const DUMMY_HASH = bcrypt.hashSync('fnb-timing-pad-do-not-use', BCRYPT_ROUNDS);
 export class AuthService {
   private readonly refreshTokenTtlSeconds: number;
   private readonly accessTokenTtlSeconds: number;
-  private readonly outletId: string;
 
   constructor(
     @Inject(ACCESS_JWT_SERVICE) private readonly accessJwt: JwtService,
     @Inject(REFRESH_JWT_SERVICE) private readonly refreshJwt: JwtService,
     private readonly authUsers: AuthUserRepository,
     private readonly refreshSessions: RefreshSessionRepository,
+    private readonly identity: IdentityService,
     config: ConfigService<Env, true>,
   ) {
     this.refreshTokenTtlSeconds = config.get('REFRESH_TOKEN_TTL', { infer: true });
     this.accessTokenTtlSeconds = config.get('ACCESS_TOKEN_TTL', { infer: true });
-    this.outletId = config.get('OUTLET_ID', { infer: true });
   }
 
   async login(email: string, password: string): Promise<AuthSessionResult> {
@@ -118,12 +119,15 @@ export class AuthService {
   /**
    * Mints an access + refresh pair. The refresh JWT's `jti` is a fresh UUID
    * recorded server-side before the token is returned; the raw token travels
-   * only in the cookie. On rotation the successor joins `familyId`.
+   * only in the cookie. On rotation the successor joins `familyId`. The
+   * `outletId` claim is stamped from the provisioned identity row (PRD §3) —
+   * users can only exist once that row exists.
    */
   private async issueSession(
     identity: AuthenticatedUser,
     familyId: string = randomUUID(),
   ): Promise<AuthSessionResult> {
+    const provisioned = await this.identity.requireIdentity();
     const jti = randomUUID();
     await this.refreshSessions.insert({
       userId: identity.id,
@@ -134,7 +138,7 @@ export class AuthService {
 
     const [accessToken, refreshToken] = await Promise.all([
       this.accessJwt.signAsync(
-        { roleCodes: identity.roleCodes, outletId: this.outletId },
+        { roleCodes: identity.roleCodes, outletId: provisioned.outletId },
         { subject: identity.id, jwtid: randomUUID() },
       ),
       this.refreshJwt.signAsync({}, { subject: identity.id, jwtid: jti }),

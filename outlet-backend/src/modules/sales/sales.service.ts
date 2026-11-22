@@ -6,6 +6,8 @@ import { ApiException } from '../../common/exceptions/api.exception.js';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.js';
 import type { Env } from '../../config/env.schema.js';
 import { DATA_SOURCE } from '../../database/database.module.js';
+// Value import (not `import type`): the class is an injection token.
+import { IdentityService } from '../identity/identity.service.js';
 import { ReceiptCounterRepository } from '../receipts/receipt-counter.repository.js';
 import { OutboxRepository } from '../outbox/outbox.repository.js';
 import type { CreateSaleRequest } from './dto/sale.dto.js';
@@ -47,7 +49,6 @@ export function hashRequest(idempotencyKey: string, lines: MergedLine[]): string
  */
 @Injectable()
 export class SalesService {
-  private readonly outletId: string;
   private readonly offlineGraceHours: number;
 
   constructor(
@@ -55,9 +56,9 @@ export class SalesService {
     private readonly sales: SalesRepository,
     private readonly receiptCounters: ReceiptCounterRepository,
     private readonly outbox: OutboxRepository,
+    private readonly identity: IdentityService,
     config: ConfigService<Env, true>,
   ) {
-    this.outletId = config.get('OUTLET_ID', { infer: true });
     this.offlineGraceHours = config.get('OFFLINE_GRACE_HOURS', { infer: true });
   }
 
@@ -65,6 +66,9 @@ export class SalesService {
     request: CreateSaleRequest,
     actor: { idempotencyKey: string; user: AuthenticatedUser; requestId: string | null },
   ): Promise<SaleResponse> {
+    // Outlet scope from the provisioned identity row — never from the
+    // request (PRD §3, §15); an unprovisioned terminal cannot sell.
+    const outletId = (await this.identity.requireIdentity()).outletId;
     // (2) Merge duplicate lines by menuItemId BEFORE hashing/validating.
     const merged = mergeLines(request.items);
     // Defense in depth: per-line bounds passed the DTO, but merged duplicates
@@ -85,8 +89,8 @@ export class SalesService {
       // (3) Serialize same-key requests, then insert/lock the idempotency
       // claim: an existing row replays its stored response (AT-07) or is a
       // key-reuse 409 (AT-08).
-      await this.sales.lockIdempotencyKey(manager, this.outletId, actor.idempotencyKey);
-      const existing = await this.sales.findIdempotencyKey(manager, this.outletId, actor.idempotencyKey);
+      await this.sales.lockIdempotencyKey(manager, outletId, actor.idempotencyKey);
+      const existing = await this.sales.findIdempotencyKey(manager, outletId, actor.idempotencyKey);
       if (existing) {
         if (existing.requestSha256 !== requestSha256) {
           throw new ApiException(
@@ -206,7 +210,7 @@ export class SalesService {
       );
 
       // (8) Lock the receipt counter and allocate the next number.
-      const allocation = await this.receiptCounters.allocate(manager, this.outletId);
+      const allocation = await this.receiptCounters.allocate(manager, outletId);
 
       // (9) Insert the sale + immutable snapshot lines; all math in BigInt.
       const lineRows = merged.map((line) => {
@@ -228,7 +232,7 @@ export class SalesService {
       const totalMinor = lineRows.reduce((sum, row) => sum + BigInt(row.subtotalMinor), 0n);
       await this.sales.insertSale(manager, {
         id: saleId,
-        outletId: this.outletId,
+        outletId,
         receiptNumber: allocation.receiptNumber,
         receiptNo: allocation.receiptNo,
         totalMinor: totalMinor.toString(),
@@ -242,7 +246,7 @@ export class SalesService {
       // (10) Allocate the outbox sequence and insert the sale.completed
       // event (AT-03: exactly one outbox row per sale).
       await this.outbox.insertSaleCompletedEvent(manager, {
-        outletId: this.outletId,
+        outletId,
         occurredAt: soldAt,
         saleId,
         receiptNo: allocation.receiptNo,
@@ -266,7 +270,7 @@ export class SalesService {
       const response: SaleResponse = {
         id: saleId,
         receiptNo: allocation.receiptNo,
-        outletId: this.outletId,
+        outletId,
         status: 'COMPLETED',
         currencyCode,
         items: lineRows.map((row) => ({
@@ -284,7 +288,7 @@ export class SalesService {
         syncStatus: 'PENDING',
       };
       await this.sales.insertIdempotencyKey(manager, {
-        outletId: this.outletId,
+        outletId,
         key: actor.idempotencyKey,
         requestSha256,
         saleId,

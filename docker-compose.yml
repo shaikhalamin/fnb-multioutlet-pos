@@ -229,8 +229,10 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${OUTLET_A_POSTGRES_USER:-fnb_outlet_a}:${OUTLET_A_POSTGRES_PASSWORD:-fnb_outlet_a_dev_password}@outlet-a-db:5432/${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}
       REDIS_URL: redis://outlet-a-redis:6379
-      OUTLET_ID: ${OUTLET_A_ID}
-      OUTLET_CODE: ${OUTLET_A_CODE:-A}
+      # Outlet identity is provisioned through the setup wizard (PRD §8.7) —
+      # the terminal starts empty and pairs with an outlet created in the HQ
+      # console. The dev seed CLI still honours OUTLET_ID/OUTLET_CODE when
+      # present for local runs outside Compose.
       OUTLET_JWT_ISSUER: ${OUTLET_JWT_ISSUER:-fnb-outlet}
       OUTLET_JWT_AUDIENCE: ${OUTLET_JWT_AUDIENCE:-fnb-outlet-api}
       OUTLET_JWT_ACCESS_SECRET: ${OUTLET_JWT_ACCESS_SECRET:-dev-only-outlet-access-secret-0123456789}
@@ -258,6 +260,10 @@ services:
       start_period: 10s
     networks:
       - outlet-a-internal
+      # The setup wizard's live key validation (POST /setup/hq-connection)
+      # calls HQ once from the API before saving the pairing (PRD §9.2);
+      # the worker reaches HQ over the same network afterwards.
+      - hq-sync
     restart: unless-stopped
 
   outlet-a-worker:
@@ -274,11 +280,10 @@ services:
       APP_ENTRYPOINT: worker
       DATABASE_URL: postgresql://${OUTLET_A_POSTGRES_USER:-fnb_outlet_a}:${OUTLET_A_POSTGRES_PASSWORD:-fnb_outlet_a_dev_password}@outlet-a-db:5432/${OUTLET_A_POSTGRES_DB:-fnb_outlet_a}
       REDIS_URL: redis://outlet-a-redis:6379
-      OUTLET_ID: ${OUTLET_A_ID}
-      OUTLET_CODE: ${OUTLET_A_CODE:-A}
-      HQ_API_BASE_URL: http://hq-api:3000/api/v1
-      HQ_OUTLET_KEY_ID: ${OUTLET_A_HQ_KEY_ID:-dev-outlet-a-key-id}
-      HQ_OUTLET_KEY_SECRET: ${OUTLET_A_HQ_KEY_SECRET:-dev-outlet-a-key-secret}
+      # No HQ credentials here (PRD §9.2): the worker reads them from the
+      # `hq_connection` row saved by the setup wizard and idles
+      # (`awaiting_provisioning`) until the terminal is paired. Identity is
+      # likewise provisioned through the wizard, not the environment.
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MENU_PULL_INTERVAL_MS: "30000"
       OUTBOX_BATCH_SIZE: "100"

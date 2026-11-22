@@ -12,6 +12,9 @@ export const OUTLET_PERMISSIONS = [
   // Privileged, audited emergency actions (PRD §8.8): OUTLET_MANAGER only —
   // the cashier/clerk role lists below never include it.
   'sync.override',
+  // Rotating the stored HQ machine key (PRD FR-10 switch-worker-secret
+  // step): OUTLET_MANAGER only, validated against HQ before saving.
+  'sync.manage',
   'users.read',
   'users.write',
 ] as const;

@@ -23,7 +23,7 @@ async function bootstrap(): Promise<void> {
   const env = parseApiEnv();
   const config = loadAppConfig(env);
   const { AppModule } = await import('./app.module.js');
-  const logger = new JsonLogger('OUTLET-API', { nodeEnv: config.nodeEnv, outletCode: config.outletCode }, !config.isProduction);
+  const logger = new JsonLogger('OUTLET-API', { nodeEnv: config.nodeEnv }, !config.isProduction);
   logger.setMinLevel(toNestLogLevel(config.logLevel));
 
   const app = await NestFactory.create(AppModule, { logger, bufferLogs: true });
@@ -46,8 +46,8 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(config.port, '0.0.0.0');
   logger.log('outlet_api_started', {
-    outletId: config.outletId,
-    outletCode: config.outletCode,
+    // Identity is a DB singleton now (setup wizard / seed) — logging whether
+    // this terminal is provisioned is the useful boot-time fact.
     port: config.port,
     apiPrefix: config.apiPrefix,
     swagger: config.swaggerEnabled,

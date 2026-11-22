@@ -5,6 +5,7 @@
 
 import * as z from 'zod'
 import { syncGraceStatusSchema } from './syncGraceStatusSchema'
+import { syncHqConnectionStatusSchema } from './syncHqConnectionStatusSchema'
 import { syncOutboxStatusSchema } from './syncOutboxStatusSchema'
 
 export const syncStatusResponseSchema = z.object({
@@ -14,4 +15,5 @@ export const syncStatusResponseSchema = z.object({
   lastMenuSyncAt: z.string().nullable().describe('Last successful menu sync; null when never synced.').meta({ examples: ['2026-11-20T04:00:00.000Z'] }),
   grace: syncGraceStatusSchema,
   outbox: syncOutboxStatusSchema,
+  hqConnection: syncHqConnectionStatusSchema.nullish().describe('The stored HQ connection (key ID only); null before pairing.'),
 })

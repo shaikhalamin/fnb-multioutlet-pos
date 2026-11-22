@@ -16,6 +16,8 @@ export const OUTLET_PERMISSIONS = [
   'sync.read',
   // Privileged, audited emergency actions (PRD §8.8) — managers only.
   'sync.override',
+  // Rotating the stored HQ machine key (PRD FR-10) — managers only.
+  'sync.manage',
   'users.read',
   'users.write',
 ] as const satisfies readonly string[]

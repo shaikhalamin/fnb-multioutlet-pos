@@ -8,6 +8,8 @@ import { MenuPullService } from '../services/menu-pull.service.js';
  * Menu pull tick (PRD §13: ~30s while online): runs the pull+apply service.
  * Failures are logged and surfaced via `/sync/status` — never retried with
  * a stale checkpoint (AT-13: HTTP failure leaves the checkpoint untouched).
+ * Before the terminal is paired with HQ the tick idles at info level
+ * (`awaiting_provisioning`) instead of warning every interval.
  */
 @Injectable()
 export class MenuPullProcessor {
@@ -22,7 +24,9 @@ export class MenuPullProcessor {
         this.logger.log('menu_pull_applied', { ...result });
       }
     } catch (error) {
-      if (error instanceof HqSyncError) {
+      if (error instanceof HqSyncError && error.code === 'HQ_NOT_PROVISIONED') {
+        this.logger.log('awaiting_provisioning', { hint: 'Pair this terminal via the setup wizard' });
+      } else if (error instanceof HqSyncError) {
         this.logger.warn('menu_pull_failed', { code: error.code, status: error.status });
       } else {
         this.logger.warn('menu_pull_failed', {

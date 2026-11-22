@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { z } from 'zod';
-import type { Env } from '../../../config/env.schema.js';
+// Value import (not `import type`): the class is an injection token.
+import { HqCredentialsProvider } from '../../identity/hq-credentials.provider.js';
 import {
   client as generatedClient,
   isResponseError,
@@ -56,7 +56,7 @@ export class HqSyncError extends Error {
 }
 
 /** Strips the `ApiSuccess` envelope once: HQ's `data` field is the payload. */
-function unwrapEnvelope(body: unknown): unknown {
+export function unwrapEnvelope(body: unknown): unknown {
   if (body !== null && typeof body === 'object' && 'data' in body) {
     return (body as { data: unknown }).data;
   }
@@ -65,41 +65,49 @@ function unwrapEnvelope(body: unknown): unknown {
 
 /**
  * Typed HQ machine client (PRD §7.4, §11): wraps the Kubb-generated sync
- * client. The outlet key is injected server-side from environment config —
- * never in a browser bundle, query string, or log. Every response is parsed
- * with the generated Zod schemas before use (§8.3 "validate response with
- * the versioned contract").
+ * client. Credentials come from the DB-backed `HqCredentialsProvider` (the
+ * `hq_connection` singleton written by the setup wizard / rotation surface)
+ * — never from a browser bundle, query string, or log. Every HQ call
+ * re-reads the provider first, so pairing and rotation take effect without
+ * a restart; a 401 triggers exactly one credential re-read + retry (PRD
+ * §9.2 rotation: switch worker secret, then keep going). Every response is
+ * parsed with the generated Zod schemas before use (§8.3 "validate response
+ * with the versioned contract").
  */
 @Injectable()
 export class HqSyncClient {
   private readonly client: ClientInstance;
 
   constructor(
-    config: ConfigService<Env, true>,
+    private readonly credentials: HqCredentialsProvider,
     /** Test hook: replaces the axios transport with a fake returning `Response`s. */
     @Optional()
     @Inject(HQ_SYNC_TRANSPORT)
     transportOverride?: Transport,
   ) {
-    const keyId = config.get('HQ_OUTLET_KEY_ID', { infer: true });
-    const keySecret = config.get('HQ_OUTLET_KEY_SECRET', { infer: true });
-    const baseURL = config.get('HQ_API_BASE_URL', { infer: true });
-
     const clientConfig: ClientConfig = transportOverride
       ? { transport: transportOverride }
-      : { baseURL, options: { timeout: HQ_TIMEOUT_MS } };
+      : { options: { timeout: HQ_TIMEOUT_MS } };
     this.client = generatedClient.createClient(clientConfig);
 
     // Machine credential: the token value for the spec's `outlet-key` apiKey
-    // scheme (Authorization header). The secret exists only here (§9.2).
+    // scheme (Authorization header), resolved from the provider per request.
+    // The secret exists only here (§9.2).
     this.client.setConfig({
-      auth: (scheme) =>
-        scheme.type === 'apiKey' && scheme.name === 'Authorization' && keyId && keySecret
-          ? `OutletKey ${keyId}.${keySecret}`
-          : undefined,
+      auth: (scheme) => {
+        const current = this.credentials.get();
+        return scheme.type === 'apiKey' &&
+          scheme.name === 'Authorization' &&
+          current &&
+          current.keyId &&
+          current.keySecret
+          ? `OutletKey ${current.keyId}.${current.keySecret}`
+          : undefined;
+      },
     });
 
-    // X-Request-Id on every call (PRD §7).
+    // X-Request-Id on every call (PRD §7). The base URL is applied from the
+    // provider in `execute()` (it is rotatable), not here.
     this.client.interceptors.request.use((request) => {
       request.headers['x-request-id'] = randomUUID();
       return request;
@@ -155,21 +163,18 @@ export class HqSyncClient {
   }
 
   /**
-   * Runs one generated call, converting failures into the sanitized
-   * `HqSyncError` (retry guidance included) and validating the payload
-   * against the generated Zod schema (§8.3).
+   * Runs one generated call: refreshes credentials from the database (so
+   * pairing/rotation land without a restart), converts failures into the
+   * sanitized `HqSyncError` (retry guidance included), retries exactly once
+   * on 401 when the credentials changed underneath us (rotation, PRD §9.2),
+   * and validates the payload against the generated Zod schema (§8.3).
    */
   private async call<T>(
     label: string,
     schema: z.ZodType<T>,
     run: () => Promise<T>,
   ): Promise<T> {
-    let payload: T;
-    try {
-      payload = await run();
-    } catch (error) {
-      throw this.toHqSyncError(label, error);
-    }
+    const payload = await this.execute(label, run);
     const parsed = schema.safeParse(payload);
     if (!parsed.success) {
       // A reply that breaks the versioned contract is treated as a
@@ -183,6 +188,35 @@ export class HqSyncClient {
       );
     }
     return parsed.data;
+  }
+
+  /** Credential refresh + single 401-retry around one generated call. */
+  private async execute<T>(label: string, run: () => Promise<T>): Promise<T> {
+    const before = await this.credentials.refresh();
+    if (!before) {
+      // Unpaired terminal: surfaced as a retryable transport-level fault so
+      // the worker idles (`awaiting_provisioning`) instead of crashing.
+      throw new HqSyncError('HQ connection is not provisioned yet', null, 'HQ_NOT_PROVISIONED', null);
+    }
+    // The base URL is part of the stored connection (rotatable), so it is
+    // re-applied from the freshly-read credentials before every call.
+    this.client.setConfig({ baseURL: before.hqApiBaseUrl });
+    try {
+      return await run();
+    } catch (error) {
+      const first = this.toHqSyncError(label, error);
+      if (first.status !== 401) throw first;
+      // The key may have been rotated (HQ grace overlap) between our refresh
+      // and HQ's reply — re-read once and retry only if something changed.
+      const latest = await this.credentials.refresh();
+      if (!HqCredentialsProvider.credentialsChanged(before, latest) || !latest) throw first;
+      this.client.setConfig({ baseURL: latest.hqApiBaseUrl });
+      try {
+        return await run();
+      } catch (retryError) {
+        throw this.toHqSyncError(label, retryError);
+      }
+    }
   }
 
   private toHqSyncError(label: string, error: unknown): HqSyncError {

@@ -74,8 +74,10 @@ const DEMO_ITEMS: ReadonlyArray<{
 ];
 
 const DEMO_OUTLETS: ReadonlyArray<{ code: string; name: string; id: string }> = [
-  // Fixed demo UUIDs so docs, seeds, root .env (OUTLET_A_ID) and the outlet
-  // database identity all agree — sync derives the outlet scope from them.
+  // Fixed demo UUIDs so docs, seeds and the outlet-side dev seed (which pins
+  // the same outlet A UUID) all agree. Terminals provisioned through the
+  // setup wizard pair with whatever outlet the admin creates in the console —
+  // these fixed IDs exist for the demo data and the UI-less dev path only.
   { code: 'A', name: 'Outlet A', id: '11111111-1111-4111-8111-111111111111' },
   { code: 'B', name: 'Outlet B', id: '22222222-2222-4222-8222-222222222222' },
   { code: 'C', name: 'Outlet C', id: '33333333-3333-4333-8333-333333333333' },
@@ -240,49 +242,10 @@ async function seedDemoData(dataSource: DataSource, companyId: string): Promise<
 }
 
 /**
- * Dev key-provisioning loop (PRD §9.2, V1): `SEED_ISSUE_OUTLET_KEYS=1`
- * issues one real scoped machine key per seeded outlet and prints
- * `keyId.secret` ONCE — the seed runs server-side with the pepper from the
- * environment, so the printed pair is the only place the raw secret exists.
- * Issuance goes through the SAME `ApiKeysService` the admin API uses — one
- * code path, one audit shape (`entityId` = the key row id). Idempotent:
- * outlets that already hold an ACTIVE, unexpired key are skipped (rotation
- * stays a deliberate admin action).
+ * Outlet machine keys are never seeded: issuance is a deliberate admin
+ * action in the HQ console (PRD FR-10, §9.2 — shown once, then paired into
+ * the outlet terminal via its setup wizard).
  */
-async function seedOutletKeys(dataSource: DataSource): Promise<void> {
-  // Fail fast with a clear message before any issuance work begins.
-  if (!process.env.OUTLET_KEY_PEPPER) {
-    throw new Error('SEED_ISSUE_OUTLET_KEYS=1 requires OUTLET_KEY_PEPPER (must match hq-api)');
-  }
-  const apiKeys = new ApiKeysService(
-    dataSource,
-    new ApiKeysRepository(dataSource),
-    new OutletsRepository(dataSource),
-    new AuditService(dataSource),
-    // The seed CLI runs with the API environment; process env is the
-    // validated contract here (pepper + NODE_ENV are the only reads).
-    new ConfigService<Env, true>(process.env as unknown as Env),
-  );
-  const outlets = await dataSource.getRepository(OutletEntity).find({ order: { code: 'ASC' } });
-  const keysRepo = dataSource.getRepository(OutletApiKeyEntity);
-
-  for (const outlet of outlets) {
-    const existing = await keysRepo.findOne({
-      where: { outletId: outlet.id, status: 'ACTIVE' },
-      order: { createdAt: 'DESC' },
-    });
-    if (existing && (existing.expiresAt === null || existing.expiresAt.getTime() > Date.now())) {
-      log('seed_outlet_key_skipped', { outletCode: outlet.code, existingKeyId: existing.keyId });
-      continue;
-    }
-    const issued = await apiKeys.issue(outlet.id, {}, { type: 'SYSTEM', id: null, via: 'seed' });
-    // One-time reveal — copy into the outlet worker's environment
-    // (root .env: OUTLET_<CODE>_HQ_KEY_ID / _SECRET) and keep out of logs.
-    process.stdout.write(
-      `${JSON.stringify({ time: new Date().toISOString(), level: 'warn', service: 'hq-backend', msg: 'seed_outlet_key_issued', warning: 'SECRET SHOWN ONCE — store it now', outletCode: outlet.code, keyId: issued.keyId, secret: issued.secret })}\n`,
-    );
-  }
-}
 
 async function main(): Promise<void> {
   const dataSource = buildCliDataSource();
@@ -294,9 +257,6 @@ async function main(): Promise<void> {
     await seedSuperAdmin(dataSource, company.id, roleIds);
     if ((process.env.SEED_DEMO_DATA ?? 'true').toLowerCase() !== 'false') {
       await seedDemoData(dataSource, company.id);
-    }
-    if ((process.env.SEED_ISSUE_OUTLET_KEYS ?? '') === '1') {
-      await seedOutletKeys(dataSource);
     }
     log('seed_completed', { companyId: company.id });
   } finally {

@@ -1,45 +1,42 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import type { DataSource } from 'typeorm';
-import type { Env } from '../../../config/env.schema.js';
 import { DATA_SOURCE } from '../../../database/database.module.js';
 import { MenuSyncStateEntity } from '../../../database/entities/menu-sync-state.entity.js';
 import { JsonLogger } from '../../../common/logging/logger.service.js';
 // Value import (not `import type`): the class is an injection token.
-import { HqSyncClient } from '../clients/hq-sync.client.js';
+import { IdentityService } from '../../identity/identity.service.js';
+import { HqSyncClient, HqSyncError } from '../clients/hq-sync.client.js';
 import { MenuApplyRepository } from '../repositories/menu-apply.repository.js';
 
 /**
  * Menu pull + atomic apply (PRD §8.3, FR-03): fetches revisioned deltas for
- * this outlet, verifies the reply's outlet identity against server-side
- * identity config, and applies the whole batch in ONE local transaction
- * before advancing the checkpoint. Any HTTP failure leaves the checkpoint
- * untouched (AT-13); gaps route to a full-snapshot rebuild (AT-14).
+ * this outlet, verifies the reply's outlet identity against the provisioned
+ * identity row, and applies the whole batch in ONE local transaction before
+ * advancing the checkpoint. Any HTTP failure leaves the checkpoint untouched
+ * (AT-13); gaps route to a full-snapshot rebuild (AT-14).
  */
 @Injectable()
 export class MenuPullService {
   private readonly logger = new JsonLogger('MenuPull');
-  private readonly outletId: string;
 
   constructor(
     @Inject(DATA_SOURCE) private readonly dataSource: DataSource,
     private readonly hq: HqSyncClient,
     private readonly apply: MenuApplyRepository,
-    config: ConfigService<Env, true>,
-  ) {
-    this.outletId = config.get('OUTLET_ID', { infer: true });
-  }
+    private readonly identity: IdentityService,
+  ) {}
 
   async pullAndApply(): Promise<{ applied: number; nextRevision: string; snapshotApplied: boolean }> {
+    const { outletId } = await this.requireProvisioned();
     const syncState = await this.dataSource
       .getRepository(MenuSyncStateEntity)
-      .findOne({ where: { outletId: this.outletId } });
+      .findOne({ where: { outletId } });
     const lastRevision = syncState?.lastAppliedRevision ?? '0';
 
     const changes = await this.hq.getMenuChanges(lastRevision, 500);
 
     // §8.3: verify the outlet ID — a reply for any other outlet is never applied.
-    if (changes.outletId !== this.outletId) {
+    if (changes.outletId !== outletId) {
       throw new Error(
         `HQ menu reply outlet ${changes.outletId} does not match local identity; refusing to apply`,
       );
@@ -64,14 +61,14 @@ export class MenuPullService {
         snapshotRequired: changes.snapshotRequired,
         firstRevision: first?.revision ?? null,
       });
-      const revision = await this.applySnapshot();
+      const revision = await this.applySnapshot(outletId);
       return { applied: 0, nextRevision: revision, snapshotApplied: true };
     }
 
     const applied = await this.dataSource.transaction(async (manager) =>
       this.apply.applyChanges(
         manager,
-        this.outletId,
+        outletId,
         lastRevision,
         changes.changes,
         changes.nextRevision,
@@ -86,10 +83,11 @@ export class MenuPullService {
    * HQ view replaces the catalog atomically — upserts, tombstones for
    * absent items, checkpoint pinned to `snapshotRevision`.
    */
-  async applySnapshot(): Promise<string> {
+  async applySnapshot(outletId?: string): Promise<string> {
+    const scope = outletId ?? (await this.requireProvisioned()).outletId;
     const snapshot = await this.hq.getMenuSnapshot();
     await this.dataSource.transaction(async (manager) =>
-      this.apply.applySnapshot(manager, this.outletId, snapshot, new Date()),
+      this.apply.applySnapshot(manager, scope, snapshot, new Date()),
     );
     this.logger.log('menu_snapshot_applied', {
       snapshotId: snapshot.snapshotId,
@@ -97,5 +95,14 @@ export class MenuPullService {
       itemCount: snapshot.items.length,
     });
     return snapshot.snapshotRevision;
+  }
+
+  /** Identity row or the worker's quiet `awaiting_provisioning` marker. */
+  private async requireProvisioned(): Promise<{ outletId: string }> {
+    const identity = await this.identity.findIdentity();
+    if (!identity) {
+      throw new HqSyncError('Outlet identity is not provisioned yet', null, 'HQ_NOT_PROVISIONED', null);
+    }
+    return identity;
   }
 }

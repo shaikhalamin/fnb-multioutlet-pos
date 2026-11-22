@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ConfigService } from '@nestjs/config';
 import type { ResolvedRequest, Transport } from './generated/.kubb/client.js';
+import type { HqCredentials } from '../../identity/hq-credentials.provider.js';
 import { HqSyncClient, HqSyncError } from './hq-sync.client.js';
 import type { SyncEventV1 } from './generated/types/SyncEventV1.js';
 
@@ -18,14 +18,28 @@ const VALID_CHANGES = {
   changes: [],
 };
 
-function makeConfig(): ConfigService<never, true> {
-  const values: Record<string, string> = {
-    HQ_OUTLET_KEY_ID: KEY_ID,
-    HQ_OUTLET_KEY_SECRET: SECRET,
-    HQ_API_BASE_URL: 'http://hq-api:3000/api/v1',
+/**
+ * Fake DB-backed credential provider: each `refresh()` returns the current
+ * queued credential set, then advances (holding the last), mirroring a
+ * rotation landing in the `hq_connection` row between reads.
+ */
+function makeCredentials(queue: Array<HqCredentials | null>) {
+  let index = 0;
+  let current: HqCredentials | null = queue[0] ?? null;
+  const provider = {
+    refresh: async (): Promise<HqCredentials | null> => {
+      current = queue[index] ?? null;
+      if (index < queue.length - 1) index += 1;
+      return current;
+    },
+    get: (): HqCredentials | null => current,
   };
-  return { get: (key: string) => values[key] } as unknown as ConfigService<never, true>;
+  return provider;
 }
+
+const PAIRED = makeCredentials([
+  { hqApiBaseUrl: 'http://hq-api:3000/api/v1', keyId: KEY_ID, keySecret: SECRET },
+]);
 
 /** Fake transport capturing requests and answering with canned Responses. */
 function makeTransport(responder: (request: ResolvedRequest, call: number) => Promise<Response>) {
@@ -84,7 +98,7 @@ const EVENT: SyncEventV1 = {
 describe('HqSyncClient', () => {
   it('injects the OutletKey authorization and a fresh X-Request-Id on every call', async () => {
     const { transport, requests } = makeTransport(async () => jsonResponse({ data: VALID_CHANGES }));
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
 
     await client.getMenuChanges('1', 500);
 
@@ -97,7 +111,7 @@ describe('HqSyncClient', () => {
     const { transport } = makeTransport(async () =>
       jsonResponse({ data: VALID_CHANGES, meta: { requestId: 'req_1', timestamp: '2026-11-20T04:00:00.000Z' } }),
     );
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
 
     const changes = await client.getMenuChanges('1', 500);
     expect(changes).toEqual(VALID_CHANGES);
@@ -107,7 +121,7 @@ describe('HqSyncClient', () => {
     const { transport } = makeTransport(async () =>
       jsonResponse({ data: { outletId: OUTLET_ID, changes: 'not-an-array' } }),
     );
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
 
     await expect(client.getMenuChanges('1', 500)).rejects.toMatchObject({
       name: 'HqSyncError',
@@ -127,7 +141,7 @@ describe('HqSyncClient', () => {
         },
       });
     });
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
 
     await expect(client.pushEventBatch([EVENT], 'batch-key-1')).rejects.toMatchObject({ code: 'HQ_UNREACHABLE' });
     const response = await client.pushEventBatch([EVENT], 'batch-key-1');
@@ -144,7 +158,7 @@ describe('HqSyncClient', () => {
         'retry-after': '7',
       }),
     );
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
 
     const error = await client.getMenuChanges('1', 500).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(HqSyncError);
@@ -157,7 +171,7 @@ describe('HqSyncClient', () => {
     const { transport } = makeTransport(async () => {
       throw new Error('ECONNREFUSED');
     });
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
 
     const error = await client.getCheckpoint().catch((caught: unknown) => caught);
     expect(error).toMatchObject({ code: 'HQ_UNREACHABLE', status: null });
@@ -169,12 +183,64 @@ describe('HqSyncClient', () => {
     const { transport } = makeTransport(async () =>
       jsonResponse({ data: { acknowledgedAt: '2026-11-20T04:03:00.000Z' } }),
     );
-    const client = new HqSyncClient(makeConfig() as never, transport);
+    const client = new HqSyncClient(PAIRED as never, transport);
     const acknowledged = await client.sendHeartbeat({
       appliedMenuRevision: '42',
       pendingOutboxCount: 0,
       quarantinedCount: 0,
     });
     expect(acknowledged.acknowledgedAt).toBe('2026-11-20T04:03:00.000Z');
+  });
+
+  it('retries exactly once on 401 when the credentials rotated underneath us (§9.2)', async () => {
+    const rotated = { hqApiBaseUrl: 'http://hq-api:3000/api/v1', keyId: KEY_ID, keySecret: 'rotated-secret-2' };
+    // First refresh → old credentials (rejected 401); re-read → rotated pair.
+    const rotating = makeCredentials([
+      { hqApiBaseUrl: 'http://hq-api:3000/api/v1', keyId: KEY_ID, keySecret: SECRET },
+      rotated,
+    ]);
+    const { transport, requests } = makeTransport(async (_request, call) => {
+      if (call === 1) {
+        return jsonResponse({ error: { code: 'UNAUTHENTICATED', message: 'key revoked', requestId: 'req_3' } }, 401);
+      }
+      return jsonResponse({ data: VALID_CHANGES });
+    });
+    const client = new HqSyncClient(rotating as never, transport);
+
+    const changes = await client.getMenuChanges('1', 500);
+    expect(changes).toEqual(VALID_CHANGES);
+    expect(requests).toHaveLength(2);
+    expect(header(requests[1], 'authorization')).toBe(`OutletKey ${rotated.keyId}.${rotated.keySecret}`);
+  });
+
+  it('surfaces the 401 when the stored credentials did NOT change (operator must rotate)', async () => {
+    const { transport, requests } = makeTransport(async () =>
+      jsonResponse({ error: { code: 'UNAUTHENTICATED', message: 'key revoked', requestId: 'req_4' } }, 401),
+    );
+    const client = new HqSyncClient(PAIRED as never, transport);
+
+    await expect(client.getMenuChanges('1', 500)).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+      status: 401,
+    });
+    // No retry fired: one request, then the surfaced 401.
+    expect(requests).toHaveLength(1);
+  });
+
+  it('reports HQ_NOT_PROVISIONED (retryable) while the terminal is unpaired', async () => {
+    let calls = 0;
+    const unpaired = makeCredentials([null]);
+    const { transport } = makeTransport(async () => {
+      calls += 1;
+      return jsonResponse({ data: VALID_CHANGES });
+    });
+    const client = new HqSyncClient(unpaired as never, transport);
+
+    await expect(client.getMenuChanges('1', 500)).rejects.toMatchObject({
+      code: 'HQ_NOT_PROVISIONED',
+      status: null,
+    });
+    // No HQ call is attempted without stored credentials.
+    expect(calls).toBe(0);
   });
 });

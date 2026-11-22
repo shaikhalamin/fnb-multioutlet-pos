@@ -2,8 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { healthControllerGetHealth } from '#/api/generated/clients/healthControllerGetHealth'
+import { setupControllerGetStatus } from '#/api/generated/clients/setupControllerGetStatus'
 import { healthControllerGetHealthStatus200Schema } from '#/api/generated/schemas/healthControllerGetHealthSchema'
+import { setupControllerGetStatusStatus200Schema } from '#/api/generated/schemas/setupControllerGetStatusSchema'
 import { ApiError } from '#/api/axios'
+import { setupKeys } from '#/features/setup/keys'
 import { useSession } from '#/features/auth/session'
 
 export const Route = createFileRoute('/')({ component: App })
@@ -109,14 +112,53 @@ function HealthPanel() {
   )
 }
 
+/** Provisioning probe: drives the "set up this terminal" CTA before pairing. */
+function useSetupStatus() {
+  return useQuery({
+    queryKey: setupKeys.status(),
+    queryFn: async () =>
+      setupControllerGetStatusStatus200Schema.parse(
+        await setupControllerGetStatus(),
+      ),
+    retry: false,
+    refetchOnWindowFocus: false,
+  })
+}
+
+function SetupCard({ unprovisioned }: { unprovisioned: boolean }) {
+  if (!unprovisioned) return null
+  return (
+    <section className="card-panel mt-8 flex flex-wrap items-center justify-between gap-4 border-hairline p-6">
+      <div>
+        <p className="kicker mb-1">New terminal</p>
+        <p className="m-0 text-sm text-body">
+          This register is waiting to be provisioned — continue in the setup
+          wizard to connect it with HQ.
+        </p>
+      </div>
+      <a href="/setup" className="btn-primary no-underline">
+        Set up this terminal
+      </a>
+    </section>
+  )
+}
+
 function App() {
   const session = useSession()
   const navigate = useNavigate()
+  const setup = useSetupStatus()
 
   useEffect(() => {
     // Signed-in staff go straight to the register.
     if (session.user) void navigate({ to: '/pos', replace: true })
   }, [session.user, navigate])
+
+  // Unknown state (backend down) shows no CTA — the Health panel covers it.
+  const setupData = setup.data
+  const unprovisioned = setupData !== undefined && !setupData.provisioned
+  // Mid-wizard: identity saved, HQ pairing still pending.
+  const awaitingPairing =
+    setupData !== undefined && setupData.identity && !setupData.provisioned
 
   return (
     <main className="page-wrap px-4 pb-8 pt-14">
@@ -139,12 +181,22 @@ function App() {
             guards and receipts that keep working even when HQ is unreachable.
           </p>
           <div className="flex flex-wrap gap-3">
-            <a href="/api/v1/docs" className="btn-primary no-underline">
+            {unprovisioned ? (
+              <a href="/setup" className="btn-primary no-underline">
+                Set up this terminal
+              </a>
+            ) : null}
+            <a
+              href="/api/v1/docs"
+              className={`${unprovisioned ? 'btn-outline' : 'btn-primary'} no-underline`}
+            >
               API Documentation
             </a>
           </div>
         </div>
       </section>
+
+      <SetupCard unprovisioned={awaitingPairing} />
 
       <HealthPanel />
 

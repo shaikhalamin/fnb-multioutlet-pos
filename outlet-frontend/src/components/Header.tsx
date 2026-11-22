@@ -53,6 +53,15 @@ export default function Header() {
                   Sales
                 </Link>
               ) : null}
+              {hasPermission(user, 'sync.read') ? (
+                <Link
+                  to="/sync"
+                  className="nav-link"
+                  activeProps={{ className: 'nav-link is-active' }}
+                >
+                  Sync
+                </Link>
+              ) : null}
               {hasPermission(user, 'users.read') ? (
                 <Link
                   to="/users"
