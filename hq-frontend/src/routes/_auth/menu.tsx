@@ -7,15 +7,14 @@ import { ApiError } from '#/api/axios'
 import { menuControllerCreateCategory } from '#/api/generated/clients/menuControllerCreateCategory'
 import { menuControllerCreateItem } from '#/api/generated/clients/menuControllerCreateItem'
 import { menuControllerListCategories } from '#/api/generated/clients/menuControllerListCategories'
-import { menuControllerListItems } from '#/api/generated/clients/menuControllerListItems'
 import { menuControllerUpdateCategory } from '#/api/generated/clients/menuControllerUpdateCategory'
 import { menuControllerUpdateItem } from '#/api/generated/clients/menuControllerUpdateItem'
-import { menuControllerListItemsStatus200Schema } from '#/api/generated/schemas/menuControllerListItemsSchema'
 import { useSession } from '#/features/auth/session'
 import { hasPermission } from '#/lib/permissions'
 import { formatMinor } from '#/lib/utils'
 
 import { menuKeys } from '#/features/menu/keys'
+import { useMenuItems } from '#/features/menu/queries'
 
 export const Route = createFileRoute('/_auth/menu')({ component: MenuPage })
 
@@ -51,18 +50,6 @@ function useCategories() {
   return useQuery({
     queryKey: menuKeys.categories(),
     queryFn: () => menuControllerListCategories(),
-  })
-}
-
-function useItems() {
-  return useQuery({
-    queryKey: menuKeys.items({ status: undefined }),
-    // Money-bearing payload (defaultPriceMinor): parse with the generated
-    // Zod schema before use (AGENTS §4.2).
-    queryFn: async () =>
-      menuControllerListItemsStatus200Schema.parse(
-        await menuControllerListItems({ query: { limit: 200 } }),
-      ),
   })
 }
 
@@ -211,7 +198,7 @@ const emptyItem: ItemForm = {
 function ItemsPanel({ canWrite }: { canWrite: boolean }) {
   const queryClient = useQueryClient()
   const categories = useCategories()
-  const items = useItems()
+  const items = useMenuItems()
   const [form, setForm] = useState<ItemForm>(emptyItem)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -293,83 +280,101 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-hairline text-left">
-                <th className="kicker py-2 pr-4">SKU</th>
-                <th className="kicker py-2 pr-4">Name</th>
-                <th className="kicker py-2 pr-4">Category</th>
-                <th className="kicker py-2 pr-4">Default price</th>
-                <th className="kicker py-2 pr-4">Status</th>
-                <th className="kicker py-2 pr-4">v</th>
-                {canWrite ? <th className="kicker py-2">Actions</th> : null}
+                <th scope="col" className="kicker py-2 pr-4">
+                  SKU
+                </th>
+                <th scope="col" className="kicker py-2 pr-4">
+                  Name
+                </th>
+                <th scope="col" className="kicker py-2 pr-4">
+                  Category
+                </th>
+                <th scope="col" className="kicker py-2 pr-4">
+                  Default price
+                </th>
+                <th scope="col" className="kicker py-2 pr-4">
+                  Status
+                </th>
+                <th scope="col" className="kicker py-2 pr-4">
+                  v
+                </th>
+                {canWrite ? (
+                  <th scope="col" className="kicker py-2">
+                    Actions
+                  </th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
-              {items.data.map((item) => (
-                <tr key={item.id} className="border-b border-hairline-soft">
-                  <td className="py-2 pr-4 text-xs text-body">{item.sku}</td>
-                  <td className="py-2 pr-4 font-medium text-ink">
-                    {item.name}
-                  </td>
-                  <td className="py-2 pr-4 text-body">{item.categoryName}</td>
-                  <td className="money py-2 pr-4">
-                    {formatMinor(item.defaultPriceMinor, item.currencyCode)}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <span
-                      className={
-                        item.status === 'ACTIVE'
-                          ? 'badge-pill badge-success'
-                          : 'badge-pill badge-neutral'
-                      }
-                    >
-                      {item.status}
-                    </span>
-                  </td>
-                  <td className="money py-2 pr-4 text-xs text-muted-foreground">
-                    {item.version}
-                  </td>
-                  {canWrite ? (
-                    <td className="py-2">
-                      <div className="flex gap-2 text-xs">
-                        <button
-                          type="button"
-                          className="font-medium text-ink hover:underline"
-                          onClick={() => {
-                            setEditingId(item.id)
-                            setForm({
-                              sku: item.sku,
-                              name: item.name,
-                              description: item.description,
-                              categoryId: item.categoryId,
-                              defaultPriceMinor: item.defaultPriceMinor,
-                              currencyCode: item.currencyCode as 'USD',
-                            })
-                            setError(null)
-                          }}
-                        >
-                          Edit
-                        </button>
-                        {item.status === 'ACTIVE' ? (
-                          <button
-                            type="button"
-                            className="font-medium text-error hover:underline"
-                            onClick={() => archiveItem.mutate(item.id)}
-                          >
-                            Archive
-                          </button>
-                        ) : (
+              {items.data.map((item) => {
+                return (
+                  <tr key={item.id} className="border-b border-hairline-soft">
+                    <td className="py-2 pr-4 text-xs text-body">{item.sku}</td>
+                    <td className="py-2 pr-4 font-medium text-ink">
+                      {item.name}
+                    </td>
+                    <td className="py-2 pr-4 text-body">{item.categoryName}</td>
+                    <td className="money py-2 pr-4">
+                      {formatMinor(item.defaultPriceMinor, item.currencyCode)}
+                    </td>
+                    <td className="py-2 pr-4">
+                      <span
+                        className={
+                          item.status === 'ACTIVE'
+                            ? 'badge-pill badge-success'
+                            : 'badge-pill badge-neutral'
+                        }
+                      >
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="money py-2 pr-4 text-xs text-muted-foreground">
+                      {item.version}
+                    </td>
+                    {canWrite ? (
+                      <td className="py-2">
+                        <div className="flex gap-2 text-xs">
                           <button
                             type="button"
                             className="font-medium text-ink hover:underline"
-                            onClick={() => restoreItem.mutate(item.id)}
+                            onClick={() => {
+                              setEditingId(item.id)
+                              setForm({
+                                sku: item.sku,
+                                name: item.name,
+                                description: item.description,
+                                categoryId: item.categoryId,
+                                defaultPriceMinor: item.defaultPriceMinor,
+                                currencyCode: item.currencyCode as 'USD',
+                              })
+                              setError(null)
+                            }}
                           >
-                            Restore
+                            Edit
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
+                          {item.status === 'ACTIVE' ? (
+                            <button
+                              type="button"
+                              className="font-medium text-error hover:underline"
+                              onClick={() => archiveItem.mutate(item.id)}
+                            >
+                              Archive
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="font-medium text-ink hover:underline"
+                              onClick={() => restoreItem.mutate(item.id)}
+                            >
+                              Restore
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

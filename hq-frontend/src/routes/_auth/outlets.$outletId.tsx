@@ -1,23 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { ApiError } from '#/api/axios'
 import { apiKeysControllerIssue } from '#/api/generated/clients/apiKeysControllerIssue'
 import { apiKeysControllerList } from '#/api/generated/clients/apiKeysControllerList'
 import { apiKeysControllerRevoke } from '#/api/generated/clients/apiKeysControllerRevoke'
 import { apiKeysControllerRotate } from '#/api/generated/clients/apiKeysControllerRotate'
-import { assignmentsControllerAssign } from '#/api/generated/clients/assignmentsControllerAssign'
 import { assignmentsControllerListOutletMenu } from '#/api/generated/clients/assignmentsControllerListOutletMenu'
 import { assignmentsControllerUnassign } from '#/api/generated/clients/assignmentsControllerUnassign'
-import { menuControllerListItems } from '#/api/generated/clients/menuControllerListItems'
 import { outletsControllerListOutlets } from '#/api/generated/clients/outletsControllerListOutlets'
 import { assignmentsControllerListOutletMenuStatus200Schema } from '#/api/generated/schemas/assignmentsControllerListOutletMenuSchema'
-import { menuControllerListItemsStatus200Schema } from '#/api/generated/schemas/menuControllerListItemsSchema'
 import { useSession } from '#/features/auth/session'
+import { AssignToOutletDialog } from '#/features/assignments/AssignToOutletDialog'
+import type { AssignSession } from '#/features/assignments/AssignToOutletDialog'
+import { useMenuItems } from '#/features/menu/queries'
 import { hasPermission } from '#/lib/permissions'
 import { formatMinor } from '#/lib/utils'
 import { outletKeys } from '#/features/outlets/keys'
 import { CopyValue, useCopyAction } from '#/components/CopyValue'
+import { Checkbox } from '#/components/ui/checkbox'
+import { cn } from 'cn'
 
 export const Route = createFileRoute('/_auth/outlets/$outletId')({
   component: OutletDetailPage,
@@ -49,16 +51,7 @@ function OutletDetailPage() {
       ),
     enabled: Boolean(outlet),
   })
-  const items = useQuery({
-    queryKey: ['menu', 'items', 'matrix'],
-    // Money-bearing payload (defaultPriceMinor): parse with the generated
-    // Zod schema before use (AGENTS §4.2).
-    queryFn: async () =>
-      menuControllerListItemsStatus200Schema.parse(
-        await menuControllerListItems({ query: { limit: 200 } }),
-      ),
-    enabled: Boolean(outlet),
-  })
+  const items = useMenuItems()
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: outletKeys.menu(outletId) })
@@ -110,6 +103,7 @@ function OutletDetailPage() {
 
       <AssignmentMatrix
         outletId={outletId}
+        outletName={outlet?.name ?? null}
         rows={rows}
         canAssign={canAssign}
         onChanged={invalidate}
@@ -135,47 +129,52 @@ type MatrixRow = {
 
 function AssignmentMatrix({
   outletId,
+  outletName,
   rows,
   canAssign,
   onChanged,
 }: {
   outletId: string
+  outletName: string | null
   rows: MatrixRow[]
   canAssign: boolean
   onChanged: () => void
 }) {
-  const queryClient = useQueryClient()
-  // Undefined = untouched (inherit the persisted override), '' = cleared.
-  const [drafts, setDrafts] = useState<Record<string, string | undefined>>({})
   const [error, setError] = useState<string | null>(null)
+  // Tick-to-assign: the ticked item ids, and the dialog session they open into
+  // (`id` remounts the dialog per session so each one starts from its own state).
+  const selectAllRef = useRef<HTMLButtonElement>(null)
+  const [selectedIds, setSelectedIds] = useState<readonly string[]>([])
+  const [assignSession, setAssignSession] = useState<
+    (AssignSession & { id: number }) | null
+  >(null)
 
-  const assign = useMutation({
-    mutationFn: (input: {
-      itemId: string
-      active: boolean
-      priceOverrideMinor: string | null
-    }) =>
-      assignmentsControllerAssign({
-        path: { outletId, itemId: input.itemId },
-        body: {
-          active: input.active,
-          priceOverrideMinor: input.priceOverrideMinor,
-        },
-      }),
-    onSuccess: () => {
-      setError(null)
-      onChanged()
-      void queryClient.invalidateQueries({
-        queryKey: ['menu', 'items', 'matrix'],
-      })
-    },
-    onError: (cause) =>
-      setError(
-        cause instanceof ApiError
-          ? `${cause.code}: ${cause.message}`
-          : 'Assignment failed.',
-      ),
-  })
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const rowIds = rows.map((row) => row.item.id)
+  const allRowsSelected =
+    rowIds.length > 0 && rowIds.every((id) => selectedSet.has(id))
+  const someRowsSelected = rowIds.some((id) => selectedSet.has(id))
+
+  function openAssign(itemIds: readonly string[]) {
+    setAssignSession({
+      id: (assignSession?.id ?? 0) + 1,
+      menuItemIds: [...itemIds],
+      outletId,
+    })
+  }
+  // The first tick opens the dialog right away; later ticks only join the
+  // selection, and the bar's single button sends them all together.
+  function toggleItem(itemId: string, checked: boolean) {
+    const next = checked
+      ? [...selectedIds, itemId]
+      : selectedIds.filter((id) => id !== itemId)
+    setSelectedIds(next)
+    if (checked && selectedIds.length === 0) openAssign(next)
+  }
+  function toggleAll(checked: boolean) {
+    setSelectedIds(checked ? rowIds : [])
+    if (checked && selectedIds.length === 0) openAssign(rowIds)
+  }
 
   // Unassignment is the real DELETE endpoint (soft-unassign + REMOVE catalog
   // revision server-side) — not a `PUT active:false` half-state.
@@ -185,9 +184,6 @@ function AssignmentMatrix({
     onSuccess: () => {
       setError(null)
       onChanged()
-      void queryClient.invalidateQueries({
-        queryKey: ['menu', 'items', 'matrix'],
-      })
     },
     onError: (cause) =>
       setError(
@@ -203,8 +199,9 @@ function AssignmentMatrix({
         Assignment matrix
       </h2>
       <p className="m-0 mb-4 text-xs text-body">
-        Effective price = override ?? master default (PRD FR-02). Saving emits a
-        per-outlet catalog revision atomically.
+        Tick items to assign them with their price — one submit commits
+        atomically. Effective price = override ?? master default (PRD FR-02);
+        removing emits a per-outlet catalog revision.
       </p>
 
       {error ? (
@@ -216,29 +213,106 @@ function AssignmentMatrix({
         </p>
       ) : null}
 
+      {canAssign ? (
+        <>
+          {/* Always rendered so ticking a row never shifts the table (CLS). */}
+          <div
+            role="region"
+            aria-label="Bulk assignment"
+            className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-canvas-soft px-4 py-2"
+          >
+            <p
+              role="status"
+              aria-atomic="true"
+              className="m-0 text-sm text-body"
+            >
+              {selectedIds.length === 0
+                ? 'Tick items to assign them to this outlet.'
+                : `${selectedIds.length} ${selectedIds.length === 1 ? 'item' : 'items'} selected`}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                disabled={selectedIds.length === 0}
+                className="btn-outline btn-sm"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => openAssign(selectedIds)}
+                disabled={selectedIds.length === 0}
+                className="btn-primary btn-sm"
+              >
+                Assign to {outletName ?? 'outlet'}
+              </button>
+            </div>
+          </div>
+          {assignSession ? (
+            <AssignToOutletDialog
+              key={assignSession.id}
+              session={assignSession}
+              onSelectionChange={setSelectedIds}
+              onClosed={() => setAssignSession(null)}
+              fallbackFocusRef={selectAllRef}
+            />
+          ) : null}
+        </>
+      ) : null}
+
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-hairline text-left">
+              {canAssign ? (
+                // 36px control + 4px padding: fits the existing row height,
+                // so adding the column does not stretch the table.
+                <th scope="col" className="py-0.5 pr-2">
+                  <Checkbox
+                    ref={selectAllRef}
+                    aria-label="Select every item"
+                    checked={
+                      allRowsSelected
+                        ? true
+                        : someRowsSelected
+                          ? 'indeterminate'
+                          : false
+                    }
+                    disabled={rowIds.length === 0}
+                    onCheckedChange={(next) => toggleAll(next === true)}
+                  />
+                </th>
+              ) : null}
               <th className="kicker py-2 pr-4">Item</th>
               <th className="kicker py-2 pr-4">Default</th>
-              <th className="kicker py-2 pr-4">Override (minor)</th>
-              <th className="kicker py-2 pr-4">Effective preview</th>
+              <th className="kicker py-2 pr-4">Effective</th>
               <th className="kicker py-2">Assigned</th>
             </tr>
           </thead>
           <tbody>
             {rows.map(({ item, active, priceOverrideMinor }) => {
-              const draft: string | undefined = drafts[item.id]
-              const overrideDraft =
-                draft === undefined
-                  ? priceOverrideMinor
-                  : draft === ''
-                    ? null
-                    : draft
-              const effective = overrideDraft ?? item.defaultPriceMinor
+              const selected = selectedSet.has(item.id)
+              const effective = priceOverrideMinor ?? item.defaultPriceMinor
               return (
-                <tr key={item.id} className="border-b border-hairline-soft">
+                <tr
+                  key={item.id}
+                  className={cn(
+                    'border-b border-hairline-soft transition-colors',
+                    selected && 'bg-surface-strong',
+                  )}
+                >
+                  {canAssign ? (
+                    <td className="py-0.5 pr-2">
+                      <Checkbox
+                        aria-label={`Select ${item.name}`}
+                        checked={selected}
+                        onCheckedChange={(next) =>
+                          toggleItem(item.id, next === true)
+                        }
+                      />
+                    </td>
+                  ) : null}
                   <td className="py-2 pr-4">
                     <p className="m-0 font-medium text-ink">{item.name}</p>
                     <p className="m-0 text-xs text-body">
@@ -248,65 +322,26 @@ function AssignmentMatrix({
                   <td className="money py-2 pr-4">
                     {formatMinor(item.defaultPriceMinor, item.currencyCode)}
                   </td>
-                  <td className="py-2 pr-4">
-                    <input
-                      value={
-                        draft !== undefined ? draft : (priceOverrideMinor ?? '')
-                      }
-                      disabled={!canAssign}
-                      onChange={(event) =>
-                        setDrafts({ ...drafts, [item.id]: event.target.value })
-                      }
-                      placeholder="inherit"
-                      inputMode="numeric"
-                      className="form-input money h-9 w-28 px-2.5 py-1.5 text-sm font-normal disabled:opacity-50"
-                    />
-                  </td>
-                  <td className="money py-2 pr-4 font-medium text-ink">
+                  <td
+                    className="money py-2 pr-4 font-medium text-ink"
+                    title={
+                      priceOverrideMinor !== null
+                        ? `Outlet override ${formatMinor(priceOverrideMinor, item.currencyCode)}`
+                        : 'Master default price'
+                    }
+                  >
                     {formatMinor(effective, item.currencyCode)}
                   </td>
                   <td className="py-2">
-                    {canAssign ? (
-                      <div className="flex flex-wrap gap-2 text-xs">
-                        <button
-                          type="button"
-                          disabled={assign.isPending || unassign.isPending}
-                          onClick={() => {
-                            // Client-side guard is UX only (AGENTS §4.2): the
-                            // backend re-validates the minor-units pattern.
-                            if (
-                              draft !== undefined &&
-                              draft !== '' &&
-                              !/^(0|[1-9][0-9]*)$/.test(draft)
-                            ) {
-                              setError(
-                                'Override must be integer minor units (e.g. 1200 = $12.00).',
-                              )
-                              return
-                            }
-                            assign.mutate({
-                              itemId: item.id,
-                              active: true,
-                              priceOverrideMinor:
-                                draft === undefined
-                                  ? (priceOverrideMinor ?? null)
-                                  : draft === ''
-                                    ? null
-                                    : draft,
-                            })
-                          }}
-                          className={
-                            active
-                              ? 'badge-pill badge-success'
-                              : 'btn-outline btn-sm'
-                          }
-                        >
-                          {active ? 'Assigned' : 'Assign'}
-                        </button>
-                        {active ? (
+                    {active ? (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="badge-pill badge-success">
+                          Assigned
+                        </span>
+                        {canAssign ? (
                           <button
                             type="button"
-                            disabled={assign.isPending || unassign.isPending}
+                            disabled={unassign.isPending}
                             onClick={() => unassign.mutate(item.id)}
                             className="btn-outline btn-sm text-error"
                           >
@@ -314,10 +349,8 @@ function AssignmentMatrix({
                           </button>
                         ) : null}
                       </div>
-                    ) : (
-                      <span className="text-xs text-body">
-                        {active ? 'Assigned' : '—'}
-                      </span>
+                    ) : canAssign ? null : (
+                      <span className="text-xs text-body">—</span>
                     )}
                   </td>
                 </tr>

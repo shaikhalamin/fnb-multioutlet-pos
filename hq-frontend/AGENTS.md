@@ -31,6 +31,7 @@ pnpm check          # Prettier --check
 3. Never call outlet backends or HQ `/sync/v1/*` machine endpoints from this browser app (PRD §7.4). Machine sync is outlet-worker-only; the API-key secret is displayed once at issuance and never logged/stored client-side beyond that view.
 4. `src/api/contracts/hq.openapi.json` stays **byte-identical to the backend export** (copy it, never reformat it — it is in `.prettierignore`); after any contract change run `pnpm generate:api` and commit the regenerated output together with the contract.
 5. Unassignment uses the generated `assignmentsControllerUnassign` (DELETE) client — `PUT active:false` is not a substitute; the DELETE is what records the REMOVE catalog revision server-side.
+6. Bulk assignment sends **one** `assignmentsControllerAssignMany` request per commit (the generated client for `POST /outlets/:outletId/menu`) — never a fan-out of single `PUT` calls, which would leave an outlet half-assigned when one of them fails. Its only entry point is the outlet details page's assignment-matrix checkboxes, which open `features/assignments/AssignToOutletDialog` with that outlet fixed; route files must not re-implement it. Per-item price drafts are minor-unit strings; an empty draft sends no `priceOverrideMinor` (keep current). The response is money-bearing: parse it with `assignmentsControllerAssignManyStatus201Schema`.
 
 ### State, routing, validation
 
@@ -50,3 +51,5 @@ pnpm check          # Prettier --check
 13. Report views must always render `dataAsOf` and per-outlet sync watermarks / `isProvisional` — stale data must never read as "zero sales" (PRD §8, AT-20).
 14. The override editor previews `effectivePriceMinor` (override ?? default) before saving (PRD FR-02).
 15. Access token in memory only; refresh stays in the backend's HttpOnly cookie. Never `localStorage`.
+16. The assignment dialog is keyboard-complete: focus lands on the item search, stays trapped inside, moves to the result or the error summary, and returns to the control that opened it (the matrix header select-all checkbox when that control is disabled again). An in-flight request locks Escape, outside clicks, Cancel and Close so its result is never lost.
+17. `components/ui/dialog.tsx`, `checkbox.tsx` and `radio-group.tsx` are the only modal/selection primitives (DESIGN_SYSTEM.md §7). Keep them token-only: the dialog is the standard card over an `bg-ink/50` scrim at `z-[60]`; an unchecked checkbox/radio is outlined with `border-muted-foreground` because the input hairline is too faint at 18px.

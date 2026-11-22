@@ -177,5 +177,5 @@ The single source of truth is [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) (editorial:
 - Backends: `pnpm lint` (oxlint), `pnpm test` (Vitest), `pnpm test:e2e`, `pnpm migration:run|revert|show`, `pnpm openapi:export`. Frontends: `pnpm dev`, `pnpm build`, `pnpm lint`, `pnpm check` (format).
 - **Frontend `pnpm build` MUST type-check before bundling** (`tsc --noEmit && vite build`). A build script that only bundles lets type errors ship — Vite does not type-check. `tsc --noEmit` must be clean before any frontend change is considered done. (Unused-code detection runs in ESLint, not `tsc`, because generated output cannot satisfy `noUnusedLocals` — see each app's `AGENTS.md`.)
 - Concurrency/transaction tests run against **real PostgreSQL + Redis** containers — SQLite is insufficient for row-lock behavior (PRD §17).
-- Acceptance scenarios AT-01…AT-22 (PRD §17) are the definition of done; new features cite the scenarios they satisfy.
+- Acceptance scenarios AT-01…AT-23 (PRD §17) are the definition of done; new features cite the scenarios they satisfy.
 - Structured JSON logs carry `requestId`, `outletId`, `eventId`, `saleId`, `receiptNo`, `revision` as applicable — and never secrets, keys, or password hashes (PRD §13, §15).

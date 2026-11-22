@@ -19,9 +19,14 @@ function publish(message: string, tone: Toast['tone']): void {
   for (const listener of listeners) listener(toast)
 }
 
+/** Confirm a completed action briefly — never steals focus (aria-live polite). */
+export function toastSuccess(message: string): void {
+  publish(message, 'success')
+}
+
 /** Confirm a copy succeeded — the user asked for visible proof (AGENTS §4.5). */
 export function toastCopied(label: string): void {
-  publish(`${label} copied to clipboard`, 'success')
+  toastSuccess(`${label} copied to clipboard`)
 }
 
 export function toastError(message: string): void {

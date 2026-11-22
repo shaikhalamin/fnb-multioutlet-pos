@@ -107,6 +107,8 @@ HQ can create, update, archive, and list categories and master menu items. A men
 
 HQ can assign/unassign an item to one or more outlets. At most one effective assignment for a given `(outlet_id, menu_item_id)` exists. Override price is nullable; effective price = override or master default. Prices are nonnegative integer minor units and have a single currency consistent with the item/outlet. HQ edits are atomic with per-outlet revision generation and change-log writes.
 
+**Bulk assignment:** HQ can activate 1–200 items on one outlet in a single request (`POST /outlets/:outletId/menu`). The whole batch is one transaction — each changed item gets its own catalog revision, change-log entry and audit row, and if any item is rejected (archived or unknown) nothing is committed. Each line may carry a `priceOverrideMinor` with the same semantics as the single-item PUT (omitted keeps the stored override, `null` clears it, a string sets it). Items already assigned in exactly that state are reported `UNCHANGED` and consume no revision, so retrying a request whose response was lost is harmless.
+
 **Acceptance:** If burger default is USD 10.00 and outlet B has USD 12.00 override, outlet A gets `"1000"`, B gets `"1200"`; unassigned outlet C sees no burger and cannot sell it.
 
 ### FR-03 Catalog distribution
@@ -519,7 +521,7 @@ type ApiError = {
 type MoneyMinor = string;          // regex ^(0|[1-9][0-9]*)$
 ```
 
-**API response schema naming:** `CreateSaleRequest`, `SaleResponse`, `AssignMenuRequest`, `OutletMenuResponse`, `CatalogChangesResponse`, `EventBatchRequest`, `EventBatchResponse`, `CreateOutletIdentityRequest`, `SaveHqConnectionRequest`, `HqConnectionResponse`. Mark sensitive key issuance endpoints as internal/admin and never include secrets in generated frontend logs; the outlet setup endpoints are public only while unprovisioned and never echo the key secret.
+**API response schema naming:** `CreateSaleRequest`, `SaleResponse`, `AssignMenuRequest`, `AssignMenuItemsRequest`, `AssignMenuItemsResponse`, `OutletMenuResponse`, `CatalogChangesResponse`, `EventBatchRequest`, `EventBatchResponse`, `CreateOutletIdentityRequest`, `SaveHqConnectionRequest`, `HqConnectionResponse`. Mark sensitive key issuance endpoints as internal/admin and never include secrets in generated frontend logs; the outlet setup endpoints are public only while unprovisioned and never echo the key secret.
 
 ### 7.2 HQ endpoints (human JWT)
 
@@ -533,6 +535,8 @@ type MoneyMinor = string;          // regex ^(0|[1-9][0-9]*)$
 | `GET/POST` | `/outlets` | `outlets.read` / `outlets.write` | List/provision outlets. |
 | `PUT` | `/outlets/:outletId/menu/:itemId` | `assignments.write` | Assign/activate and optionally override price. |
 | `DELETE` | `/outlets/:outletId/menu/:itemId` | `assignments.write` | Soft-unassign + create removal revision. |
+| `POST` | `/outlets/:outletId/menu` | `assignments.write` | Assign 1–200 items to one outlet atomically (FR-02): all commit, each with its own revision and optional per-item price override, or none. |
+| `GET` | `/outlets/:outletId/menu` | `assignments.read` | Assignment matrix rows for one outlet (HQ view). |
 | `POST` | `/outlets/:outletId/api-keys` | `keys.manage` | Issue key; reveal secret once. |
 | `POST` | `/outlets/:outletId/api-keys/:keyId/rotate` | `keys.manage` | Rotate with bounded overlap. |
 | `DELETE` | `/outlets/:outletId/api-keys/:keyId` | `keys.manage` | Revoke key. |
@@ -565,6 +569,45 @@ Content-Type: application/json
   }
 }
 ```
+
+**Bulk assign request / response (one transaction; `outcome` is `ASSIGNED` or `UNCHANGED` per item, in item-ID order; a line without `priceOverrideMinor` keeps the stored override):**
+
+```http
+POST /api/v1/outlets/61de28db-92ed-46ef-9d90-3a951ac03420/menu
+Authorization: Bearer <hq-jwt>
+Content-Type: application/json
+
+{
+  "items": [
+    { "menuItemId": "9708835e-2e21-465a-87e9-5f8d56cd44ab", "priceOverrideMinor": "1200" },
+    { "menuItemId": "c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4" }
+  ]
+}
+```
+
+```json
+{
+  "data": {
+    "outletId": "61de28db-92ed-46ef-9d90-3a951ac03420",
+    "catalogRevision": "43",
+    "assignedCount": 2,
+    "unchangedCount": 0,
+    "items": [
+      {
+        "menuItemId": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+        "assignmentId": "31fe8f6b-02b8-409d-b1fa-6c441f422949",
+        "outcome": "ASSIGNED",
+        "defaultPriceMinor": "1000",
+        "priceOverrideMinor": null,
+        "effectivePriceMinor": "1000",
+        "currencyCode": "USD"
+      }
+    ]
+  }
+}
+```
+
+An archived or unknown item rejects the whole request before any write: `422 ITEM_INACTIVE` / `404 NOT_FOUND`, both with `details.menuItemIds` naming the offending items.
 
 ### 7.3 Outlet endpoints (outlet human JWT)
 
@@ -951,7 +994,7 @@ GET /api/v1/reports/revenue-by-outlet?from=2026-11-01T00:00:00Z&to=2026-12-01T00
 
 ## 11. Frontend product scope
 
-**HQ frontend:** login; dashboard (revenue, lag, outlet health); master categories and menu CRUD; assignment matrix by outlet; override editor with effective-price preview; outlet/key lifecycle administration (show secret one time); reports with date filters and `dataAsOf`; sync-health panel; audit views. Use TanStack Router protected route layouts and Zod-validated query/search params. Generate typed Axios API functions, TypeScript DTOs, Zod validation schemas and TanStack Query helpers from the HQ OpenAPI contract via Kubb; do not manually maintain conflicting API types.
+**HQ frontend:** login; dashboard (revenue, lag, outlet health); master categories and menu CRUD; assignment matrix by outlet with override editor and effective-price preview; bulk assignment through one shared dialog on the outlet details page (tick item rows → the dialog opens with that outlet fixed → set a per-item price or keep the current one), where a single button sends one atomic `POST /outlets/:outletId/menu`; outlet/key lifecycle administration (show secret one time); reports with date filters and `dataAsOf`; sync-health panel; audit views. Use TanStack Router protected route layouts and Zod-validated query/search params. Generate typed Axios API functions, TypeScript DTOs, Zod validation schemas and TanStack Query helpers from the HQ OpenAPI contract via Kubb; do not manually maintain conflicting API types.
 
 **Outlet frontend:** local login; responsive POS menu/cart; live stock availability; checkout with stable client idempotency key across retries; receipt detail/reprint; inventory adjustment with audit reason; local sales history; last menu sync / pending upload banner. Use TanStack Router and Query, with optimistic UI only for non-financial actions. Stock/sale confirmation must use authoritative backend response, not a local optimistic decrement. On network failure between browser and *local backend*, retry the same `Idempotency-Key` (never mint a second key for the same attempted sale).
 
@@ -1095,6 +1138,7 @@ These are design targets subject to performance tests and infrastructure sizing;
 | AT-20 | HQ reporting during outlet backlog | Reports disclose stale ingestion timestamp/watermark. |
 | AT-21 | Duplicate or out-of-order event sequences | No duplicate business effects; contiguous checkpoint advances only when gaps filled. |
 | AT-22 | Local DB restore + replay | Receipt counter and outbox remain consistent; resends deduplicated by HQ. |
+| AT-23 | HQ bulk-assigns a batch that contains one archived item | The whole request is rejected (`ITEM_INACTIVE`) and nothing commits — no assignment row, revision, change entry or audit row. A valid batch commits every item with one revision each; repeating it changes nothing. |
 
 **Testing layers:** Jest unit tests for services and guards; integration tests against **real PostgreSQL and Redis** via containers (SQLite is insufficient for row-lock behavior); API/contract tests for OpenAPI and event v1; concurrency stress with parallel clients; property-based money/quantity tests; end-to-end browser tests; network partition and crash injection. CI runs migrations on fresh databases and verifies generated Kubb clients are current.
 
@@ -1110,7 +1154,7 @@ These are design targets subject to performance tests and infrastructure sizing;
 
 **Phase 4 – Reporting / hardening:** revenue/top items, staleness indicators, admin dashboards, audit, cross-outlet security tests, load/concurrency/failure tests
 
-**Definition of done:** all AT-01 to AT-22 pass; API docs and generated clients match; production migrations and Docker deployment work; no leaked secrets; observability dashboards and on-call runbook exist; a failed/duplicate sync cannot double-count HQ revenue.
+**Definition of done:** all AT-01 to AT-23 pass; API docs and generated clients match; production migrations and Docker deployment work; no leaked secrets; observability dashboards and on-call runbook exist; a failed/duplicate sync cannot double-count HQ revenue.
 
 
 ## 19. Implementation reference material

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { DataSource, EntityManager } from 'typeorm';
+import { DataSource, type EntityManager, In } from 'typeorm';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { MasterMenuItemEntity } from '../../database/entities/master-menu-item.entity.js';
 import { MenuCategoryEntity } from '../../database/entities/menu-category.entity.js';
@@ -27,10 +27,21 @@ export type AssignmentRow = {
 export class AssignmentsRepository {
   constructor(@Inject(DATA_SOURCE) private readonly dataSource: DataSource) {}
 
-  findAssignment(outletId: string, menuItemId: string): Promise<OutletMenuAssignmentEntity | null> {
-    return this.dataSource
-      .getRepository(OutletMenuAssignmentEntity)
-      .findOne({ where: { outletId, menuItemId } });
+  /**
+   * Every assignment of one outlet for the given items, locked `FOR UPDATE` on
+   * the caller's transaction: the rows carry `version`, so they are read under
+   * lock before `version + 1` is computed (AGENTS §3.4).
+   */
+  findAssignmentsForUpdate(
+    manager: EntityManager,
+    outletId: string,
+    menuItemIds: string[],
+  ): Promise<OutletMenuAssignmentEntity[]> {
+    return manager.getRepository(OutletMenuAssignmentEntity).find({
+      where: { outletId, menuItemId: In(menuItemIds) },
+      order: { menuItemId: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
   }
 
   async insertAssignment(

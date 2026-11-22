@@ -138,8 +138,8 @@ wait for the key. Key rotation later: HQ console → *Rotate* → outlet POS →
 | http://localhost:4000/api/v1/docs | HQ Swagger UI (local dev cluster only) |
 | http://localhost:5000/api/v1/docs | Outlet A Swagger UI (local dev cluster only) |
 
-Quickest end-to-end check: assign items to your outlet in HQ, wait one menu
-pull (~30s), stock the items on the POS *Inventory* page, ring up a sale,
+Quickest end-to-end check: assign items to your outlet in HQ (Outlets → open
+the outlet → tick items → *Assign*, with an optional per-item price), wait one menu pull (~30s), stock the items on the POS *Inventory* page, ring up a sale,
 then watch it appear on the HQ dashboard within a few sync cycles (HQ reports
 disclose `dataAsOf` while they wait). The POS sync-status banner and
 `GET /api/v1/sync/status` show menu revision and outbox backlog locally.
@@ -186,6 +186,12 @@ seeding). Phase 1 delivers (PRD §18):
 - **Outlets + assignments** — provision outlets (revision-0 row included),
   assign/unassign with price overrides; effective price = override ??
   default (FR-02/AT-02); no-op saves never burn a revision.
+- **Bulk assignment (FR-02/AT-23)** — `POST /outlets/:id/menu` activates
+  1–200 items on one outlet in ONE transaction (one revision per changed
+  item, all-or-nothing, idempotent on retry), each line optionally setting a
+  price override. In the console, the outlet details page's item checkboxes
+  open the dialog: set a per-item price or keep the current one, and a single
+  *Assign N items* button sends the one request.
 - **Outlet sync keys** — issue/rotate/revoke; 256-bit secret revealed
   exactly once, stored as a peppered HMAC (verified against `OUTLET_KEY_PEPPER`).
 
@@ -406,7 +412,8 @@ decision).
   adjustments), human/machine credential crossover rejected both ways,
   machine routes send no CORS headers, and deployed frontend bundles grep
   clean of secrets.
-- E2e suites: hq-backend 57 specs (incl. `reporting`/`audit`/`security`),
+- E2e suites: hq-backend 68 specs (incl. `reporting`/`audit`/`security`
+  and `assignments-bulk` for AT-23),
   outlet-backend 48 specs (incl. forged-token matrix and 503/429+Retry-After
   delivery failures) against real PostgreSQL/Redis.
 
@@ -458,6 +465,10 @@ structured JSON (one object per line) carrying `requestId` for every request
 - TanStack Start is configured in SPA mode (`vite.config.ts`), producing a
   static bundle; the build stage copies the prerendered `_shell.html` to
   `index.html` for the Nginx `try_files` fallback.
+- The web `.dockerignore` files deliberately keep `.gitignore` in the build
+  context: Tailwind's source scanner honours it, so without it the prerender
+  pass rescans `dist/` and links a stylesheet hash that is never shipped
+  (404 + a flash of unstyled CSS on every page load).
 - Per-service environment is centralized in the root `.env` (see
   `.env.example`). Never commit real secrets or bake them into images.
 - Production: deploy HQ centrally and repeat the outlet stack once per site

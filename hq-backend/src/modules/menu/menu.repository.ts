@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { DataSource, EntityManager } from 'typeorm';
+import { DataSource, type EntityManager, In } from 'typeorm';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { MasterMenuItemEntity } from '../../database/entities/master-menu-item.entity.js';
 import { MenuCategoryEntity } from '../../database/entities/menu-category.entity.js';
@@ -153,6 +153,37 @@ export class MenuRepository {
       where: { id: itemId, companyId },
       lock: { mode: 'pessimistic_write' },
     });
+  }
+
+  /**
+   * Authoritative bulk read for assignment mutations: `SELECT … FOR UPDATE`
+   * on every requested item, locked in item-ID order (PostgreSQL sorts before
+   * the lock). An edit/archive of one of these items holds the same row lock
+   * while it discovers its fan-out targets, so the two serialize instead of
+   * leaving a stale active assignment behind (PRD §8.2, §8.6).
+   */
+  findItemsForUpdate(
+    manager: EntityManager,
+    companyId: string,
+    itemIds: string[],
+  ): Promise<MasterMenuItemEntity[]> {
+    return manager.getRepository(MasterMenuItemEntity).find({
+      where: { companyId, id: In(itemIds) },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+  }
+
+  /** Category names by ID (for change payloads), read on the caller's transaction. */
+  async findCategoryNames(
+    manager: EntityManager,
+    categoryIds: string[],
+  ): Promise<Map<string, string>> {
+    const rows = await manager.getRepository(MenuCategoryEntity).find({
+      where: { id: In(categoryIds) },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.name]));
   }
 
   insertItem(

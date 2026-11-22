@@ -168,6 +168,19 @@ lg:text-display-mega` (32 → 48 → 64 across mobile/tablet/desktop).
   value in light grey. The form control is `.form-input`; typed text is also
   forced to ink by an `@layer base` rule on `input/select/textarea`, so even
   bare fields can't inherit the grey body color.
+- Overlays and selectors (HQ console): `components/ui/dialog.tsx`,
+  `checkbox.tsx` and `radio-group.tsx` are the only modal/selection
+  primitives. The dialog is the standard card (`bg-surface-card`, hairline
+  border, 16px radius) over a `bg-ink/50` scrim at `z-[60]` — above the
+  `z-50` sticky header and toaster, so neither can cover a focused control
+  inside it. It fades/zooms for ≤ 200 ms; `motion-reduce:animate-none!`
+  removes the motion (the `!` is required: the `data-[state=open]`
+  animation rule is more specific). Checkbox and radio draw an 18px control
+  inside a 36px / 24px hit area; checked = ink fill + glyph (state is never
+  colour alone), focus = ink ring on the visible box. The **unchecked**
+  outline is `border-muted-foreground` (≈ 4.8:1), not the input hairline: at
+  18px `--hairline-strong` is ≈ 1.5:1 against the card and a control boundary
+  needs 3:1 (WCAG 1.4.11).
 - `components/ui/*` (shadcn primitives) consume the semantic tokens; `button`
   is pill-geometry. When adding components via
   `pnpm dlx shadcn@latest add <name>`, they inherit the palette — afterwards

@@ -863,6 +863,101 @@
         ]
       }
     },
+    "/outlets/{outletId}/menu": {
+      "post": {
+        "operationId": "AssignmentsController_assignMany",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignMenuItemsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignMenuItemsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "VALIDATION_FAILED — empty, duplicated or too many item lines, or a malformed price override"
+          },
+          "404": {
+            "description": "NOT_FOUND — outlet, or one or more items"
+          },
+          "422": {
+            "description": "ITEM_INACTIVE — an archived item; nothing is committed"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Assign up to 200 items to an outlet atomically (one transaction).",
+        "tags": [
+          "Assignments"
+        ]
+      },
+      "get": {
+        "operationId": "AssignmentsController_listOutletMenu",
+        "parameters": [
+          {
+            "name": "outletId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OutletMenuResponse"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "NOT_FOUND"
+          }
+        },
+        "security": [
+          {
+            "bearer-jwt": []
+          }
+        ],
+        "summary": "Assignment matrix rows for one outlet (HQ view).",
+        "tags": [
+          "Assignments"
+        ]
+      }
+    },
     "/outlets/{outletId}/menu/{itemId}": {
       "put": {
         "operationId": "AssignmentsController_assign",
@@ -963,48 +1058,6 @@
           }
         ],
         "summary": "Soft-unassign an item and emit its REMOVE revision.",
-        "tags": [
-          "Assignments"
-        ]
-      }
-    },
-    "/outlets/{outletId}/menu": {
-      "get": {
-        "operationId": "AssignmentsController_listOutletMenu",
-        "parameters": [
-          {
-            "name": "outletId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OutletMenuResponse"
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "NOT_FOUND"
-          }
-        },
-        "security": [
-          {
-            "bearer-jwt": []
-          }
-        ],
-        "summary": "Assignment matrix rows for one outlet (HQ view).",
         "tags": [
           "Assignments"
         ]
@@ -2258,6 +2311,140 @@
             "description": "ARCHIVED tombstones the item."
           }
         }
+      },
+      "AssignMenuItemLine": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "priceOverrideMinor": {
+            "type": "string",
+            "nullable": true,
+            "example": "1200",
+            "description": "Per-outlet price override in integer minor units (decimal string of bigint). Omitted keeps the stored override (or the master default), null clears it back to the default.",
+            "pattern": "^(0|[1-9][0-9]*)$"
+          }
+        },
+        "required": [
+          "menuItemId"
+        ]
+      },
+      "AssignMenuItemsRequest": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "example": [
+              {
+                "menuItemId": "9708835e-2e21-465a-87e9-5f8d56cd44ab",
+                "priceOverrideMinor": "1200"
+              },
+              {
+                "menuItemId": "c7647ce1-69c2-4ff2-8bc4-f3b96f7edca4"
+              }
+            ],
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "Master menu items to assign (activate) on this outlet — 1–200 lines with unique menuItemIds. Every item commits together, each with its own catalog revision; if any item is rejected, nothing commits.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssignMenuItemLine"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ]
+      },
+      "AssignmentResultResponse": {
+        "type": "object",
+        "properties": {
+          "menuItemId": {
+            "type": "string",
+            "example": "9708835e-2e21-465a-87e9-5f8d56cd44ab"
+          },
+          "assignmentId": {
+            "type": "string",
+            "example": "31fe8f6b-02b8-409d-b1fa-6c441f422949"
+          },
+          "outcome": {
+            "type": "string",
+            "example": "ASSIGNED",
+            "enum": [
+              "ASSIGNED",
+              "UNCHANGED"
+            ],
+            "description": "ASSIGNED = created or reactivated (one UPSERT catalog revision emitted); UNCHANGED = already assigned in exactly this state, so no revision was consumed."
+          },
+          "defaultPriceMinor": {
+            "type": "string",
+            "example": "1000",
+            "description": "Master default price, minor units, decimal string of bigint."
+          },
+          "priceOverrideMinor": {
+            "type": "string",
+            "example": "1200",
+            "nullable": true,
+            "description": "Override price, minor units, decimal string of bigint; null when the master default applies. An omitted request line keeps the stored override; a string sets it; null clears it."
+          },
+          "effectivePriceMinor": {
+            "type": "string",
+            "example": "1200",
+            "description": "override ?? default, minor units, decimal string of bigint."
+          },
+          "currencyCode": {
+            "type": "string",
+            "example": "USD"
+          }
+        },
+        "required": [
+          "menuItemId",
+          "assignmentId",
+          "outcome",
+          "defaultPriceMinor",
+          "priceOverrideMinor",
+          "effectivePriceMinor",
+          "currencyCode"
+        ]
+      },
+      "AssignMenuItemsResponse": {
+        "type": "object",
+        "properties": {
+          "outletId": {
+            "type": "string",
+            "example": "61de28db-92ed-46ef-9d90-3a951ac03420"
+          },
+          "catalogRevision": {
+            "type": "string",
+            "example": "45",
+            "description": "Outlet catalog revision after the whole batch, decimal string of bigint; unchanged when every item was UNCHANGED."
+          },
+          "assignedCount": {
+            "type": "number",
+            "example": 2,
+            "description": "Items created or reactivated by this request."
+          },
+          "unchangedCount": {
+            "type": "number",
+            "example": 1,
+            "description": "Items that were already assigned and left untouched."
+          },
+          "items": {
+            "description": "One row per requested item, in item-ID order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssignmentResultResponse"
+            }
+          }
+        },
+        "required": [
+          "outletId",
+          "catalogRevision",
+          "assignedCount",
+          "unchangedCount",
+          "items"
+        ]
       },
       "AssignMenuRequest": {
         "type": "object",

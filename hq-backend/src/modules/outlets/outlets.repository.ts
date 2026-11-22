@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { DataSource } from 'typeorm';
+import { DataSource, type EntityManager } from 'typeorm';
 import { DATA_SOURCE } from '../../database/database.module.js';
 import { OutletCatalogRevisionEntity } from '../../database/entities/outlet-catalog-revision.entity.js';
 import { OutletEntity } from '../../database/entities/outlet.entity.js';
@@ -45,6 +45,20 @@ export class OutletsRepository {
       const revisionRepo = manager.getRepository(OutletCatalogRevisionEntity);
       await revisionRepo.save(revisionRepo.create({ outletId: outlet.id, currentRevision: revision }));
       return { ...outlet, catalogRevision: revision };
+    });
+  }
+
+  /**
+   * Takes the outlet's catalog-revision row lock `FOR UPDATE` for the caller's
+   * transaction. Every assignment mutation on an outlet takes it before
+   * touching assignment rows, so concurrent assigns/unassigns (single or
+   * bulk) serialize on one row instead of racing the assignment upsert
+   * (PRD §8.6).
+   */
+  lockCatalogRevision(manager: EntityManager, outletId: string): Promise<OutletCatalogRevisionEntity | null> {
+    return manager.getRepository(OutletCatalogRevisionEntity).findOne({
+      where: { outletId },
+      lock: { mode: 'pessimistic_write' },
     });
   }
 

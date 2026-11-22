@@ -1,6 +1,11 @@
 # Keep build context minimal and secrets out of images. Build-time config
 # (tsconfig, vite.config.ts, tsr.config.json, components.json) and nginx/
 # MUST stay in the context — the Vite build and runtime stage consume them.
+#
+# `.gitignore` MUST stay too: Tailwind's source scanner honours it, so without
+# it the prerender pass rescans the client build in dist/ and emits a second
+# stylesheet — the shell then links a CSS hash that is never shipped (404 +
+# flash of unstyled content on every page load).
 node_modules
 dist
 .tanstack
@@ -9,7 +14,6 @@ dist
 .git
 .vscode
 *.md
-.gitignore
 .prettierignore
 prettier.config.js
 eslint.config.js
