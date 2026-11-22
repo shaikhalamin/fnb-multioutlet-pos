@@ -16,9 +16,9 @@ import { SyncService } from './sync.service.js';
  * Sync-facing surface (PRD §7.3, §8): local status reads, the Phase-3 menu
  * pull/apply service, the typed HQ machine client and the dispatcher
  * processors. `SetupModule` supplies the validate-then-save connection
- * logic reused by the authenticated rotation route. BullMQ queue/worker
- * instances are plain providers wired on the worker entrypoint
- * (`worker-main.ts`), never part of the sale path.
+ * logic reused by the authenticated rotation route. The BullMQ queues and
+ * consumers are registered by `SyncWorkerModule` (@nestjs/bullmq) on the
+ * worker entrypoint only, never part of the sale path.
  */
 @Module({
   imports: [OutboxModule, AuditModule, SetupModule],
@@ -28,6 +28,14 @@ import { SyncService } from './sync.service.js';
     HqSyncClient,
     MenuApplyRepository,
     MenuPullService,
+    OutboxSweepProcessor,
+    SyncDeliveryProcessor,
+    MenuPullProcessor,
+    SyncReconcileProcessor,
+    SyncHeartbeatProcessor,
+  ],
+  // Consumed by the worker-side BullMQ consumers (sync-worker.module.ts).
+  exports: [
     OutboxSweepProcessor,
     SyncDeliveryProcessor,
     MenuPullProcessor,

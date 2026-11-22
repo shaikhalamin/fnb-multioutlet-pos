@@ -1,3 +1,4 @@
+import { BullModule } from '@nestjs/bullmq';
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
@@ -26,6 +27,17 @@ import { UsersModule } from './modules/users/users.module.js';
   // ConfigurationModule first: every other module reads ConfigService<Env, true>.
   imports: [
     ConfigurationModule,
+    // Shared BullMQ configuration (PRD §13): stores only the ioredis
+    // connection options for REDIS_URL. The worker-only SyncWorkerModule
+    // (composed in by WorkerAppModule) registers the actual queues — the API
+    // process keeps zero BullMQ/Redis connections so the sale path stays
+    // outage-proof (AT-10).
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
+        connection: { url: config.get('REDIS_URL', { infer: true }) },
+      }),
+    }),
     // Global rate limiting: 100 requests/minute per client IP by default
     // (env-tunable for perf runs, PRD §16). Tighter per-route budgets are
     // set with @Throttle (e.g. outlet login).

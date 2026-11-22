@@ -88,6 +88,12 @@ export const envSchema = z.object({
    * bounded batches (FR-10).
    */
   AUDIT_LOG_RETENTION_DAYS: z.coerce.number().int().min(0).default(0),
+  /**
+   * Retention sweep cadence in milliseconds (worker profile): the
+   * `audit-cleanup` queue's repeatable job runs once per window — hourly by
+   * default (FR-10).
+   */
+  AUDIT_RETENTION_CHECK_MS: z.coerce.number().int().positive().default(3_600_000),
 });
 
 export type Env = z.infer<typeof envSchema>;

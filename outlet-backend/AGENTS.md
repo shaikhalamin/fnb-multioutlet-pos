@@ -23,7 +23,7 @@ pnpm openapi:export   # rebuild openapi/openapi.json → consumed by outlet-fron
 
 ## Module map (PRD §5, §18)
 
-`auth`, `users`, `identity` (identity + HQ-connection singletons), `setup` (first-run provisioning wizard), `menu-cache`, `inventory`, `sales`, `receipts`, `outbox`, `sync` (with `services/`, `repositories/`, `processors/`, `clients/`), `local-reporting` — under `src/modules/<name>/`. Entities in `src/database/entities/` matching PRD §6.2 tables exactly. Queues: `menu-pull`, `outbox-dispatch`, `sync-delivery`, `sync-reconcile`.
+`auth`, `users`, `identity` (identity + HQ-connection singletons), `setup` (first-run provisioning wizard), `menu-cache`, `inventory`, `sales`, `receipts`, `outbox`, `sync` (with `services/`, `repositories/`, `processors/`, `consumers/`, `clients/`), `local-reporting` — under `src/modules/<name>/`. Entities in `src/database/entities/` matching PRD §6.2 tables exactly. Queues (registered worker-only via `@nestjs/bullmq` in `sync/sync-worker.module.ts`, composed by `src/worker-app.module.ts`): `menu-pull`, `outbox-dispatch`, `sync-delivery`, `sync-reconcile`.
 
 ## Strict rules
 

@@ -1,5 +1,7 @@
+import { BullModule } from '@nestjs/bullmq';
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { EnvelopeInterceptor } from './common/interceptors/envelope.interceptor.js';
 import { RequestIdInterceptor } from './common/interceptors/request-id.interceptor.js';
@@ -8,6 +10,7 @@ import { JwtAuthGuard } from './common/rbac/jwt-auth.guard.js';
 import { httpLoggingMiddleware } from './common/logging/http-logging.middleware.js';
 import { JsonLogger } from './common/logging/logger.service.js';
 import { ConfigurationModule } from './config/configuration.module.js';
+import type { Env } from './config/env.schema.js';
 import { DatabaseModule } from './database/database.module.js';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
@@ -24,6 +27,16 @@ import { UsersModule } from './modules/users/users.module.js';
   // ConfigurationModule first: every other module reads ConfigService<Env, true>.
   imports: [
     ConfigurationModule,
+    // Shared BullMQ configuration (PRD §13): stores only the ioredis
+    // connection options for REDIS_URL. The worker-only QueuesModule
+    // (src/queues/, composed in by WorkerAppModule) registers the actual
+    // queues — the API process never opens BullMQ connections.
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
+        connection: { url: config.get('REDIS_URL', { infer: true }) },
+      }),
+    }),
     // Global rate limiting: 100 requests/minute per client IP. Tighter
     // per-route budgets are set with @Throttle (e.g. auth login).
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
