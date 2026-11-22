@@ -93,6 +93,15 @@ function OutletDetailPage() {
         <p className="mb-6 mt-1 text-sm text-body">
           {outlet.timezone} · {outlet.status} · catalog revision{' '}
           <span className="money">{outlet.catalogRevision}</span>
+          {' · '}
+          <button
+            type="button"
+            className="underline decoration-dotted"
+            title="Copy the Outlet ID for the terminal's setup wizard"
+            onClick={() => void navigator.clipboard.writeText(outlet.id)}
+          >
+            ID <span className="money">{outlet.id}</span> (copy)
+          </button>
         </p>
       ) : null}
 
