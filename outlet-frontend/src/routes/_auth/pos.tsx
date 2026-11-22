@@ -446,10 +446,13 @@ function PosPage() {
             </p>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
+          {/* Checkout zone: the charge pill fills the row (POS convention —
+              one unmistakable, ≥40px full-width touch target) and keeps
+              breathing room from the empty-state hint / totals above. */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
               type="submit"
-              className="btn-primary"
+              className="btn-primary flex-1"
               disabled={Object.keys(cart).length === 0 || checkout.isPending}
             >
               {checkout.isPending ? 'Charging…' : 'Charge sale'}

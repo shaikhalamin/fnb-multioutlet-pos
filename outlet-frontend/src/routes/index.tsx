@@ -171,7 +171,9 @@ function App() {
           aria-hidden="true"
           className="orb orb-rose -right-28 top-8 h-80 w-80"
         />
-        <div className="relative">
+        {/* Landing moment: centered display copy between the corner orbs
+            (DESIGN_SYSTEM §5 — landing/brand copy is centered, not edge-hugging). */}
+        <div className="relative flex flex-col items-center text-center">
           <p className="kicker mb-4">Multi-Outlet F&amp;B Platform</p>
           <h1 className="mb-6 max-w-3xl font-display text-display-md text-ink sm:text-display-xl lg:text-display-mega">
             Outlet point of sale.
@@ -180,7 +182,7 @@ function App() {
             Fast local sales from the last synchronized catalog, live stock
             guards and receipts that keep working even when HQ is unreachable.
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             {unprovisioned ? (
               <a href="/setup" className="btn-primary no-underline">
                 Set up this terminal

@@ -132,7 +132,9 @@ function App() {
           aria-hidden="true"
           className="orb orb-peach -right-28 top-8 h-80 w-80"
         />
-        <div className="relative">
+        {/* Landing moment: centered display copy between the corner orbs
+            (DESIGN_SYSTEM §5 — landing/brand copy is centered, not edge-hugging). */}
+        <div className="relative flex flex-col items-center text-center">
           <p className="kicker mb-4">Multi-Outlet F&amp;B Platform</p>
           <h1 className="mb-6 max-w-3xl font-display text-display-md text-ink sm:text-display-xl lg:text-display-mega">
             Headquarters console.
@@ -142,7 +144,7 @@ function App() {
             reporting for every outlet site. Phase 0 foundation: signed builds,
             typed contracts and observable services.
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             {user ? (
               <Link to="/dashboard" className="btn-primary no-underline">
                 Open dashboard
