@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMemo, useRef, useState } from 'react'
+import { z } from 'zod'
 import { ApiError } from '#/api/axios'
 import { apiKeysControllerIssue } from '#/api/generated/clients/apiKeysControllerIssue'
 import { apiKeysControllerList } from '#/api/generated/clients/apiKeysControllerList'
@@ -17,11 +18,17 @@ import { useMenuItems } from '#/features/menu/queries'
 import { hasPermission } from '#/lib/permissions'
 import { formatMinor } from '#/lib/utils'
 import { outletKeys } from '#/features/outlets/keys'
-import { CopyValue, useCopyAction } from '#/components/CopyValue'
+import { CopyValue } from '#/components/CopyValue'
 import { Checkbox } from '#/components/ui/checkbox'
 import { cn } from 'cn'
 
+/** In-page section tabs carried in the URL, so a tab is linkable/shareable. */
+const outletTabSchema = z.object({
+  tab: z.enum(['assignments', 'settings']).catch('assignments'),
+})
+
 export const Route = createFileRoute('/_auth/outlets/$outletId')({
+  validateSearch: outletTabSchema.parse,
   component: OutletDetailPage,
 })
 
@@ -29,11 +36,11 @@ type IssuedKey = { keyId: string; secret: string }
 
 function OutletDetailPage() {
   const { outletId } = Route.useParams()
+  const { tab } = Route.useSearch()
   const session = useSession()
   const queryClient = useQueryClient()
   const canAssign = hasPermission(session.user, 'assignments.write')
   const canManageKeys = hasPermission(session.user, 'keys.manage')
-  const idCopy = useCopyAction('Outlet ID')
 
   const outlets = useQuery({
     queryKey: outletKeys.list(),
@@ -49,7 +56,9 @@ function OutletDetailPage() {
       assignmentsControllerListOutletMenuStatus200Schema.parse(
         await assignmentsControllerListOutletMenu({ path: { outletId } }),
       ),
-    enabled: Boolean(outlet),
+    // The matrix data only feeds the Assignments tab — don't fetch it when
+    // the operator lands straight on Settings (e.g. from the pairing panel).
+    enabled: Boolean(outlet) && tab === 'assignments',
   })
   const items = useMenuItems()
 
@@ -88,27 +97,68 @@ function OutletDetailPage() {
         <p className="mb-6 mt-1 text-sm text-body">
           {outlet.timezone} · {outlet.status} · catalog revision{' '}
           <span className="money">{outlet.catalogRevision}</span>
-          {' · '}
-          <button
-            type="button"
-            className="underline decoration-dotted"
-            title="Copy the Outlet ID for the terminal's setup wizard"
-            onClick={() => void idCopy.copy(outlet.id)}
-          >
-            ID <span className="money">{outlet.id}</span> (
-            {idCopy.copied ? 'copied ✓' : 'copy'})
-          </button>
         </p>
       ) : null}
 
-      <AssignmentMatrix
-        outletId={outletId}
-        outletName={outlet?.name ?? null}
-        rows={rows}
-        canAssign={canAssign}
-        onChanged={invalidate}
-      />
-      {canManageKeys ? <OutletKeysPanel outletId={outletId} /> : null}
+      <nav
+        aria-label="Outlet sections"
+        className="mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline pb-3"
+      >
+        <Link
+          to="/outlets/$outletId"
+          params={{ outletId }}
+          search={{ tab: 'assignments' }}
+          aria-current={tab === 'assignments' ? 'page' : undefined}
+          className={cn('nav-link', tab === 'assignments' && 'is-active')}
+        >
+          Menu assignments
+        </Link>
+        <Link
+          to="/outlets/$outletId"
+          params={{ outletId }}
+          search={{ tab: 'settings' }}
+          aria-current={tab === 'settings' ? 'page' : undefined}
+          className={cn('nav-link', tab === 'settings' && 'is-active')}
+        >
+          Settings
+        </Link>
+      </nav>
+
+      {tab === 'assignments' ? (
+        <AssignmentMatrix
+          outletId={outletId}
+          outletName={outlet?.name ?? null}
+          rows={rows}
+          canAssign={canAssign}
+          onChanged={invalidate}
+        />
+      ) : (
+        <>
+          <section className="card-panel mb-6 p-6">
+            <h2 className="m-0 mb-1 font-display text-title-md text-ink">
+              Outlet identity
+            </h2>
+            <p className="m-0 mb-4 text-xs text-body">
+              The terminal&apos;s{' '}
+              <span className="font-medium text-ink">/setup</span> wizard pairs
+              to this outlet with the Outlet ID below, together with the outlet
+              code shown above the tabs.
+            </p>
+            {outlet ? (
+              <CopyValue
+                label="Outlet ID"
+                value={outlet.id}
+                buttonLabel="Copy Outlet ID"
+              />
+            ) : (
+              <p className="m-0 text-sm text-body" aria-busy="true">
+                Loading outlet…
+              </p>
+            )}
+          </section>
+          {canManageKeys ? <OutletKeysPanel outletId={outletId} /> : null}
+        </>
+      )}
     </main>
   )
 }
@@ -410,9 +460,10 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
         Outlet sync keys
       </h2>
       <p className="m-0 mb-4 text-xs text-body">
-        Used by the outlet worker as{' '}
-        <code>Authorization: OutletKey keyId.secret</code>. The secret is
-        revealed exactly once at issue/rotation.
+        Pairs the outlet terminal for sync — its setup wizard asks for the{' '}
+        <span className="font-medium text-ink">key ID</span> and the{' '}
+        <span className="font-medium text-ink">secret</span> as two separate
+        values. The secret is revealed exactly once at issue/rotation.
       </p>
 
       {issued ? (
@@ -439,11 +490,6 @@ function OutletKeysPanel({ outletId }: { outletId: string }) {
               label="Key secret (shown once)"
               value={issued.secret}
               buttonLabel="Copy secret"
-            />
-            <CopyValue
-              label="Combined keyId.secret (worker Authorization header)"
-              value={`${issued.keyId}.${issued.secret}`}
-              buttonLabel="Copy combined"
             />
           </div>
           <button

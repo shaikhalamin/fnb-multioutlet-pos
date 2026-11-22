@@ -30,7 +30,7 @@ type JustCreated = OutletResponse
  * Post-creation pairing panel: surfaces the HQ-issued Outlet ID + code for
  * copying (each copy confirms with a toast) and walks the operator through
  * pairing the terminal (PRD §8.7 bootstrap) — setup wizard step 1 here,
- * step 2 after issuing a key on the outlet's detail page.
+ * step 2 after issuing a key on the outlet's Settings tab.
  */
 function PairingPanel({ outlet }: { outlet: JustCreated }) {
   const idCopy = useCopyAction('Outlet ID')
@@ -72,12 +72,14 @@ function PairingPanel({ outlet }: { outlet: JustCreated }) {
           <Link
             to="/outlets/$outletId"
             params={{ outletId: outlet.id }}
+            search={{ tab: 'settings' }}
             className="underline decoration-dotted"
           >
             open {outlet.name}
           </Link>{' '}
-          → assign menu items →{' '}
-          <span className="font-medium text-ink">API keys → Issue key</span>.
+          →{' '}
+          <span className="font-medium text-ink">Settings → Issue new key</span>{' '}
+          (menu items can be assigned on its Assignments tab at any time).
         </li>
         <li>
           Copy the one-time{' '}
@@ -155,6 +157,7 @@ function OutletsPage() {
                 key={outlet.id}
                 to="/outlets/$outletId"
                 params={{ outletId: outlet.id }}
+                search={{ tab: 'assignments' }}
                 className="feature-card p-4 no-underline"
               >
                 <div className="mb-2 flex items-center justify-between">
@@ -168,7 +171,7 @@ function OutletsPage() {
                 </p>
                 <p className="m-0 mt-1 text-xs text-body">{outlet.timezone}</p>
                 <p className="m-0 mt-3 text-xs font-medium text-ink">
-                  Assignments &amp; keys →
+                  Assignments &amp; settings →
                 </p>
               </Link>
             ))}

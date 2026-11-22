@@ -201,6 +201,7 @@ function OutletHealthCard({
       <Link
         to="/outlets/$outletId"
         params={{ outletId: outlet.id }}
+        search={{ tab: 'assignments' }}
         className="feature-card p-4 no-underline"
       >
         <div className="mb-2 flex items-center justify-between">
@@ -231,6 +232,7 @@ function OutletHealthCard({
     <Link
       to="/outlets/$outletId"
       params={{ outletId: outlet.id }}
+      search={{ tab: 'assignments' }}
       className="feature-card p-4 no-underline"
     >
       <div className="mb-2 flex items-center justify-between gap-2">
