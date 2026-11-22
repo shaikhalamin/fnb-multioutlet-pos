@@ -8,10 +8,13 @@ import type { AdjustInventoryRequest, AdjustInventoryResponse, InventoryBalanceR
 
 /**
  * Local inventory operations (PRD §7.3, FR-05): balance reads and audited
- * adjustments. An adjustment is one transaction: lock the balance row
- * `FOR UPDATE`, assert the resulting quantity stays nonnegative, apply the
- * signed delta with `version + 1`, and append the stock-movement audit row
- * carrying reason/actor/request ID (FR-04). Nothing here talks to HQ.
+ * adjustments. The list is catalog-driven: every local catalog item appears,
+ * showing 0 until staff stock it — the bootstrapping path PRD §8.8 expects
+ * after pairing, since a freshly synced terminal has no balance rows yet. An
+ * adjustment is one transaction: lock the balance row `FOR UPDATE`, assert
+ * the resulting quantity stays nonnegative, apply the signed delta with
+ * `version + 1`, and append the stock-movement audit row carrying
+ * reason/actor/request ID (FR-04). Nothing here talks to HQ.
  */
 @Injectable()
 export class InventoryService {

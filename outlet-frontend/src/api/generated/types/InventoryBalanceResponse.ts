@@ -20,13 +20,13 @@ export type InventoryBalanceResponse = {
    */
   sku: string;
   /**
-   * @description On-hand quantity (integer).
+   * @description On-hand quantity (integer); 0 for an item never stocked yet.
    * @example 30
    * @type number
    */
   quantityOnHand: number;
   /**
-   * @description Balance row version; bumps on every mutation.
+   * @description Balance row version; bumps on every mutation. 0 for an item never stocked yet.
    * @example 4
    * @type number
    */

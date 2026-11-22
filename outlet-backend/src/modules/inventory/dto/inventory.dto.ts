@@ -37,10 +37,16 @@ export class InventoryBalanceResponse {
   @ApiProperty({ example: 'BURGER-01' })
   sku!: string;
 
-  @ApiProperty({ example: 30, description: 'On-hand quantity (integer).' })
+  @ApiProperty({
+    example: 30,
+    description: 'On-hand quantity (integer); 0 for an item never stocked yet.',
+  })
   quantityOnHand!: number;
 
-  @ApiProperty({ example: 4, description: 'Balance row version; bumps on every mutation.' })
+  @ApiProperty({
+    example: 4,
+    description: 'Balance row version; bumps on every mutation. 0 for an item never stocked yet.',
+  })
   version!: number;
 
   @ApiProperty({ example: '2026-11-20T04:00:00.000Z' })

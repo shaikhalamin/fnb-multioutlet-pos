@@ -5,7 +5,11 @@ import { CatalogItemEntity } from '../../database/entities/catalog-item.entity.j
 import { InventoryBalanceEntity } from '../../database/entities/inventory-balance.entity.js';
 import { StockMovementEntity } from '../../database/entities/stock-movement.entity.js';
 
-/** Balance row joined with its catalog identity for the inventory view. */
+/**
+ * Catalog item joined with its balance (when one exists) for the inventory
+ * view. Items never stocked yet surface with `quantityOnHand` '0' and
+ * `version` 0 — the catalog row is the anchor, not the balance row.
+ */
 export type InventoryRow = {
   menuItemId: string;
   name: string;
@@ -24,17 +28,25 @@ export type InventoryRow = {
 export class InventoryRepository {
   constructor(@Inject(DATA_SOURCE) private readonly dataSource: DataSource) {}
 
+  /**
+   * One row per local catalog item, LEFT JOINed with its balance: an item
+   * that has never been stocked still appears (quantity 0, version 0) so the
+   * inventory view can offer the audited first-restock adjustment (PRD §8.8
+   * bootstrapping — same COALESCE convention as the POS menu read in
+   * menu-cache.repository). Inactive items keep showing: their balances and
+   * history remain after HQ removes the assignment.
+   */
   async listBalances(): Promise<InventoryRow[]> {
     return this.dataSource
       .createQueryBuilder()
-      .select('balance.menu_item_id', 'menuItemId')
+      .select('item.menu_item_id', 'menuItemId')
       .addSelect('item.name', 'name')
       .addSelect('item.sku', 'sku')
-      .addSelect('balance.quantity_on_hand', 'quantityOnHand')
-      .addSelect('balance.version', 'version')
-      .addSelect('balance.updated_at', 'updatedAt')
-      .from(InventoryBalanceEntity, 'balance')
-      .innerJoin(CatalogItemEntity, 'item', 'item.menu_item_id = balance.menu_item_id')
+      .addSelect('COALESCE(balance.quantity_on_hand, 0)', 'quantityOnHand')
+      .addSelect('COALESCE(balance.version, 0)', 'version')
+      .addSelect('COALESCE(balance.updated_at, item.updated_at)', 'updatedAt')
+      .from(CatalogItemEntity, 'item')
+      .leftJoin('inventory_balances', 'balance', 'balance.menu_item_id = item.menu_item_id')
       .orderBy('item.name', 'ASC')
       .getRawMany<InventoryRow>();
   }

@@ -24,7 +24,7 @@ export class InventoryController {
 
   @Get('inventory')
   @RequirePermissions('inventory.read')
-  @ApiOperation({ summary: 'Local stock balances joined with catalog identity.' })
+  @ApiOperation({ summary: 'Every catalog item with its stock balance (0 until first stocked).' })
   @ApiOkResponse({ type: [InventoryBalanceResponse] })
   async listBalances(): Promise<InventoryBalanceResponse[]> {
     return this.inventoryService.listBalances();

@@ -9,7 +9,7 @@ import { client, unwrapResult, resolveThrowOnError, securitySchemes } from '../.
 
 /**
  * `GET /inventory`
- * @summary Local stock balances joined with catalog identity.
+ * @summary Every catalog item with its stock balance (0 until first stocked).
  */
 export function inventoryControllerListBalances<ThrowOnError extends boolean = true>(options: Options<InventoryControllerListBalancesOptions, ThrowOnError> = {}): Promise<UnwrappedResult<InventoryControllerListBalancesResponses, ThrowOnError>> {
   const { client: apiClient = client, ...config } = options

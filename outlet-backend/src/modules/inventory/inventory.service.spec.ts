@@ -47,6 +47,70 @@ function makeService(repo: ReturnType<typeof makeRepo>, dataSource = makeDataSou
 
 const ITEM = '11111111-1111-4111-8111-111111111111';
 
+describe('InventoryService.listBalances', () => {
+  it('surfaces a never-stocked catalog item at quantity 0 and version 0', async () => {
+    // PRD §8.8 bootstrapping: a freshly paired terminal has catalog rows but
+    // no balance rows; the list must still show them so staff can restock.
+    const catalogSyncedAt = new Date('2026-11-22T15:21:24Z');
+    const repo = makeRepo({
+      listBalances: vi.fn(async () => [
+        {
+          menuItemId: ITEM,
+          name: 'Chicken Burger',
+          sku: 'BURGER-01',
+          quantityOnHand: '0',
+          version: 0,
+          updatedAt: catalogSyncedAt,
+        },
+      ]),
+    });
+    const { service } = makeService(repo);
+
+    const rows = await service.listBalances();
+
+    expect(rows).toEqual([
+      {
+        menuItemId: ITEM,
+        name: 'Chicken Burger',
+        sku: 'BURGER-01',
+        quantityOnHand: 0,
+        version: 0,
+        updatedAt: catalogSyncedAt.toISOString(),
+      },
+    ]);
+  });
+
+  it('maps a stocked balance row through unchanged', async () => {
+    const updatedAt = new Date('2026-11-20T04:00:00Z');
+    const repo = makeRepo({
+      listBalances: vi.fn(async () => [
+        {
+          menuItemId: ITEM,
+          name: 'Cola',
+          sku: 'COLA-01',
+          quantityOnHand: '100',
+          version: 2,
+          updatedAt,
+        },
+      ]),
+    });
+    const { service } = makeService(repo);
+
+    const rows = await service.listBalances();
+
+    expect(rows).toEqual([
+      {
+        menuItemId: ITEM,
+        name: 'Cola',
+        sku: 'COLA-01',
+        quantityOnHand: 100,
+        version: 2,
+        updatedAt: updatedAt.toISOString(),
+      },
+    ]);
+  });
+});
+
 describe('InventoryService.adjust', () => {
   it('applies a positive delta, bumps version, and appends an audited movement', async () => {
     const repo = makeRepo();

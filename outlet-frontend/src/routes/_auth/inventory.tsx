@@ -156,6 +156,14 @@ function InventoryPage() {
             ? balances.error.message
             : 'network error'}
         </p>
+      ) : balances.data.length === 0 ? (
+        <section className="card-panel p-6 text-sm text-body">
+          <p className="font-medium text-ink">No catalog items yet.</p>
+          <p className="mt-1">
+            Items appear here as soon as the terminal is paired and HQ assigns a
+            menu — then stock each one with an audited restock adjustment.
+          </p>
+        </section>
       ) : (
         <section className="card-panel overflow-x-auto p-6">
           <table className="w-full border-collapse text-sm">

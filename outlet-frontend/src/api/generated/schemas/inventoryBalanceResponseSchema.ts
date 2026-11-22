@@ -9,7 +9,7 @@ export const inventoryBalanceResponseSchema = z.object({
   menuItemId: z.string().meta({ examples: ['9708835e-2e21-465a-87e9-5f8d56cd44ab'] }),
   name: z.string().meta({ examples: ['Chicken Burger'] }),
   sku: z.string().meta({ examples: ['BURGER-01'] }),
-  quantityOnHand: z.number().describe('On-hand quantity (integer).').meta({ examples: [30] }),
-  version: z.number().describe('Balance row version; bumps on every mutation.').meta({ examples: [4] }),
+  quantityOnHand: z.number().describe('On-hand quantity (integer); 0 for an item never stocked yet.').meta({ examples: [30] }),
+  version: z.number().describe('Balance row version; bumps on every mutation. 0 for an item never stocked yet.').meta({ examples: [4] }),
   updatedAt: z.string().meta({ examples: ['2026-11-20T04:00:00.000Z'] }),
 })

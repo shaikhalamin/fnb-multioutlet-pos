@@ -435,7 +435,7 @@
             "bearer-jwt": []
           }
         ],
-        "summary": "Local stock balances joined with catalog identity.",
+        "summary": "Every catalog item with its stock balance (0 until first stocked).",
         "tags": [
           "Inventory"
         ]
@@ -1330,12 +1330,12 @@
           "quantityOnHand": {
             "type": "number",
             "example": 30,
-            "description": "On-hand quantity (integer)."
+            "description": "On-hand quantity (integer); 0 for an item never stocked yet."
           },
           "version": {
             "type": "number",
             "example": 4,
-            "description": "Balance row version; bumps on every mutation."
+            "description": "Balance row version; bumps on every mutation. 0 for an item never stocked yet."
           },
           "updatedAt": {
             "type": "string",
