@@ -179,7 +179,7 @@ function CategoriesPanel({ canWrite }: { canWrite: boolean }) {
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="New category name"
-            className="text-input w-56 font-normal"
+            className="form-input w-56 font-normal"
           />
           <button
             type="submit"
@@ -392,7 +392,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, sku: event.target.value })
               }
               placeholder="BURGER-02"
-              className="text-input font-normal disabled:opacity-50"
+              className="form-input font-normal disabled:opacity-50"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
@@ -403,7 +403,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, name: event.target.value })
               }
               placeholder="Beef Burger"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
@@ -413,7 +413,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
               onChange={(event) =>
                 setForm({ ...form, categoryId: event.target.value })
               }
-              className="text-input font-normal"
+              className="form-input font-normal"
             >
               <option value="">Select…</option>
               {categories.data
@@ -433,7 +433,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, defaultPriceMinor: event.target.value })
               }
               placeholder="1000 = $10.00"
-              className="text-input money font-normal"
+              className="form-input money font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink sm:col-span-2">
@@ -444,7 +444,7 @@ function ItemsPanel({ canWrite }: { canWrite: boolean }) {
                 setForm({ ...form, description: event.target.value })
               }
               placeholder="Optional"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <div className="col-span-full flex flex-wrap items-center gap-3">

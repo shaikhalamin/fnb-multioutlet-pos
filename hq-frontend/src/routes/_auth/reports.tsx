@@ -134,7 +134,7 @@ function ReportsPage() {
             onChange={(event) =>
               setDraft({ ...draft, from: event.target.value })
             }
-            className="text-input font-normal"
+            className="form-input font-normal"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -143,7 +143,7 @@ function ReportsPage() {
             type="date"
             value={draft.to}
             onChange={(event) => setDraft({ ...draft, to: event.target.value })}
-            className="text-input font-normal"
+            className="form-input font-normal"
           />
         </label>
         <button type="submit" className="btn-primary btn-sm">
@@ -262,7 +262,7 @@ function ReportsPage() {
                     }),
                   })
                 }
-                className="text-input font-normal"
+                className="form-input font-normal"
               >
                 {outlets.data
                   .filter((outlet) => outlet.status === 'ACTIVE')

@@ -263,7 +263,7 @@ function InventoryPage() {
                 value={quantity}
                 onChange={(event) => setQuantity(event.target.value)}
                 placeholder={reason === 'RESTOCK' ? 'e.g. 50' : 'e.g. -3'}
-                className="text-input money font-normal"
+                className="form-input money font-normal"
               />
             </label>
 

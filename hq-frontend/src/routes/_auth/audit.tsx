@@ -120,7 +120,7 @@ function AuditPage() {
               setDraft({ ...draft, action: event.target.value })
             }
             placeholder="auth.login_failed"
-            className="text-input font-normal"
+            className="form-input font-normal"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -131,7 +131,7 @@ function AuditPage() {
               setDraft({ ...draft, actorId: event.target.value })
             }
             placeholder="3f7a4d60-…"
-            className="text-input font-normal"
+            className="form-input font-normal"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -142,7 +142,7 @@ function AuditPage() {
             onChange={(event) =>
               setDraft({ ...draft, from: event.target.value })
             }
-            className="text-input font-normal"
+            className="form-input font-normal"
           />
         </label>
         <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -151,7 +151,7 @@ function AuditPage() {
             type="date"
             value={draft.to}
             onChange={(event) => setDraft({ ...draft, to: event.target.value })}
-            className="text-input font-normal"
+            className="form-input font-normal"
           />
         </label>
         <div className="flex items-end">

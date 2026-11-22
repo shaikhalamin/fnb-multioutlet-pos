@@ -116,7 +116,7 @@ lg:text-display-mega` (32 → 48 → 64 across mobile/tablet/desktop).
 | `.btn-outline` (`+ .btn-sm`) | Secondary: transparent, 1px `--hairline-strong`, hover `--surface-strong` |
 | `.badge-pill` | Pill badge/chip: `--surface-strong` bg, caption-uppercase voice |
 | `.badge-success` / `.badge-error` / `.badge-neutral` | Status variants (pair with `.badge-pill`); use `normal-case tracking-[0.08em]` when the content is a name/role, not a status |
-| `.text-input` | Form control: 44px, white, 8px radius, `--hairline-strong` border; focus = 2px ink ring (no layout shift). Override size with utilities (`h-9 w-28 px-2.5`) |
+| `.form-input` | Form control: 44px, white, 8px radius, `--hairline-strong` border, typed text always ink; focus = 2px ink ring (no layout shift). Override size with utilities (`h-9 w-28 px-2.5`) |
 | `.money` | Money & aligned numerals: Inter + `tabular-nums`. **Use this instead of `font-mono`** — the system has no mono moment |
 | `.orb` + `.orb-mint/-peach/-lavender/-sky/-rose` | Decorative blurred radial-gradient circle. Always `aria-hidden="true"`, absolutely positioned, sized/placed with utilities. Hero/login: large (h-72+); dashboard/POS headers: small accent (h-40) |
 | `.orb-card` | Soft band (canvas-soft, 24px radius) with an orb blooming behind centered display copy — landing/brand moments |
@@ -156,10 +156,18 @@ lg:text-display-mega` (32 → 48 → 64 across mobile/tablet/desktop).
   in `@theme inline`. There is no `tailwind.config.*`; `src/styles.css` is the
   single theme source.
 - Component classes live in `@layer components`, so plain utilities can
-  override them per-usage (e.g. `text-input h-9 w-28`).
-- Element defaults (`a`, …) must live in `@layer base`. An unlayered rule
-  outranks every layer and silently overrides component classes — an unlayered
-  `a { color }` left link CTAs (`a.btn-primary`) with ink text on the ink pill.
+  override them per-usage (e.g. `form-input h-9 w-28`).
+- Element defaults (`a`, form controls, …) must live in `@layer base`. An
+  unlayered rule outranks every layer and silently overrides component classes
+  — an unlayered `a { color }` left link CTAs (`a.btn-primary`) with ink text
+  on the ink pill.
+- Never name a component class after a `@theme` color token (the `.text-input`
+  lesson): `--color-input` makes Tailwind generate a `text-input` **color
+  utility** (grey `--hairline-strong`), and the utilities layer beats
+  `@layer components` — so the old `.text-input` class rendered every typed
+  value in light grey. The form control is `.form-input`; typed text is also
+  forced to ink by an `@layer base` rule on `input/select/textarea`, so even
+  bare fields can't inherit the grey body color.
 - `components/ui/*` (shadcn primitives) consume the semantic tokens; `button`
   is pill-geometry. When adding components via
   `pnpm dlx shadcn@latest add <name>`, they inherit the palette — afterwards
@@ -168,4 +176,6 @@ lg:text-display-mega` (32 → 48 → 64 across mobile/tablet/desktop).
 - Status vocabulary: ok/in-stock/settled → success; expired/error/out-of-stock
   → error; pending/warning/unknown → neutral (no amber in this system).
 - Accessibility: primary pill is 40px tall; keep tap targets ≥ 40px on POS
-  flows; visible focus (`.text-input` ink ring; `outline-ring` on the rest).
+  flows; visible focus (`.form-input` ink ring; `outline-ring` on the rest).
+- Native checkboxes/radios get `accent-color: var(--ink)` from `@layer base`
+  (no OS-blue accents); placeholders are `--muted-soft`, typed values ink.

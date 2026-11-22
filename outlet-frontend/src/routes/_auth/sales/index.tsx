@@ -87,7 +87,7 @@ function SalesPage() {
           From
           <input
             type="date"
-            className="text-input mt-1 block h-9 w-44 font-normal normal-case tracking-normal"
+            className="form-input mt-1 block h-9 w-44 font-normal normal-case tracking-normal"
             value={range.from ? range.from.slice(0, 10) : ''}
             onChange={(event) => onFromChange(event.target.value)}
           />
@@ -96,7 +96,7 @@ function SalesPage() {
           To
           <input
             type="date"
-            className="text-input mt-1 block h-9 w-44 font-normal normal-case tracking-normal"
+            className="form-input mt-1 block h-9 w-44 font-normal normal-case tracking-normal"
             value={range.to ? range.to.slice(0, 10) : ''}
             onChange={(event) => onToChange(event.target.value)}
           />

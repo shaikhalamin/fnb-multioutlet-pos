@@ -210,7 +210,7 @@ function OutletsPage() {
                 setForm({ ...form, code: event.target.value.toUpperCase() })
               }
               placeholder="D"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -221,7 +221,7 @@ function OutletsPage() {
                 setForm({ ...form, name: event.target.value })
               }
               placeholder="Outlet D"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold">
@@ -232,7 +232,7 @@ function OutletsPage() {
                 setForm({ ...form, timezone: event.target.value })
               }
               placeholder="Asia/Dhaka"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <div className="col-span-full flex flex-wrap items-center gap-3">

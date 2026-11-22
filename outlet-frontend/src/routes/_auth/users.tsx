@@ -309,7 +309,7 @@ function UsersPage() {
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="new.cashier@outlet-a.local"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <label className="flex flex-col gap-1 text-xs font-semibold text-ink">
@@ -319,7 +319,7 @@ function UsersPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Min 8 characters"
-              className="text-input font-normal"
+              className="form-input font-normal"
             />
           </label>
           <fieldset className="col-span-full m-0 border-0 p-0">

@@ -101,7 +101,7 @@ function LoginPage() {
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="text-input font-normal"
+                className="form-input font-normal"
                 placeholder="cashier@outlet-a.local"
               />
             </label>
@@ -113,7 +113,7 @@ function LoginPage() {
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="text-input font-normal"
+                className="form-input font-normal"
                 placeholder="••••••••"
               />
             </label>

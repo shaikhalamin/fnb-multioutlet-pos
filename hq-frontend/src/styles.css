@@ -258,6 +258,20 @@ body {
   a:hover {
     text-decoration-color: var(--ink);
   }
+
+  /* Form controls are data entry, not running text: typed values always
+     render in ink (the grey body color must not leak into bare fields), and
+     native checkboxes/radios take the ink accent instead of the OS blue. */
+  input,
+  select,
+  textarea {
+    color: var(--ink);
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--ink);
+  }
 }
 
 code {
@@ -436,8 +450,12 @@ a {
   }
 
   /* Form input: white surface, 8px radius, 44px height; focus thickens the
-     border to 2px ink (via inset ring, so nothing shifts). */
-  .text-input {
+     border to 2px ink (via inset ring, so nothing shifts).
+     Named `.form-input`, never `.text-input`: `--color-input` in `@theme`
+     makes Tailwind generate a `text-input` color utility (grey
+     `--hairline-strong`), and utilities beat this components layer — a
+     `.text-input` class would silently force grey typed text. */
+  .form-input {
     width: 100%;
     height: 44px;
     padding: 12px 16px;
@@ -452,11 +470,11 @@ a {
       box-shadow 140ms ease;
   }
 
-  .text-input::placeholder {
+  .form-input::placeholder {
     color: var(--muted-soft);
   }
 
-  .text-input:focus {
+  .form-input:focus {
     border-color: var(--ink);
     box-shadow: inset 0 0 0 1px var(--ink);
   }

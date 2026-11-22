@@ -254,7 +254,7 @@ function HqConnectionCard(props: {
               onChange={(event) =>
                 setForm({ ...form, hqApiBaseUrl: event.target.value.trim() })
               }
-              className="text-input font-normal"
+              className="form-input font-normal"
               placeholder="http://hq-api:3000/api/v1"
             />
           </label>
@@ -266,7 +266,7 @@ function HqConnectionCard(props: {
               onChange={(event) =>
                 setForm({ ...form, keyId: event.target.value.trim() })
               }
-              className="text-input font-normal"
+              className="form-input font-normal"
               placeholder="ok_dev_…"
             />
           </label>
@@ -280,7 +280,7 @@ function HqConnectionCard(props: {
               onChange={(event) =>
                 setForm({ ...form, keySecret: event.target.value.trim() })
               }
-              className="text-input font-normal"
+              className="form-input font-normal"
               placeholder="one-time secret"
             />
           </label>

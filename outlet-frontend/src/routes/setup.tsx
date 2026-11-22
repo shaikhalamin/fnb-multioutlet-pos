@@ -218,7 +218,7 @@ function SetupPage() {
                       outletId: event.target.value.trim(),
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="11111111-1111-4111-8111-111111111111"
                 />
               </label>
@@ -234,7 +234,7 @@ function SetupPage() {
                       outletCode: event.target.value.toUpperCase(),
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="A"
                 />
               </label>
@@ -251,7 +251,7 @@ function SetupPage() {
                       adminEmail: event.target.value,
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="admin@outlet-a.local"
                 />
               </label>
@@ -269,7 +269,7 @@ function SetupPage() {
                       adminPassword: event.target.value,
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="At least 8 characters"
                 />
               </label>
@@ -317,7 +317,7 @@ function SetupPage() {
                       hqApiBaseUrl: event.target.value.trim(),
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="http://hq-api:3000/api/v1"
                 />
               </label>
@@ -332,7 +332,7 @@ function SetupPage() {
                       keyId: event.target.value.trim(),
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="ok_dev_…"
                 />
               </label>
@@ -349,7 +349,7 @@ function SetupPage() {
                       keySecret: event.target.value.trim(),
                     })
                   }
-                  className="text-input font-normal"
+                  className="form-input font-normal"
                   placeholder="one-time secret"
                 />
               </label>

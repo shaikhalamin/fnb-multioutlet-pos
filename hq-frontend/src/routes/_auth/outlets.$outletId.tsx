@@ -256,7 +256,7 @@ function AssignmentMatrix({
                       }
                       placeholder="inherit"
                       inputMode="numeric"
-                      className="text-input money h-9 w-28 px-2.5 py-1.5 text-sm font-normal disabled:opacity-50"
+                      className="form-input money h-9 w-28 px-2.5 py-1.5 text-sm font-normal disabled:opacity-50"
                     />
                   </td>
                   <td className="money py-2 pr-4 font-medium text-ink">

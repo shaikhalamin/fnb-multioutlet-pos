@@ -181,7 +181,7 @@ function GracePanel({ onDone }: { onDone: () => void }) {
   return (
     <form
       onSubmit={submit}
-      className="border-t border-hairline bg-surface px-4 py-3 text-left text-body-strong"
+      className="border-t border-hairline bg-canvas-soft px-4 py-3 text-left text-body-strong"
     >
       <p className="mb-2 text-xs font-display text-lg">
         Emergency grace override
@@ -201,7 +201,7 @@ function GracePanel({ onDone }: { onDone: () => void }) {
             max={72}
             value={hours}
             onChange={(event) => setHours(event.target.value)}
-            className="mt-1 block w-24 rounded-lg border border-hairline-strong bg-surface px-2 py-1.5 text-sm"
+            className="form-input mt-1 block h-9 w-24 px-2.5 text-sm"
           />
         </label>
         <label
@@ -216,7 +216,7 @@ function GracePanel({ onDone }: { onDone: () => void }) {
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder="Regional network outage; connector replacement scheduled."
-            className="mt-1 block w-full resize-none rounded-lg border border-hairline-strong bg-surface px-2 py-1.5 text-sm"
+            className="form-input mt-1 block h-auto w-full resize-none px-2.5 py-2 text-sm"
           />
         </label>
         <Button type="submit" disabled={extend.isPending}>
@@ -260,7 +260,7 @@ function ReplayPanel({
       : null
 
   return (
-    <div className="border-t border-hairline bg-surface px-4 py-3 text-left text-body-strong">
+    <div className="border-t border-hairline bg-canvas-soft px-4 py-3 text-left text-body-strong">
       <p className="mb-2 font-display text-lg">Quarantined events</p>
       <p className="mb-3 text-xs text-body">
         Terminal delivery failures parked for manual repair — never deleted.
