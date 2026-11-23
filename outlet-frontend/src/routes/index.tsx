@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { Link, createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { setupControllerGetStatus } from '#/api/generated/clients/setupControllerGetStatus'
 import { setupControllerGetStatusStatus200Schema } from '#/api/generated/schemas/setupControllerGetStatusSchema'
@@ -84,10 +84,13 @@ function App() {
                 Set up this terminal
               </a>
             ) : null}
-            <a
-              href="/api/v1/docs"
+            <Link
+              to="/login"
               className={`${unprovisioned ? 'btn-outline' : 'btn-primary'} no-underline`}
             >
+              Sign in
+            </Link>
+            <a href="/api/v1/docs" className="btn-outline no-underline">
               API Documentation
             </a>
           </div>

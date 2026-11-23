@@ -36,8 +36,8 @@ function App() {
           </h1>
           <p className="mb-8 max-w-2xl text-body-md text-body sm:text-lg sm:leading-relaxed">
             Master menu governance, outlet assignment, API keys and cross-outlet
-            reporting for every outlet site. Phase 0 foundation: signed builds,
-            typed contracts and observable services.
+            reporting for every outlet site — with typed contracts, generated
+            clients and outlet-initiated sync keeping every terminal current.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             {user ? (
