@@ -16,7 +16,9 @@
 interface Env {
   BACKEND_ORIGIN?: string;
   /** Static-assets binding (Fetch-like; minimal local typing). */
-  ASSETS: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> };
+  ASSETS: {
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  };
 }
 
 const proxyError = (): Response =>
@@ -70,4 +72,4 @@ export default {
 
     return new Response(upstream.body, { status: upstream.status, headers });
   },
-} satisfies { fetch(request: Request, env: Env): Promise<Response> };
+} satisfies { fetch: (request: Request, env: Env) => Promise<Response> };
