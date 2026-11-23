@@ -1,0 +1,4 @@
+# SPA fallback for client-side routes (Cloudflare Pages serving).
+# Pages Functions under /api/ and prerendered static assets are matched
+# before these rules, so only true client-side routes fall through here.
+/*  /index.html  200

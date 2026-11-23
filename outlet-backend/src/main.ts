@@ -39,7 +39,9 @@ async function bootstrap(): Promise<void> {
     // development/admin-restricted environments.
     const document = buildOpenApiDocument(app);
     SwaggerModule.setup(`${config.apiPrefix}/docs`, app, document, {
-      jsonDocumentUrl: 'openapi.json',
+      // Absolute path: without `useGlobalPrefix`, a relative jsonDocumentUrl
+      // is served from the app root (PRD §7 / AGENTS.md §3.5: /api/v1/openapi.json).
+      jsonDocumentUrl: `${config.apiPrefix}/openapi.json`,
       swaggerOptions: { persistAuthorization: true },
     });
   }
