@@ -1,478 +1,790 @@
 # fnb-platform — Multi-Outlet F&B Management Platform
 
-Monorepo layout for the four independently built and deployed applications
-described in [fnb_multi_outlet_prd.md](./fnb_multi_outlet_prd.md):
+A restaurant / F&B platform where **Headquarters (HQ)** owns the master menu, outlet
+assignments and cross-outlet reporting, while every **outlet** runs its own
+point-of-sale that keeps selling even when HQ is unreachable. The repo is a monorepo
+of **four independently built and deployed apps** (specified in
+[fnb_multi_outlet_prd.md](./fnb_multi_outlet_prd.md)):
 
 | Application | Folder | Stack |
 |---|---|---|
-| HQ backend (API + worker) | `hq-backend/` | NestJS, TypeScript (ESM) |
-| Outlet backend (API + sync worker) | `outlet-backend/` | NestJS, TypeScript (ESM) |
-| HQ frontend | `hq-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind — editorial design system ([DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)) |
-| Outlet POS frontend | `outlet-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind — editorial design system ([DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md)) |
+| HQ backend (API + worker) | `hq-backend/` | NestJS, TypeScript (ESM), PostgreSQL, Redis |
+| Outlet backend (API + sync worker) | `outlet-backend/` | NestJS, TypeScript (ESM), PostgreSQL, Redis |
+| HQ frontend (management console) | `hq-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind |
+| Outlet frontend (POS terminal) | `outlet-frontend/` | React 19, TanStack Start (SPA), Vite, Tailwind |
 
 All projects use **pnpm** (pinned via `packageManager` in each `package.json`).
 
-## Fresh clone → running system (Docker)
+## Table of contents
 
-Prerequisites: git and Docker Engine with Compose v2 (`docker compose
-version`). Node/pnpm are **not** required for this flow — every command below
-runs inside the built images. They are only needed for
-[local development without Docker](#local-development-without-docker).
+- [What it does, in two paragraphs](#what-it-does-in-two-paragraphs)
+- [Quick start (Docker — minimum effort)](#quick-start-docker--minimum-effort)
+  - [One-shot alternative](#one-shot-alternative)
+  - [Pair the outlet terminal with HQ (UI flow, ~2 minutes)](#pair-the-outlet-terminal-with-hq-ui-flow-2-minutes)
+  - [Log in and verify](#log-in-and-verify)
+  - [Reset / teardown](#reset--teardown)
+  - [Development without Docker (optional)](#development-without-docker-optional)
+- [API endpoints](#api-endpoints)
+  - [HQ endpoints](#hq-endpoints)
+  - [Outlet endpoints](#outlet-endpoints)
+- [Database schemas](#database-schemas)
+  - [HQ schema (`fnb_hq`)](#hq-schema-fnb_hq)
+  - [Outlet schema (`fnb_outlet_a` — one per site)](#outlet-schema-fnb_outlet_a--one-per-site)
+- [Architecture](#architecture)
+  - [HQ architecture — menu, assignments, reports, sync settings](#hq-architecture--menu-assignments-reports-sync-settings)
+  - [Outlet architecture — menu sync, stock, sales, push to HQ, offline](#outlet-architecture--menu-sync-stock-sales-push-to-hq-offline)
+- [Offline connectivity strategy — POS, KDS, and reconnect sync](#offline-connectivity-strategy--pos-kds-and-reconnect-sync)
+  - [How offline terminals resync sales to HQ when the internet returns](#how-offline-terminals-resync-sales-to-hq-when-the-internet-returns)
+  - [How POS and KDS communicate during offline mode (proposed extension)](#how-pos-and-kds-communicate-during-offline-mode-proposed-extension)
+- [Conversion to microservices — evolution path](#conversion-to-microservices--evolution-path)
+  - [Target architecture](#target-architecture)
+  - [Service decomposition vs today's monolith](#service-decomposition-vs-todays-monolith)
+  - [Guardrails the split must preserve](#guardrails-the-split-must-preserve)
+  - [Suggested extraction order (strangler pattern)](#suggested-extraction-order-strangler-pattern)
+- [Scaling strategy — 10 outlets · 100k sales → 10–100M sales](#scaling-strategy--10-outlets-100k-sales--10100m-sales)
+  - [Growth path](#growth-path)
+  - [Outlets: one server per site, unchanged at every stage](#outlets-one-server-per-site-unchanged-at-every-stage)
+  - [HQ database: vertical → pooling → replica → partitions → shards](#hq-database-vertical--pooling--replica--partitions--shards)
+  - [HQ servers: vertical, then a load balancer — gradually](#hq-servers-vertical-then-a-load-balancer--gradually)
+  - [Cache strategy](#cache-strategy)
+  - [Target topology](#target-topology)
 
-### One-shot alternative
+## What it does, in two paragraphs
 
-`./setup_env` runs steps 1–5 in one go: it copies each `.env.example` to `.env`
-(existing files are kept), builds the images, starts the stack — the
-`hq-migrate` / `outlet-a-migrate` jobs apply the migrations automatically
-before the APIs start — seeds HQ with key issuance, wires outlet A's printed
-keyId/secret pair into `.env` automatically, restarts `outlet-a-worker`, and
-seeds Outlet A. If outlet A already holds an ACTIVE key (re-run), no new pair
-is issued and the script says so — rotate via the HQ console if the secret was
-lost.
+**How HQ manages items.** HQ staff sign in to the HQ console and manage master menu
+categories and items (name, SKU, description, default price) and provision outlets.
+For each outlet they assign menu items — optionally with a per-outlet price override —
+and issue the machine sync credentials the outlet terminal needs. Every menu or
+assignment edit bumps a per-outlet catalog **revision** and appends a change record
+(`UPSERT`/`REMOVE`) **in the same database transaction**; outlets pull those changes.
+HQ also receives each outlet's sales as immutable read-only projections and serves
+reports from them, always disclosing sync lag (`dataAsOf`, `isProvisional`).
 
-### 1. Clone and configure
+**How an outlet sells and manages stock.** Each outlet is a self-contained stack: its
+own backend, PostgreSQL database, Redis, POS frontend and sync worker. Staff sign in
+locally, see the menu synced from HQ, stock items on the Inventory page (audited
+restock / write-off / recount), and ring up sales. A sale is **one local PostgreSQL
+transaction**: prices and totals are resolved server-side from the local catalog
+snapshot (the client sends only item IDs + quantities), stock is decremented with
+row locks, a gapless receipt number (`A-000001`, `A-000002`, …) is allocated from a
+per-outlet counter, and exactly one `sale.completed` event is appended to a
+transactional outbox. The sync worker pushes outbox events to HQ and pulls menu
+changes in the background — **a sale never waits on HQ**, so selling continues
+during HQ outages and the backlog drains automatically once HQ returns.
 
-### 1. Clone and configure
+Conventions used everywhere: money is integer minor units as decimal strings
+(`"1200"`, never a JS number), timestamps are UTC ISO-8601, IDs are UUIDs, and every
+HTTP response uses the `ApiSuccess`/`ApiError` envelope with `X-Request-Id`.
+
+## Quick start (Docker — minimum effort)
+
+Prerequisite: **git** and **Docker Engine with Compose v2** (`docker compose
+version`). Node/pnpm/Postgres are not needed — every command runs inside the built
+images.
 
 ```bash
+# 1. Clone and configure (the root .env is the only required file —
+#    its pre-filled defaults boot the whole stack as-is)
 git clone <repo-url> && cd fnb-platform
-cp .env.example .env                                 # required — drives docker compose
-cp hq-backend/.env.example hq-backend/.env           # optional — host-side dev + seed CLI
-cp outlet-backend/.env.example outlet-backend/.env   # optional — host-side dev + seed CLI
-cp hq-frontend/.env.example hq-frontend/.env         # optional — defaults already apply
-cp outlet-frontend/.env.example outlet-frontend/.env # optional — defaults already apply
-```
+cp .env.example .env
 
-- The **root `.env` is the only one the Docker flow needs**: Compose injects
-  every container's environment from it, and app-level `.env` files are never
-  read inside the images. Its pre-filled values boot the full stack as-is —
-  the placeholder secrets already satisfy each backend's runtime Zod
-  validation; replace them before exposing the environment beyond loopback.
-  Every variable referenced by `docker-compose.yml` is documented there.
-- The **backend** `.env` files are for running pnpm commands from those
-  folders (`pnpm start:dev`, `pnpm seed`, `pnpm migration:run`,
-  `pnpm test:e2e`). They target the Compose-published datastores
-  (`localhost:15432`/`16379` for HQ, `15433`/`16380` for Outlet A), so start
-  those first: `docker compose up -d hq-db hq-redis outlet-a-db outlet-a-redis`.
-- The **frontend** `.env` files are optional: the apps talk same-origin
-  `/api/v1` everywhere — the Vite dev proxy locally and the Nginx reverse
-  proxy in the container — so `pnpm dev` needs no configuration to reach the
-  Compose-published backends.
-
-### 2. Build and start
-
-```bash
+# 2. Build and start everything (migrations run automatically
+#    via the hq-migrate / outlet-a-migrate jobs before the APIs start)
 docker compose up --build -d
-```
 
-- The four app images (`fnb/hq-backend:local`, `fnb/outlet-backend:local`,
-  both frontends) are built locally and tagged — nothing is pulled from a
-  registry for them; only `postgres:17-alpine` / `redis:7-alpine` come from
-  Docker Hub.
-- The one-shot `hq-migrate` / `outlet-a-migrate` jobs apply the TypeORM
-  migrations **before** the APIs start (single controlled job per database,
-  PRD §14.2); `hq-api` additionally gates on Redis health.
-- Wait for readiness: `docker compose ps` — every long-running service should
-  report `healthy`/`running` (health probe: `GET /api/v1/health` per backend).
-
-| Service | Purpose | Host URL |
-|---|---|---|
-| `hq-web` | HQ frontend (Nginx) | http://localhost:8080 |
-| `hq-api` | HQ backend API | http://localhost:4000/api/v1 |
-| `hq-worker` | HQ background worker | — |
-| `hq-db` / `hq-redis` | HQ PostgreSQL / Redis (internal) | — |
-| `outlet-a-web` | Outlet A POS frontend (Nginx) | http://localhost:8081 |
-| `outlet-a-api` | Outlet A backend API | http://localhost:5000/api/v1 |
-| `outlet-a-worker` | Outlet A sync worker (menu pull / outbox push) | — |
-| `outlet-a-db` / `outlet-a-redis` | Outlet A PostgreSQL / Redis (internal) | — |
-
-(All host ports are configurable via the root `.env`.)
-
-### 3. Seed HQ
-
-One idempotent command seeds the HQ admin plus the demo outlets A/B/C with
-demo items:
-
-```bash
+# 3. Seed HQ (idempotent): super admin + demo outlets A/B/C + demo items
 docker compose run --rm hq-api node dist/database/seed.js
 ```
 
-- HQ console login it creates: `admin@fnb.local` / `Admin123!` (override via
-  `SEED_HQ_ADMIN_EMAIL` / `SEED_HQ_ADMIN_PASSWORD` on the seed run).
-- Machine keys are **never** seeded: issuing one is a deliberate admin action
-  in the console (shown once, PRD §9.2) — that's step 4 below.
+### One-shot alternative
 
-### 4. Pair the outlet terminal with HQ (the UI flow)
+`./setup_env` does steps 1–3 in one go: copies every `.env.example` to `.env`
+(existing files kept), builds the images, starts the stack, seeds HQ, and prints the
+pairing walkthrough below.
 
-Outlet terminals start **unprovisioned** — identity and the HQ machine key
-arrive through the setup wizard, not environment variables (PRD §8.7, §9.2).
-The whole flow is demo-able from the two UIs:
+### Pair the outlet terminal with HQ (UI flow, ~2 minutes)
 
-1. **Create the outlet in HQ** — http://localhost:8080 → *Outlets* → fill the
-   create form (code/name/timezone). The pairing panel that appears shows the
-   **Outlet ID + code** with copy buttons.
-2. **Provision the terminal** — open http://localhost:8081/setup and paste the
-   **Outlet ID + code** (step 1 of the wizard), plus the first admin
-   account for that POS. The backend writes identity, receipt counters, the
-   sync checkpoint and the admin in one transaction and seals itself.
-3. **Issue the key in HQ** — the outlet's detail page → *Settings* tab →
-   *Outlet sync keys* → *Issue new key* (a user allowed to manage keys). Copy
-   the one-time **Key ID + Key secret** with their own copy buttons — each
-   goes into its own field in the wizard's step 2.
-4. **Pair** — back in the wizard's step 2, paste the HQ base URL
-   (`http://hq-api:3000/api/v1` inside Compose — pre-filled) plus the key
-   pair and hit **Test & pair**. HQ validates the key live (a key minted for
-   another outlet is refused), the pairing is saved in the outlet's own
-   database, and the sync worker picks it up **without a restart**.
+Outlet terminals ship **unprovisioned** on purpose — identity and the HQ machine key
+are entered through the POS setup wizard, not config files:
 
-Until pairing the worker logs `awaiting_provisioning` once per cycle and its
-HQ calls are refused. **POS sales work regardless once the catalog has synced**
-— an outlet sale never depends on HQ (PRD §2); only menu pull / event push
-wait for the key. Key rotation later: HQ console → *Rotate* → outlet POS →
-*Sync* page → *Rotate the HQ key* (same live validation, no restart).
+1. **Create the outlet in HQ** — open the **HQ console: http://localhost:8080**, sign
+   in with the seeded admin (`admin@fnb.local` / `Admin123!`), go to *Outlets* →
+   create an outlet (or pick a seeded demo outlet A/B/C) and copy its
+   **Outlet ID + code** from the pairing panel.
+2. **Provision the terminal** — open the **outlet console: http://localhost:8081/setup**
+   and in wizard **step 1** paste the Outlet ID + code, plus the first admin account
+   (email + password) for that register. This commits once, then seals permanently.
+3. **Issue the sync key in HQ** — in the HQ console open the outlet → *Settings* →
+   *Outlet sync keys* → *Issue new key*, and copy the one-time **Key ID + Key secret**.
+4. **Pair** — back in the wizard **step 2**, paste the key pair (a combined
+   `keyId.secret` paste is auto-split) and hit **Test & pair**. The key is validated
+   live against HQ and stored in the outlet's own database — the sync worker picks it
+   up without a restart. (HQ URL is pre-filled for the Compose network.)
 
-### 5. Log in and verify
+### Log in and verify
 
 | URL | What |
 |---|---|
-| http://localhost:8080 | HQ console — `admin@fnb.local` / `Admin123!` |
-| http://localhost:8081 | Outlet A POS — the admin account you chose in the wizard |
-| http://localhost:4000/api/v1/docs | HQ Swagger UI (local dev cluster only) |
-| http://localhost:5000/api/v1/docs | Outlet A Swagger UI (local dev cluster only) |
+| http://localhost:8080 | **HQ console** — `admin@fnb.local` / `Admin123!` |
+| http://localhost:8081 | **Outlet POS** — the admin account you created in the wizard |
+| http://localhost:4000/api/v1/docs | HQ Swagger UI (local cluster only) |
+| http://localhost:5000/api/v1/docs | Outlet Swagger UI (local cluster only) |
 
-Quickest end-to-end check: assign items to your outlet in HQ (Outlets → open
-the outlet → tick items → *Assign*, with an optional per-item price), wait one menu pull (~30s), stock the items on the POS *Inventory* page, ring up a sale,
-then watch it appear on the HQ dashboard within a few sync cycles (HQ reports
-disclose `dataAsOf` while they wait). The POS sync-status banner and
-`GET /api/v1/sync/status` show menu revision and outbox backlog locally.
-
-> Local, UI-less development: `outlet-backend` still ships a dev seed
-> (`pnpm seed`) that provisions a fixed demo identity plus demo users/catalog
-> directly — useful for backend work without the wizard. The Compose cluster
-> intentionally does **not** run it.
+Quickest end-to-end check: in HQ assign items to your outlet (*Outlets* → open the
+outlet → tick items → *Assign*, optional per-item price), wait one menu pull (~30s),
+stock the items on the POS *Inventory* page, ring up a sale — then watch it land in
+HQ's dashboard/reports within a few sync cycles. `docker compose logs -f
+outlet-a-worker` shows menu pulls and event pushes; the POS *Sync* page and
+`GET /api/v1/sync/status` show the local revision and outbox backlog.
 
 ### Reset / teardown
 
 ```bash
-docker compose down        # stop the stack, keep all data volumes
+docker compose down        # stop the stack, keep data volumes
 docker compose down -v     # also wipe both databases and queues (irreversible)
 ```
 
-Reset only outlet A (to re-demo the pairing wizard; wipes its database):
+### Development without Docker (optional)
+
+Datastores still come from Compose: `docker compose up -d hq-db hq-redis outlet-a-db outlet-a-redis`.
+Then each app is independent (pnpm; per-app `.env.example` files target the
+Compose-published stores):
 
 ```bash
-docker rm -f fnb-platform-outlet-a-db-1
-docker volume rm fnb-platform_outlet-a-db-data
-docker compose up -d
+cd hq-backend      && pnpm install && pnpm migration:run && pnpm seed && pnpm start:dev   # API :3000
+cd outlet-backend  && pnpm install && pnpm migration:run && pnpm seed && pnpm start:dev   # API :3000
+# outlet sync worker:  pnpm start:worker   (or pnpm build && node dist/worker-main.js)
+
+cd hq-frontend     && pnpm install && pnpm dev    # Vite :3000 — proxies /api → localhost:4000
+cd outlet-frontend && pnpm install && pnpm dev    # Vite :3000 — proxies /api → localhost:5000
 ```
 
-After `down -v`, repeat from step 2 (images are retained; re-seeding is
-required).
+(Both frontend dev servers pin port 3000 — run them one at a time or override the
+port. The outlet `pnpm seed` is a UI-less dev path with fixed demo accounts
+`manager|cashier|clerk@outlet-a.local`; the Docker flow uses the setup wizard instead.)
 
-## Phase 1 — HQ security & catalog (implemented)
+---
 
-Sign in to the HQ console at http://localhost:8080 with the seeded admin
-(`admin@fnb.local` / `Admin123!` — override via `SEED_HQ_ADMIN_*` before
-seeding). Phase 1 delivers (PRD §18):
+## API endpoints
 
-- **HQ JWT auth with rotating refresh** — Passport strategies (bearer access,
-  cookie refresh JWT) with two independent HS256 secrets, refresh tokens in an
-  HttpOnly cookie scoped to `/api/v1/auth`, server-side `jti` tracking, CAS
-  rotation, family revocation on reuse (AT-18), login rate limiting.
-- **RBAC** — 11 permissions, 3 seeded roles; every route guarded
-  server-side (`@RequirePermissions` + global `JwtAuthGuard`).
-- **Users management** — `/api/v1/users`, `/api/v1/roles` + console UI.
-- **Master menu** — `/api/v1/categories`, `/api/v1/menu-items` CRUD with
-  archive tombstones; item edits fan out per-outlet `UPSERT`/`REMOVE`
-  catalog changes atomically in the same transaction (PRD §8.2).
-- **Outlets + assignments** — provision outlets (revision-0 row included),
-  assign/unassign with price overrides; effective price = override ??
-  default (FR-02/AT-02); no-op saves never burn a revision.
-- **Bulk assignment (FR-02/AT-23)** — `POST /outlets/:id/menu` activates
-  1–200 items on one outlet in ONE transaction (one revision per changed
-  item, all-or-nothing, idempotent on retry), each line optionally setting a
-  price override. In the console, the outlet details page's item checkboxes
-  open the dialog: set a per-item price or keep the current one, and a single
-  *Assign N items* button sends the one request.
-- **Outlet sync keys** — issue/rotate/revoke; 256-bit secret revealed
-  exactly once, stored as a peppered HMAC (verified against `OUTLET_KEY_PEPPER`).
+All paths are relative to the versioned base: HQ `http://localhost:4000/api/v1`,
+Outlet `http://localhost:5000/api/v1`. Human routes require a bearer JWT (login →
+access token; refresh token rotates in an HttpOnly cookie) and an RBAC permission;
+the machine sync routes require the outlet key header
+(`Authorization: OutletKey <keyId>.<secret>`).
 
-Seed (idempotent; also creates demo outlets A/B/C + items for AT-01/AT-02):
+### HQ endpoints
 
-```bash
-cd hq-backend && pnpm seed
+| Method | Endpoint | What it does |
+|---|---|---|
+| GET | `/health` | Liveness/readiness probe (database + Redis) |
+| POST | `/auth/login` | Sign in (rate limited); sets the refresh cookie |
+| POST | `/auth/refresh` | Rotate the refresh cookie, mint a new access token |
+| POST | `/auth/logout` | Revoke the current refresh session family |
+| GET | `/categories` | List menu categories |
+| POST | `/categories` | Create a category |
+| GET | `/categories/:id` | Read one category |
+| PATCH | `/categories/:id` | Rename / reorder / archive a category |
+| GET | `/menu-items` | List master menu items (keyset pagination) |
+| POST | `/menu-items` | Create a master item |
+| GET | `/menu-items/:id` | Read one master item |
+| PATCH | `/menu-items/:id` | Update and/or archive a master item (fans out catalog changes) |
+| GET | `/outlets` | List outlets with their current catalog revision |
+| POST | `/outlets` | Provision an outlet (creates its revision-0 catalog row) |
+| PATCH | `/outlets/:id` | Rename or suspend/reactivate an outlet |
+| GET | `/outlets/:id/sync-status` | Replication status HQ knows about that outlet (watermarks, backlog) |
+| POST | `/outlets/:outletId/menu` | Bulk-assign up to 200 items to an outlet atomically (one transaction) |
+| PUT | `/outlets/:outletId/menu/:itemId` | Assign/activate one item, optionally with a price override |
+| DELETE | `/outlets/:outletId/menu/:itemId` | Unassign an item (emits a REMOVE revision) |
+| GET | `/outlets/:outletId/menu` | Assignment matrix rows for one outlet |
+| POST | `/outlets/:outletId/api-keys` | Issue an outlet sync key (secret shown once) |
+| GET | `/outlets/:outletId/api-keys` | List the outlet's keys (no secret material) |
+| POST | `/outlets/:outletId/api-keys/:keyId/rotate` | Rotate a key (predecessor stays valid for a grace window) |
+| DELETE | `/outlets/:outletId/api-keys/:keyId` | Revoke a key immediately |
+| GET | `/users` | List HQ users |
+| POST | `/users` | Create an HQ user with roles |
+| PATCH | `/users/:id` | Update status and/or replace roles |
+| GET | `/roles` | List roles with their permission sets |
+| GET | `/reports/revenue-by-outlet` | Completed revenue per outlet for a UTC window |
+| GET | `/reports/outlets/:id/top-items` | Top-selling items for one outlet |
+| GET | `/audit/logs` | Immutable audit trail (newest first, filterable) |
+
+Machine sync routes (outlet key, not user JWT) — these are what the outlet worker calls:
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| GET | `/sync/v1/menu/changes` | Revisioned catalog deltas for the calling outlet (ascending) |
+| GET | `/sync/v1/menu/snapshot` | Full consistent catalog snapshot (bootstrap / gap recovery) |
+| POST | `/sync/v1/events/batch` | Push a batch of sale events; per-event acks on one response |
+| GET | `/sync/v1/checkpoint` | Highest contiguous accepted sequence + missing ranges |
+| POST | `/sync/v1/heartbeat` | Outlet reports its backlog and applied menu revision |
+
+### Outlet endpoints
+
+| Method | Endpoint | What it does |
+|---|---|---|
+| GET | `/health` | Liveness/readiness probe (database + Redis) |
+| POST | `/auth/login` | Local staff sign in (rate limited); sets the refresh cookie |
+| POST | `/auth/refresh` | Rotate the refresh cookie, mint a new access token |
+| POST | `/auth/logout` | Revoke the current refresh session family |
+| GET | `/setup/status` | Terminal provisioning state (drives the setup wizard) |
+| POST | `/setup/identity` | Wizard step 1: save HQ-issued Outlet ID + code, create first admin (seals after use) |
+| POST | `/setup/hq-connection` | Wizard step 2: validate the HQ key live and pair this terminal (seals after use) |
+| GET | `/users` | List local outlet users |
+| POST | `/users` | Create a local outlet user with roles |
+| PATCH | `/users/:id` | Update status and/or replace roles |
+| GET | `/roles` | List local roles with their permission sets |
+| GET | `/menu` | Active local menu with effective prices and stock (`catalogRevision` in meta) |
+| GET | `/inventory` | Every catalog item with its stock balance |
+| POST | `/inventory/adjustments` | Audited stock adjustment (RESTOCK / WRITE_OFF / RECOUNT) |
+| POST | `/sales` | Create an atomic multi-item sale (requires `Idempotency-Key` header) |
+| GET | `/sales` | Local sale history (keyset pagination, optional date range) |
+| GET | `/sales/:id` | Receipt detail with immutable line snapshots + sync status |
+| GET | `/sync/status` | Local menu-sync checkpoint and outbox backlog |
+| PUT | `/sync/hq-connection` | Rotate the stored HQ machine key (validated against HQ first) |
+| POST | `/sync/grace-override` | Extend the offline grace window (privileged, audited) |
+| POST | `/sync/outbox/:eventId/replay` | Re-arm a quarantined outbox event after operator review |
+
+---
+
+## Database schemas
+
+Both databases are PostgreSQL, managed exclusively by TypeORM migrations
+(`synchronize` is off). Money columns are `bigint` minor units; prices in this table
+marked `_minor` follow the decimal-string convention.
+
+### HQ schema (`fnb_hq`)
+
+| Table | What it stores |
+|---|---|
+| `companies` | Single tenant root; scopes every HQ row and defines the base currency |
+| `outlets` | Registered outlets: code, name, timezone, ACTIVE/SUSPENDED status |
+| `hq_users` | HQ staff accounts (email, bcrypt password hash, ACTIVE/DISABLED) |
+| `hq_roles` / `hq_permissions` | Role bundles (e.g. HQ_SUPER_ADMIN) and the permission catalog (dot-case codes) |
+| `hq_user_roles` / `hq_role_permissions` | User↔role and role↔permission mappings |
+| `hq_refresh_sessions` | One row per issued refresh JWT; enables rotation and family revocation on reuse |
+| `menu_categories` | Master menu categories (name, sort order); archived, never deleted |
+| `master_menu_items` | Master catalog items: SKU, name, default price, currency; versioned, archived instead of deleted |
+| `outlet_menu_assignments` | Which items are sold at which outlet, with optional `price_override_minor`; effective price = override ?? default |
+| `outlet_catalog_revisions` | One locked counter row per outlet holding its current catalog revision |
+| `outlet_catalog_changes` | Append-only per-outlet change log (`UPSERT`/`REMOVE` + full item payload) that outlets pull |
+| `outlet_api_keys` | Machine sync credentials: key ID, peppered HMAC secret hash, scopes, ACTIVE/REVOKED |
+| `sync_inbox_events` | Dedupe ledger of accepted outlet events (unique per outlet+event and outlet+sequence) |
+| `hq_sales` / `hq_sale_items` | Immutable read-only projections of synced sales with as-sold name/price snapshots — the only source reports read |
+| `sync_outlet_checkpoints` | Per-outlet sync watermark: highest contiguous sequence, last heartbeat, reported backlog, seen menu revision |
+| `audit_logs` | Immutable operations/security audit trail (actor, action, entity, metadata) |
+
+### Outlet schema (`fnb_outlet_a` — one per site)
+
+| Table | What it stores |
+|---|---|
+| `outlet_identity` | Singleton terminal identity: HQ-issued Outlet ID + code, timezone, currency |
+| `hq_connection` | Singleton pairing with HQ: base URL + machine key; the only place the secret lives |
+| `outlet_users` | Local staff accounts (email, bcrypt hash, ACTIVE/DISABLED) |
+| `outlet_roles` / `outlet_permissions` | Local roles (manager / cashier / clerk) and permission codes |
+| `outlet_user_roles` / `outlet_role_permissions` | User↔role and role↔permission mappings |
+| `outlet_refresh_sessions` | One row per issued refresh JWT (rotation + family revocation) |
+| `outlet_audit_logs` | Local audit of privileged actions (grace overrides, replay) |
+| `catalog_items` | Local read-model of the HQ-assigned menu: names, SKUs, effective prices, active flag — written only by sync |
+| `menu_sync_state` | Singleton menu-sync checkpoint: last applied HQ revision, last sync time, grace override expiry |
+| `inventory_balances` | On-hand stock per assigned item (never negative, versioned for row locking) |
+| `stock_movements` | Append-only stock ledger: signed delta + reason (SALE / RESTOCK / WRITE_OFF / RECOUNT), actor, request ID |
+| `sales` / `sale_items` | Completed sale header (gapless receipt `A-000001`, total, catalog revision) and immutable line snapshots |
+| `sale_idempotency_keys` | Per-attempt idempotency records: request hash → stored response, so safe retries replay the same receipt |
+| `receipt_counters` | Singleton per-outlet receipt allocator (locked inside the sale transaction) |
+| `outbox_events` | Transactional outbox of `sale.completed` events: payload + SHA-256 hash, sequence number, PENDING/RETRY/DELIVERED/QUARANTINED |
+| `outbox_counters` | Singleton allocator for the contiguous per-outlet event sequence numbers |
+| `sync_attempt_logs` | Append-only delivery ledger per outbox event (HTTP status, duration, error code) |
+
+---
+
+## Architecture
+
+```
+┌──────────────────────────── HQ (central, one deployment) ─────────────────────────┐
+│                                                                                   │
+│   HQ Console (browser) ──▶ HQ API (NestJS, /api/v1) ──▶ HQ PostgreSQL (fnb_hq)    │
+│                                 │       └──▶ HQ Redis (queues + health)           │
+│                                 └──▶ HQ Worker (audit-log retention, hourly)      │
+└────────────────────────────────────────┬──────────────────────────────────────────┘
+                                         │  HTTPS, outlet-initiated ONLY:
+                                         │    pull menu: GET  /sync/v1/menu/changes|snapshot
+                                         │    push sales: POST /sync/v1/events/batch
+                                         │    GET checkpoint · POST heartbeat
+                                         │  (HQ never connects to any outlet)
+┌──────────────────────── OUTLET (own stack, repeatable per site) ──────────────────┐
+│                                                                                   │
+│   POS terminal (browser) ──▶ Outlet API (NestJS, /api/v1) ──▶ Outlet PostgreSQL   │
+│                                   │       └──▶ Outlet Redis (worker queues only)  │
+│                                   └──▶ Outlet Sync Worker (BullMQ) ──▶ HTTPS ──▶ HQ│
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Verification used in Phase 1: backend `pnpm test` (31 unit) and
-`pnpm test:e2e` (18 e2e against real PostgreSQL/Redis — auth lifecycle,
-AT-01 assignment fan-out, AT-02 override, RBAC denial, key lifecycle),
-browser walkthrough of the console, and direct SQL checks of revisions,
-change payloads, key hashes and audit rows.
+The two environments are fully isolated (separate networks, databases, Redis, JWT
+secrets). The only bridge is the outlet worker's outbound HTTPS to the HQ sync API,
+authenticated with the machine key stored in the outlet's `hq_connection` table.
+The outlet API process deliberately holds **zero** Redis/queue connections so the
+sale path cannot be disturbed by queue or HQ problems.
 
-## Phase 2 — Outlet operations (implemented)
+### HQ architecture — menu, assignments, reports, sync settings
 
-Sign in to the Outlet A POS at http://localhost:8081 with a seeded account:
-`manager@outlet-a.local` / `Manager123!`, `cashier@outlet-a.local` /
-`Cashier123!`, `clerk@outlet-a.local` / `Clerk123!` (override via
-`SEED_OUTLET_<ROLE>_EMAIL/PASSWORD` before seeding). Phase 2 delivers
-(PRD §18):
-
-- **Outlet JWT auth with rotating refresh** — mirror of the HQ session model
-  with outlet-only secrets (`OUTLET_JWT_*`), the `outlet_rt` HttpOnly cookie,
-  CAS rotation and family revocation on reuse; access tokens carry the
-  `outletId` claim re-validated against this deployment on every request.
-- **Local RBAC + user management** — 8 permissions, 3 seeded roles
-  (`OUTLET_MANAGER` / `OUTLET_CASHIER` / `OUTLET_INVENTORY_CLERK`), local
-  user CRUD at `/api/v1/users` + `/api/v1/roles`.
-- **Catalog cache** — `GET /menu` serves the locally assigned catalog with
-  effective prices, live stock and `meta.catalogRevision`/`lastCatalogSyncAt`;
-  seeded to simulate a completed sync (the Phase-3 pull worker reconciles it).
-- **Inventory** — `GET /inventory` + audited `POST /inventory/adjustments`
-  (RESTOCK/WRITE_OFF/RECOUNT): row-locked, versioned, nonnegative, every
-  movement records reason/actor/request ID (FR-04/FR-05).
-- **Atomic idempotent sales** — `POST /sales` runs the exact PRD §8.6
-  transaction: advisory-lock the idempotency key → offline-grace check
-  (`SYNC_TEMPORARILY_UNAVAILABLE` past 72h) → catalog/price resolution →
-  conditional stock decrements in deterministic order (insufficient stock ⇒
-  409 with `{menuItemId, requestedQuantity, availableQuantity}` and full
-  rollback) → receipt allocation (`A-000001`) → immutable snapshot lines →
-  exactly one `sale.completed` outbox event (canonical-JSON SHA-256) →
-  stored idempotency response. Same key + same body replays the stored
-  receipt (AT-07); same key + different body ⇒ 409 `IDEMPOTENCY_KEY_REUSED`
-  (AT-08). Money is `bigint` end to end, serialized as decimal strings.
-- **Local sync status** — `GET /sync/status` (menu revision, grace state,
-  outbox backlog) answered entirely from local tables; never calls HQ.
-- **POS frontend** — login, POS menu/cart/checkout (one idempotency key per
-  attempt, held across retries; totals only from the authoritative
-  response), receipt confirmation/reprint, inventory adjustments, sales
-  history + receipt detail, local user management, and a sync-status banner.
-  All API access goes through Kubb-generated typed clients (Axios + Zod +
-  TanStack Query) from the exported OpenAPI contract.
-
-Seed (idempotent; fixed demo identity, roles, demo users, fixed-UUID catalog
-with burger/pizza/cola at 50/40/100 stock, counters, fresh sync state) — the
-UI-less local development path; the production path is the setup wizard
-(step 4 above), and the seed never overwrites an existing identity row:
-
-```bash
-cd outlet-backend && pnpm seed          # or: docker compose run --rm outlet-a-api node dist/database/seed.js
+```
+┌───────────────────────────────────── HQ ──────────────────────────────────────┐
+│                                                                               │
+│  HQ Console pages: dashboard · menu · outlets · users · reports · audit       │
+│        │  (same-origin /api proxy)                                            │
+│        ▼                                                                      │
+│  HQ API: JWT guard + RBAC (menu.write, outlets.write, assignments.write,      │
+│          keys.manage, reports.read, audit.read …)                             │
+│        │                                                                      │
+│        ▼                                                                      │
+│  ┌───────────────────────────── HQ PostgreSQL ─────────────────────────────┐  │
+│  │  master_menu_items ──▶ outlet_menu_assignments (+ price override)       │  │
+│  │        │                          │                                     │  │
+│  │        └───── ONE transaction ────┴─▶ outlet_catalog_revisions (rev + 1)│  │
+│  │                                          └─▶ outlet_catalog_changes     │  │
+│  │                                              (UPSERT/REMOVE payload)    │  │
+│  │  outlet_api_keys (peppered HMAC)      sync_inbox_events (dedupe)        │  │
+│  │  hq_sales + hq_sale_items (projections) sync_outlet_checkpoints         │  │
+│  │  audit_logs                                                             │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  /sync/v1/* (outlet key): menu pull · events batch · checkpoint · heartbeat   │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Verification used in Phase 2: outlet-backend `pnpm test` (70 unit) and
-`pnpm test:e2e` (24 e2e against the real outlet PostgreSQL/Redis — AT-03
-atomic sale with SQL persistence asserts, AT-04 full rollback, AT-05
-last-unit race, AT-06 100 concurrent sales with contiguous receipts,
-AT-07/AT-08 idempotency, AT-11 grace expiry, AT-17-flavor persona denials,
-AT-18 refresh reuse), a browser walkthrough of the POS (cashier checkout ⇒
-receipt `A-000001`, clerk restock, manager user creation, sync banner
-showing the pending upload), curl spot-checks of every error code, and
-direct SQL checks of snapshots, movements, counters, the outbox payload
-hash and the idempotency response JSON.
+- **Menu items.** A create/update/archive of a category or item writes
+  `master_menu_items` and, in the *same* transaction, bumps every assigned outlet's
+  `outlet_catalog_revisions.current_revision` and appends an `outlet_catalog_changes`
+  row carrying the full item payload (`UPSERT` or `REMOVE`). A crash can therefore
+  never leave an outlet's revision and change log inconsistent.
+- **Outlet assignment.** Provisioning an outlet creates its revision-0 row; assigning
+  items (single or bulk, up to 200, all-or-nothing) writes
+  `outlet_menu_assignments` — effective price = `price_override_minor` ?? the master
+  default — and emits one revision per changed item. Unassignment emits `REMOVE`.
+- **Reports.** Reporting is a read projection over `hq_sales` / `hq_sale_items`
+  computed on request (no report tables). Every response carries `dataAsOf`
+  (max ingestion watermark) and `isProvisional` while any outlet has a backlog or has
+  never reported — stale data is never mistaken for zero sales.
+- **Sync settings.** Each outlet's sync credential is an `outlet_api_keys` row
+  (256-bit secret shown once, stored as a peppered HMAC). HQ can list, rotate (with a
+  grace window where the predecessor stays valid), and revoke keys; per-outlet
+  health/progress is visible via `/outlets/:id/sync-status`, fed by heartbeats and
+  checkpoints. Ingest is transactional: each pushed event is deduped in
+  `sync_inbox_events`, projected into `hq_sales`, and acked
+  (`ACCEPTED` / `DUPLICATE` / `RETRYABLE_ERROR` / `REJECTED_PERMANENT`) — so replays
+  are harmless and effects are exactly-once.
 
-Swagger UI (local dev cluster only): http://localhost:4000/api/v1/docs (HQ)
-and http://localhost:5000/api/v1/docs (Outlet A); machine-readable documents
-at `/openapi.json`. The committed artifacts in
-`*/openapi/openapi.json` are regenerated via `pnpm openapi:export`; keep
-them in sync with endpoint changes (PRD §11).
+### Outlet architecture — menu sync, stock, sales, push to HQ, offline
 
-Host-published datastores for non-Docker development and e2e tests
-(loopback only): HQ PostgreSQL `localhost:15432`, HQ Redis `localhost:16379`,
-Outlet A PostgreSQL `localhost:15433`, Outlet A Redis `localhost:16380`.
-
-Network isolation (PRD §2):
-
-- `hq-internal` — HQ API/worker/web + HQ DB/Redis
-- `outlet-a-internal` — outlet A API/worker/web + outlet A DB/Redis
-- `hq-sync` — the only path between environments; the **outlet worker** uses
-  it to call the HQ sync API (base URL + machine key stored in the outlet's
-  `hq_connection` table — see the pairing flow in step 4). The outlet API
-  joins this network only for the setup wizard's one-time live key
-  validation. HQ has no route to any outlet database, and outlet sales never
-  depend on HQ reachability.
-
-Frontends are served by their own Nginx, which also reverse-proxies `/api/`
-to their backend so the browser stays same-origin (no CORS exposure).
-
-## Phase 3 — Synchronization (implemented)
-
-The complete outlet ⇄ HQ synchronization loop (PRD §8, §18): typed HQ machine
-client, menu pull + single-response snapshot, BullMQ dispatcher (sweep →
-lease `FOR UPDATE SKIP LOCKED` → deliver), transactional HQ inbox with
-per-event acks (`ACCEPTED` / `DUPLICATE` / `RETRYABLE_ERROR` /
-`REJECTED_PERMANENT`), capped-backoff retries, hourly checkpoint
-reconciliation, heartbeats, quarantine with manager replay, and the audited
-emergency offline-grace override.
-
-### Machine-key provisioning (PRD §9.2)
-
-Outlets sync with HQ only after a real key is provisioned — and provisioning
-is now fully UI-driven (step 4 of
-[Fresh clone → running system](#fresh-clone--running-system-docker) above):
-
-1. HQ console → *Outlets* → create the outlet → copy its **Outlet ID + code**
-   from the pairing panel.
-2. Outlet POS → `/setup` → paste ID + code + the first admin (step 1 of the
-   wizard; identity, counters and the admin commit in one transaction, then
-   the endpoint seals permanently).
-3. HQ console → the outlet's page → *API keys → Issue key* → copy the
-   one-time **key ID + secret**.
-4. Outlet POS → wizard step 2 → **Test & pair**. The outlet backend calls
-   HQ's checkpoint endpoint with the candidate key (refusing a key minted
-   for a different outlet), stores the pairing in its own `hq_connection`
-   table, and the worker reads it from there — no environment variables, no
-   restart. Later rotations use the same live validation via the POS *Sync*
-   page (`PUT /api/v1/sync/hq-connection`, `sync.manage`).
-
-The HQ seed deliberately does **not** issue keys (issuing one is a deliberate
-admin action, FR-10); it pins well-known demo UUIDs for outlets A/B/C and the
-three demo items so the demo data stays consistent.
-
-### What the loop guarantees (verified by drills + e2e)
-
-- **Sales never wait on HQ** (AT-10/AT-11): during a full `docker stop
-  fnb-platform-hq-api-1` outage, POS sales kept committing with sequential
-  receipts (`A-001145..147`), `/sync/status` showed the growing backlog, the
-  worker backed off (`HQ_UNREACHABLE` → capped exponential backoff honoring
-  `Retry-After`), and the backlog drained within seconds of restart with zero
-  duplicates at HQ.
-- **Exactly-once HQ effects** (AT-09/AT-15): re-posting a delivered batch
-  returns `DUPLICATE` with a single `hq_sales` projection; the same `eventId`
-  with a different payload is `REJECTED_PERMANENT` (`EVENT_ID_CONFLICT` +
-  security audit) and never overwrites the original.
-- **Atomic menu apply** (AT-13/AT-14): a mid-apply failure commits nothing
-  and never advances the checkpoint; a deleted change history (gap) triggers
-  the single-response snapshot — upserts, tombstones for absent items,
-  checkpoint pinned to `snapshotRevision`.
-- **Offline grace** (AT-12/AT-19, §8.8): stale sync (73 h) blocks sales with
-  `503 SYNC_TEMPORARILY_UNAVAILABLE`; a manager's audited override
-  (`POST /sync/grace-override`, banner → dialog) rescues sales; HQ price
-  changes alter only future sales — receipts keep their snapshot prices.
-- **Identity is server-derived** (AT-16/AT-17): the outlet scope comes only
-  from the key record; events claiming another outlet reject the whole batch
-  (403); cashiers cannot apply overrides; `/sync/v1/*` sends no CORS headers.
-- **Restore safety** (AT-22): replaying events from a restored outlet backup
-  is all-`DUPLICATE` at HQ — receipt numbers and projections stay consistent.
-
-HQ-side surfaces: `GET /sync/v1/menu/changes|snapshot`, `POST
-/sync/v1/events/batch`, `GET /sync/v1/checkpoint`, `POST
-/sync/v1/heartbeat` (machine key; 600/min throttle; envelope + `X-Request-Id`
-everywhere) and `GET /outlets/:id/sync-status` (human `sync.read`).
-Outlet-side surfaces: `GET /sync/status`, `POST /sync/grace-override`,
-`POST /sync/outbox/:eventId/replay` (manager `sync.override`).
-
-## Phase 4 — Reporting & hardening (implemented)
-
-Cross-outlet reporting, staleness disclosure, audit views and load/security
-depth (PRD §10, §18; backup/recovery and production rollout omitted by
-decision).
-
-### Reports (PRD §10, computed on request from indexed HQ projections)
-
-- `GET /reports/revenue-by-outlet?from=&to=&currency=` (`reports.read`):
-  per-outlet completed revenue/count as decimal-string `bigint` sums. **Every
-  ACTIVE outlet appears** — zero-sale outlets carry `"0"` and a null
-  `lastIngestedAt`, never an omission.
-- `GET /reports/outlets/:id/top-items?from=&to=&limit=5` (`reports.read`):
-  `quantitySold DESC` with `menu_item_id` tie-break; `itemName` joins the
-  current master name and falls back to the sale-time snapshot for items no
-  longer in the master catalog (AT-19).
-- **Staleness contract (AT-20):** every report carries `dataAsOf` = global
-  max `ingested_at` and `isProvisional` = true while any ACTIVE outlet
-  reports an outbox backlog or has never ingested a sale. Windows are UTC
-  (`from` inclusive, `to` exclusive), bounded to 366 days (§15); unlike
-  currencies are never summed.
-- HQ frontend: `/reports` (Zod-validated date filters, top-items outlet
-  picker) and a dashboard revenue card + outlet health grid (menu revision,
-  watermarks, backlog/never-reported/heartbeat-stale states) wired to
-  `GET /outlets/:id/sync-status`.
-
-### Audit (PRD §11 audit views)
-
-- `GET /audit/logs` (`audit.read`, a new HQ_SUPER_ADMIN-only permission —
-  re-run `pnpm --dir hq-backend seed` on existing databases): immutable,
-  newest-first listing with action/actor/entity/occurred_at filters and
-  deterministic `(occurred_at, id)` cursor paging.
-- HQ frontend `/audit`: cursor-paginated table with load-more and filters
-  (the envelope's `meta.nextCursor` is promoted to an `x-page-cursor`
-  response header by the shared axios layer — the one envelope-unwrap point).
-- Retention stays disabled by default (`AUDIT_LOG_RETENTION_DAYS=0`,
-  immutable trail); the HQ worker's hourly timer deletes in ≤1000-row
-  batches only when configured.
-
-### Verification evidence (AT-17, AT-20, §16)
-
-- AT-20 drill (live compose): POS sale at Outlet A with `hq-api` stopped
-  (receipt A-003455, outbox RETRY with backoff) → restart → report showed
-  stale `dataAsOf` + `isProvisional: true` with the sale uncounted → after
-  drain, report totals matched SQL `SUM(total_minor)` exactly (1286700 /
-  3477 for the day) and Outlet B rendered "never reported", never "0 sales".
-- AT-02/AT-19: sale at a 777-minor price override survived the HQ price
-  revert — the HQ projection kept `unit_price_minor = 777` for that receipt.
-- AT-17: forged-token matrix (wrong secret / issuer / audience / expired /
-  disabled user → 401), §9.3 matrix spot-checks (analyst reports OK but no
-  audit/menu-write; menu manager no keys/reports/audit; cashier no
-  adjustments), human/machine credential crossover rejected both ways,
-  machine routes send no CORS headers, and deployed frontend bundles grep
-  clean of secrets.
-- E2e suites: hq-backend 68 specs (incl. `reporting`/`audit`/`security`
-  and `assignments-bulk` for AT-23),
-  outlet-backend 48 specs (incl. forged-token matrix and 503/429+Retry-After
-  delivery failures) against real PostgreSQL/Redis.
-
-### Sale-load baseline (PRD §16 — subject to host hardware)
-
-`pnpm --dir outlet-backend perf:sale` (autocannon; fresh Idempotency-Key +
-X-Request-Id per request; stock pre-restocked through the audited
-adjustments path). Raise the outlet API throttle for the run:
-
-```bash
-OUTLET_A_THROTTLE_LIMIT=1000000 docker compose up -d outlet-a-api
-pnpm --dir outlet-backend perf:sale --duration 60 --connections 25
+```
+┌──────────────────────────────────── OUTLET ───────────────────────────────────┐
+│                                                                               │
+│  POS pages: pos · inventory · sales · sync · users        setup wizard (/setup)│
+│        │  (same-origin /api proxy)                                            │
+│        ▼                                                                      │
+│  Outlet API: JWT guard + local RBAC (sales.create, inventory.adjust,          │
+│              sync.override …)                                                 │
+│        │                                                                      │
+│        ▼                                                                      │
+│  ┌────────────────────────── Outlet PostgreSQL ────────────────────────────┐  │
+│  │  catalog_items (HQ snapshot)     menu_sync_state (applied revision)     │  │
+│  │  inventory_balances + stock_movements (ledger)                          │  │
+│  │  sales + sale_items + receipt_counters + sale_idempotency_keys          │  │
+│  │  outbox_events + outbox_counters + sync_attempt_logs                    │  │
+│  │  hq_connection (base URL + machine key)                                 │  │
+│  └─────────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  Sync Worker (separate process; BullMQ queues in Redis)                       │
+│    menu-pull (30s) · outbox sweep (5s) · delivery · reconcile (1h) ·          │
+│    heartbeat (60s)                                                            │
+└───────────────────────────────────────────────────────────────────────────────┘
 ```
 
-(The recorded baseline and post-run integrity results live in
-`outlet-backend/README.md`.)
+**1. How the menu arrives from HQ (pull).** The worker pulls every
+`MENU_PULL_INTERVAL_MS` (default 30s): `GET /sync/v1/menu/changes?since=last_applied_revision`
+against the outlet's own revision, authenticated with the machine key from
+`hq_connection`. All deltas are applied in **one transaction** — upsert/remove rows in
+`catalog_items` and `menu_sync_state.last_applied_revision = N` — so a mid-apply
+failure commits nothing and the checkpoint never advances past unapplied data. If the
+change history has a gap (or the terminal is new), it falls back to
+`GET /sync/v1/menu/snapshot` and rebuilds the whole local catalog. Until paired, the
+worker idles and logs `awaiting_provisioning`; pairing happens once through the setup
+wizard (identity + live-validated key → `hq_connection`), picked up without a restart.
 
-## Local development (without Docker)
+**2. How stock is maintained.** Each assigned item has one `inventory_balances` row
+(`quantity_on_hand`, CHECK ≥ 0, optimistic `version`) plus an append-only
+`stock_movements` ledger. Sales decrement stock inside the sale transaction; clerks
+adjust it through audited RESTOCK / WRITE_OFF / RECOUNT adjustments that record
+reason, actor and request ID. New items arrive at 0 until first stocked. Row locks
+(`FOR UPDATE`) and deterministic item-ID ordering — not application mutexes — are the
+concurrency control, so concurrent sales serialize safely and a last-unit race is
+won by exactly one buyer.
 
-Each project is independent — install and run from its own folder with pnpm:
+**3. How a sale happens (receipt included).** The POS sends
+`POST /api/v1/sales` with an `Idempotency-Key` header and body items only
+(`{ menuItemId, quantity }` — never prices, totals, or receipt numbers; the server
+computes those):
 
-```bash
-# backends (hq-backend / outlet-backend)
-pnpm install
-pnpm start:dev      # HTTP API on :3000 (prefix /api/v1)
-pnpm build && node dist/worker-main.js   # worker entrypoint
-
-# frontends (hq-frontend / outlet-frontend)
-pnpm install
-pnpm dev            # Vite dev server on :3000
-pnpm build          # SPA build -> dist/client (see vite.config.ts spa config)
+```
+ONE PostgreSQL transaction (deterministic lock order):
+  1  lock the idempotency row        → same key+body replays the stored receipt
+  2  offline-grace check             → last sync within OFFLINE_GRACE_HOURS (72h)
+                                        else 503 SYNC_TEMPORARILY_UNAVAILABLE
+  3  resolve prices from catalog_items (effective price incl. HQ override)
+  4  lock inventory rows (sorted item IDs) → any INSUFFICIENT_STOCK ⇒ full rollback
+  5  decrement balances + append stock_movements (reason = SALE)
+  6  receipt_counters FOR UPDATE     → gapless per-outlet receipt A-000001, A-000002, …
+  7  insert sales + sale_items       → immutable name/SKU/price snapshots
+  8  outbox_counters + outbox_events → exactly one sale.completed event, sequence N
+COMMIT → authoritative receipt response to the cashier
 ```
 
-Backends read `PORT`, `DATABASE_URL`, `REDIS_URL` (+ outlet identity and HQ
-sync variables for the outlet worker; see each app's `.env.example` for the
-full list). Every entrypoint runtime-validates its environment with Zod and
-fails startup on missing/inconsistent values (PRD §14.1). The worker
-entrypoints additionally require the HQ sync configuration. Logs are
-structured JSON (one object per line) carrying `requestId` for every request
-(PRD §13).
+Later HQ price changes only affect future sales — receipts keep their time-of-sale
+snapshot prices. Retries reuse the same idempotency key and replay the same receipt;
+reusing a key with a *different* body is rejected (`IDEMPOTENCY_KEY_REUSED`).
 
-## Docker notes
+**4. How sales reach HQ (push).** The worker sweeps the outbox every 5s, leases due
+events (`FOR UPDATE SKIP LOCKED`) and delivers them in batches to
+`POST HQ /sync/v1/events/batch`. HQ answers with per-event acks:
+`ACCEPTED` → `DELIVERED`; `DUPLICATE` (already ingested) → `DELIVERED`;
+`RETRYABLE_ERROR` → `RETRY` with capped exponential backoff;
+`REJECTED_PERMANENT` → `QUARANTINED` for manager review
+(`POST /sync/outbox/:eventId/replay`). An event is never marked delivered before HQ
+acked it, and HQ's transactional inbox (`sync_inbox_events` unique constraints) makes
+replays no-ops — at-least-once transport, exactly-once effects.
 
-- Backend images are multi-stage (pnpm via corepack → build → prod-deps
-  runtime) and run as non-root. The **same image** runs the API (default
-  `CMD`) and the worker (`command: node dist/worker-main.js` in compose).
-- Frontend images build the Vite SPA and serve it via each app's own
-  `nginx/nginx.conf` (static files + `/api/` reverse proxy + SPA fallback).
-- TanStack Start is configured in SPA mode (`vite.config.ts`), producing a
-  static bundle; the build stage copies the prerendered `_shell.html` to
-  `index.html` for the Nginx `try_files` fallback.
-- The web `.dockerignore` files deliberately keep `.gitignore` in the build
-  context: Tailwind's source scanner honours it, so without it the prerender
-  pass rescans `dist/` and links a stylesheet hash that is never shipped
-  (404 + a flash of unstyled CSS on every page load).
-- Per-service environment is centralized in the root `.env` (see
-  `.env.example`). Never commit real secrets or bake them into images.
-- Production: deploy HQ centrally and repeat the outlet stack once per site
-  (own DB volume, Redis, API, worker, UI) with outbound HTTPS to HQ — see
-  PRD §14.2 "Production topology".
+**5. Why selling continues when HQ is down.** The sale path is entirely local: the
+POS talks only to the outlet API, the outlet API talks only to the outlet's own
+PostgreSQL (zero Redis/queue connections, zero HQ calls), and receipts come from the
+local counter, so numbering stays gapless with no HQ dependency. When HQ is
+unreachable, committed sales simply accumulate as `PENDING` outbox rows (visible on
+`GET /api/v1/sync/status` and the POS sync banner) while the worker retries with
+backoff. Sales are allowed offline up to the grace window (`OFFLINE_GRACE_HOURS`,
+default 72h); past it, new sales are blocked with
+`503 SYNC_TEMPORARILY_UNAVAILABLE` until a successful sync — or until a manager uses
+the audited emergency override (`POST /sync/grace-override`). The moment HQ returns,
+the backlog drains automatically and HQ projects every sale exactly once; reports
+show `dataAsOf` + `isProvisional: true` in the meantime, never silently stale zeros.
+
+---
+
+## Offline connectivity strategy — POS, KDS, and reconnect sync
+
+![Offline POS and KDS sync strategy](docs/images/offline-pos-sync-strategy.png)
+
+One picture, two promises. Everything inside the green **Outlet** box — POS
+terminal, local backend, local PostgreSQL, Kitchen Display System, sync worker —
+runs on the restaurant's own local network and keeps working with no internet;
+the only bridge to the blue **HQ** box is the sync worker's outbound HTTPS, gated
+by the *Internet available?* decision.
+
+### How offline terminals resync sales to HQ when the internet returns
+
+Offline durability is the transactional outbox — a completed sale and its sync
+record commit together, so there is nothing in memory (or in a queue a restart
+would lose) that an outage can destroy:
+
+1. **Sell locally, commit once.** During an outage the POS keeps calling the local
+   outlet API; each sale commits its stock decrement, gapless receipt number and
+   exactly one `sale.completed` event in a single PostgreSQL transaction (the
+   numbered walkthrough in the outlet architecture section above).
+2. **Accumulate as PENDING, don't block.** Committed sales pile up as pending
+   outbox rows — visible on `GET /api/v1/sync/status` and the POS sync banner —
+   while the worker retries with backoff. Selling stays open for the configurable
+   offline grace window (`OFFLINE_GRACE_HOURS`, default 72 h); past it, new sales
+   are refused with `503 SYNC_TEMPORARILY_UNAVAILABLE` until a sync succeeds or a
+   manager applies the audited emergency override (`POST /sync/grace-override`).
+3. **Drain in batches on reconnect.** When HQ becomes reachable again the worker
+   leases due events (`FOR UPDATE SKIP LOCKED`) and pushes them in batches to
+   `POST /sync/v1/events/batch` over HTTPS — automatic, no operator action and no
+   manual replay step.
+4. **Dedupe and project at HQ, ack per event.** HQ validates each event against
+   the `sync_inbox_events` dedupe ledger before projecting it into `hq_sales`,
+   then answers every event individually: `ACCEPTED` / `DUPLICATE` → the event is
+   marked `DELIVERED` (replays are no-ops), `RETRYABLE_ERROR` → `RETRY` with
+   capped exponential backoff, `REJECTED_PERMANENT` → `QUARANTINED` for manager
+   review and replay.
+5. **Never delivered without an ack.** Only an HQ acknowledgement advances an
+   event's status, and the worker writes that delivery status back to the local
+   database — outbox, sync status API and HQ checkpoints converge on the same
+   truth. Reports meanwhile disclose `dataAsOf` / `isProvisional` so the backlog
+   gap is never mistaken for zero sales.
+
+Net effect: no completed sale is lost during an outage, none is counted twice at
+HQ, and recovery is a background drain rather than a procedure.
+
+### How POS and KDS communicate during offline mode (proposed extension)
+
+Today the POS is the only in-store client; the strategy diagram shows the natural
+next step — a **Kitchen Display System** on the same LAN, as one more client of
+the local backend:
+
+- **The local backend is the hub, never HQ.** The cashier creates sales via
+  `POST /api/v1/sales`; KDS screens talk to the same outlet API. All POS ↔ KDS
+  traffic stays on the local network and touches no HQ resource, so kitchen
+  operations need no internet either.
+- **Kitchen tickets are persisted with the sale.** The ticket would be written in
+  the sale transaction itself (the diagram's "atomic sale, stock, receipt, outbox
+  and proposed kitchen ticket"), so a reloaded or rebooted KDS screen recovers
+  its open tickets from PostgreSQL instead of losing them.
+- **Real-time over a LAN WebSocket, reconciled from the database.** The backend
+  pushes new orders and status changes (Preparing → Ready → Served) to the KDS
+  over a local WebSocket and mirrors order-status notifications back to the POS
+  terminal. Because the state lives in the database, recovery is mechanical:
+  automatic reconnection, an API-based reconciliation query on (re)load, a
+  polling fallback where WebSockets are blocked, and idempotent status updates so
+  a duplicate push can never corrupt an order.
+- **Zero impact on the sync boundary.** KDS is a purely outlet-local concern; the
+  outbox, checkpoints and HQ ingestion machinery need no change.
+
+Combined, the strategy is: local transactional selling + persistent order/ticket
+storage + LAN-based real-time displays + asynchronous exactly-once
+synchronization to HQ — the restaurant keeps taking orders through an internet
+outage and reconciles perfectly once it returns.
+
+---
+
+## Conversion to microservices — evolution path
+
+The platform can gradually evolve into a microservices architecture by separating
+the major business functionalities of the HQ backend into smaller, independently
+deployable services.
+
+Today the system consists of an HQ backend, HQ frontend, outlet backend and outlet
+frontend. The HQ backend handles menu management, outlet management, authentication,
+sales synchronization, reporting and auditing. Each outlet operates independently
+with its own database and synchronization worker.
+
+In the proposed microservices architecture, the HQ backend would be divided into the
+following services:
+
+1. **Catalog Service** — manages master menu items, categories, outlet-specific menu
+   assignments, prices and catalog revisions.
+2. **Outlet Management Service** — handles outlet registration, identity, activation
+   and suspension.
+3. **Authentication Service** — manages HQ user authentication, roles and access
+   permissions.
+4. **Synchronization and Sales Ingestion Service** — receives sales events from
+   outlets, prevents duplicate processing and maintains synchronized sales records.
+5. **Reporting Service** — generates revenue reports, sales summaries and business
+   analytics from the synchronized sales data.
+6. **Audit Service** — maintains immutable records of important administrative and
+   security activities.
+
+Each microservice would have clearly defined responsibilities, APIs and independent
+data ownership. Services would communicate using REST APIs and asynchronous events
+where appropriate.
+
+This architecture would allow individual services to be developed, deployed and
+scaled independently. For example, the Reporting Service could be scaled separately
+when sales data increases, without affecting the Catalog Service.
+
+However, the outlet's sales processing and inventory updates must remain within a
+single local transactional boundary, because both operations must succeed or fail
+together. This also preserves the platform's offline-first capability, allowing
+outlets to process sales even when HQ is unavailable, subject to the configured
+offline-grace period.
+
+The migration should be performed incrementally, beginning with modularizing the
+existing backend and extracting suitable services such as reporting, rather than
+rebuilding the entire application at once.
+
+### Target architecture
+
+![Proposed HQ microservices architecture](docs/images/hq-microservices-architecture.png)
+
+What the diagram changes — and what it deliberately leaves alone:
+
+- **Outlets are untouched.** Every site keeps the exact stack it has today: local
+  POS → local API → local PostgreSQL, with the Redis-queued sync worker doing the
+  only talking to HQ. A sale stays one local transaction and never waits on HQ.
+- **The HQ console gets a single entry point.** The React frontend calls an
+  **API Gateway / routing layer** instead of individual services; routing, JWT
+  verification and rate limiting live there once instead of in every service.
+- **Six services, database per service.** Each extracted service owns its own
+  store (Catalog DB, Outlet Registry DB, Identity DB, Sales Projection DB,
+  Reporting Read Store, Audit DB) — no shared tables, no cross-database FKs;
+  references between services stay UUIDs owned by their authority.
+- **The sync contract survives unchanged.** The outlet worker keeps calling the
+  same `/sync/v1/*` endpoints with the same outlet-key auth; the gateway just
+  routes menu pulls to the Catalog Service and event batches to the Sync
+  Ingestion Service, so outlets need no code change.
+- **Ingestion feeds reporting asynchronously** (CQRS-style): ingestion projects
+  accepted events into the Sales Projection DB; the Reporting Service reads from
+  its own read store and keeps disclosing `dataAsOf` / `isProvisional`.
+
+### Service decomposition vs today's monolith
+
+| Service | Extracted from HQ backend today | Owns |
+|---|---|---|
+| Catalog Service | `/categories`, `/menu-items`, `/outlets/:outletId/menu*` and `GET /sync/v1/menu/changes\|snapshot`; tables `menu_categories`, `master_menu_items`, `outlet_menu_assignments`, `outlet_catalog_revisions`, `outlet_catalog_changes` | Catalog DB (the catalog mutation + change-log append stay one transaction here — never split) |
+| Outlet Management Service | `/outlets` CRUD, suspend/reactivate, sync-key issue/rotate/revoke; tables `outlets`, `outlet_api_keys` | Outlet Registry DB |
+| Authentication Service | `/auth/*`, `/users`, `/roles`; tables `hq_users`, `hq_roles`/`hq_permissions` + mappings, `hq_refresh_sessions` | Identity DB (JWT signing keys and password hashes never leave it) |
+| Sync & Sales Ingestion Service | `POST /sync/v1/events/batch`, `GET /sync/v1/checkpoint`, `POST /sync/v1/heartbeat`; tables `sync_inbox_events`, `sync_outlet_checkpoints`, `hq_sales` / `hq_sale_items` projections | Sales Projection DB |
+| Reporting Service | `/reports/*` (revenue by outlet, top items) — already a pure read side | Reporting Read Store |
+| Audit Service | `/audit/logs`; table `audit_logs` — becomes an event subscriber instead of sharing tables | Audit DB (append-only) |
+
+### Guardrails the split must preserve
+
+1. **Sync stays outbound-only from outlet to HQ.** HQ services never connect to an
+   outlet; the worker pulls menu and pushes events over HTTPS through the gateway.
+2. **The outlet sale path stays local and atomic.** Sales + inventory decrement +
+   outbox append remain one PostgreSQL transaction inside the outlet — no service
+   boundary ever crosses it.
+3. **Catalog ownership is not divided.** `master_menu_items`, assignments, the
+   revision counter and the change log move *together* into the Catalog Service so
+   a menu edit and its distribution record still commit atomically.
+4. **The wire contract is unchanged behind the gateway.** Same `/api/v1` base, same
+   `ApiSuccess`/`ApiError` envelope, same stable error codes, money still integer
+   minor units as decimal strings.
+5. **Exactly-once ingest discipline survives.** Per-event acks plus the dedupe
+   ledger (`sync_inbox_events` uniqueness) keep replays harmless; async
+   service-to-service events follow the same at-least-once + idempotent-consumer
+   pattern the outbox already uses.
+
+### Suggested extraction order (strangler pattern)
+
+The NestJS modules already map 1:1 to the candidate services, so each extraction is
+a deployment change, not a rewrite:
+
+1. **Reporting** — pure read side with no synchronous dependents; safest first cut.
+2. **Audit** — subscriber with no callers waiting on it.
+3. **Sync & Sales Ingestion** — owns the machine-key routes; gateway takes over
+   `/sync/v1/*` routing from day one so outlets never notice.
+4. **Outlet Management, Authentication, Catalog** — last, when scale or team
+   boundaries justify it; Catalog waits because its transaction couples the most
+   tables.
+
+---
+
+## Scaling strategy — 10 outlets · 100k sales → 10–100M sales
+
+This architecture scales because the hard guarantees are already per-outlet: each
+outlet commits sales locally, every HQ-ingested event is keyed by `outlet_id`, and no
+flow ever needs a cross-outlet transaction. Outlets and HQ therefore scale
+independently, and each stage below is additive — no schema rewrite between stages.
+
+### Growth path
+
+| Stage | Scale (synced sales) | What changes |
+|---|---|---|
+| 0 · Baseline | 10 outlets, ~100k | 1 HQ API node + 1 Postgres + 1 Redis; PgBouncer enabled from day one |
+| 1 · Vertical DB | ~1–5M | Bigger HQ DB node (CPU/RAM/NVMe) + Postgres tuning + monthly partitions |
+| 2 · Read replica | ~5–20M | Streaming replica takes reports/console reads; retention via `DROP PARTITION` |
+| 3 · Load balancer + cache | ~20–50M | LB in front of N stateless HQ API nodes; Redis report/snapshot caches |
+| 4 · Sharding | 50–100M+ | Shard HQ data by `outlet_id`; dedicated analytics store for reports |
+
+### Outlets: one server per site, unchanged at every stage
+
+```
+OUTLET SITE (repeatable, independent)
+  POS ──▶ Outlet API ──▶ local PostgreSQL (partitioned)      scale: vertical only
+             │
+             └─▶ sync worker ──▶ Redis ──▶ HTTPS ──▶ HQ      one more site = one more stack
+```
+
+- One site's load is bounded by its own counters; a single server with local Postgres
+  serves one outlet across the entire range — scale it vertically if a site grows.
+- Adding outlets adds capacity linearly: new site = new independent stack, zero HQ
+  migration. The HQ side never gets per-request outlet traffic.
+- Long-lived sites apply the same local hygiene: monthly partitions on `sales`,
+  `sale_items`, `stock_movements`, `sync_attempt_logs`; prune delivered outbox rows.
+
+### HQ database: vertical → pooling → replica → partitions → shards
+
+- **Vertical first** — CPU/RAM/NVMe plus autovacuum / `work_mem` tuning carry the
+  range into the millions; ingest transactions are short, single-outlet writes.
+- **Connection pooling** — PgBouncer in transaction mode; each API instance keeps a
+  small TypeORM pool, so N instances multiplex over one bounded Postgres connection set.
+- **Table partitioning** — monthly range partitions on `hq_sales` (`sold_at`),
+  `hq_sale_items`, `sync_inbox_events` (`received_at`), `audit_logs`
+  (`occurred_at`): reports prune to the queried window, retention becomes
+  `DROP PARTITION` instead of `DELETE`.
+- **Read replica** — streaming replica serves reports and console reads; the primary
+  stays write-path only. Replica lag is absorbed by the built-in `dataAsOf`
+  staleness disclosure — no consistency lies are needed.
+- **Sharding last** — shard key = `outlet_id` (Citus, or routed PgBouncer pools per
+  shard). Every hot table already keys on `outlet_id` and every uniqueness guarantee
+  is `(outlet_id, …)` (event ID, sequence, receipt), so ingest touches exactly one
+  shard and no cross-shard transactions ever exist. Reports fan out and merge, or
+  stream into a dedicated analytics store.
+
+### HQ servers: vertical, then a load balancer — gradually
+
+- The HQ API is stateless (bearer JWT; refresh sessions in the DB), so scale-out
+  needs no sticky sessions: bigger node until it hurts → LB + 2 nodes → N nodes.
+- LB health checks hit `GET /api/v1/health`; rate limiting moves to shared Redis
+  counters so limits hold across nodes.
+- HQ worker roles (audit retention) scale independently — none sit on the sale path.
+
+### Cache strategy
+
+| What | Where | How |
+|---|---|---|
+| Report responses (revenue-by-outlet, top items) | Redis | Key = report + window + currency; TTL 60–300s; store with `dataAsOf`/`isProvisional` so staleness stays truthful |
+| Menu snapshot / catalog changes | Redis + ETag | Keyed by outlet + revision; invalidated on HQ revision bump; pulls carry their revision → cheap 304 short-circuit |
+| Rate-limit counters | Redis | Shared across all API nodes so limits hold behind the LB |
+| Outlet menu reads | Outlet DB | Already a local read-model (`catalog_items`) — the most effective cache already exists |
+| Never cache | — | `POST /sync/v1/events/batch` and anything keyed by `Idempotency-Key` |
+
+### Target topology
+
+```
+Stage 3 — HQ scale-out (before sharding):
+
+                ┌────────────── Load balancer ──────────────┐
+                │            /api/v1/*  · health probes     │
+                └─────────────┬─────────────────┬───────────┘
+                              ▼                 ▼
+                       ┌───────────┐     ┌───────────┐
+                       │ HQ API #1 │     │ HQ API #2 │ … N (stateless)
+                       └─────┬─────┘     └─────┬─────┘
+                             └────────┬────────┘
+                        ┌─────────────┼─────────────┐
+                        ▼             ▼             ▼
+                ┌────────────┐ ┌────────────┐ ┌────────────────┐
+                │   Redis    │ │ PgBouncer  │ │ each API node  │
+                │  report &  │ │    (tx     │ │ keeps a small  │
+                │  snapshot  │ │  pooling)  │ │ local TypeORM  │
+                │ caches,    │ └─────┬──────┘ │ pool           │
+                │ throttles  │       ▼        └────────────────┘
+                └────────────┘ ┌──────────────────┐   streaming   ┌────────────────┐
+                               │ HQ Postgres      │──────────────▶│ read replica   │
+                               │ primary, monthly │               │ reports +      │
+                               │ range partitions │               │ console reads  │
+                               └──────────────────┘               │ (lag disclosed)│
+                                                                  └────────────────┘
+
+Stage 4 — sharded HQ (50–100M+ sales):
+
+                     ┌───────── Load balancer ─────────┐
+                     └────────────────┬────────────────┘
+                                      ▼
+                    HQ API nodes (stateless, scale to N)
+                                      │
+                                      │  shard map: outlet_id → shard
+                ┌─────────────────────┼─────────────────────┐
+                ▼                     ▼                     ▼
+         ┌──────────────┐      ┌──────────────┐      ┌──────────────┐
+         │   Shard 1    │      │   Shard 2    │  …   │   Shard K    │
+         │ PgBouncer    │      │ PgBouncer    │      │ PgBouncer    │
+         │ Postgres     │      │ Postgres     │      │ Postgres     │
+         │ (+ replica)  │      │ (+ replica)  │      │ (+ replica)  │
+         │ outlets 1..x │      │ outlets x..y │      │ outlets y..z │
+         └──────┬───────┘      └──────┬───────┘      └──────┬───────┘
+                └─────────────────────┼─────────────────────┘
+                                      ▼
+              cross-shard reporting: fan-out aggregate + merge —
+              or continuous projection into a dedicated
+              analytics store (columnar) for heavy dashboards
+
+              ingest path: each event touches exactly ONE shard
+              (all keys are (outlet_id, …)) → no cross-shard transactions
+```
+
+---
+
+For engineering rules and deeper design detail, see
+[AGENTS.md](./AGENTS.md), the per-app `AGENTS.md` files, and the
+[PRD](./fnb_multi_outlet_prd.md) (§8 sync design, §17 acceptance scenarios AT-01…AT-23).
