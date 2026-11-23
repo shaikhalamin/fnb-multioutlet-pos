@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Explicit config: prevents wrangler's framework auto-detection from
+  // assuming a TanStack Start SSR server (this app builds as a static SPA).
+  "name": "fnb-pos-outlet-frontend",
+  "main": "worker.ts",
+  "compatibility_date": "2026-11-19",
+  "assets": {
+    // Populated by the project build command:
+    //   pnpm build && cp dist/client/_shell.html dist/client/index.html
+    "directory": "./dist/client",
+    // Non-asset, non-/api routes serve index.html (replaces Pages _redirects).
+    "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    // Public origin of the outlet backend on Railway — not a secret. Can be
+    // overridden per-environment in the Cloudflare dashboard.
+    "BACKEND_ORIGIN": "https://fnb-pos-outlet-backend-production.up.railway.app"
+  },
+  "observability": { "enabled": true }
+}
