@@ -1,94 +1,76 @@
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
-import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import { createFileRoute, Navigate } from '@tanstack/react-router'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { z } from 'zod'
 import { ApiError } from '#/api/axios'
 import { setupControllerCreateIdentity } from '#/api/generated/clients/setupControllerCreateIdentity'
 import { setupControllerGetStatus } from '#/api/generated/clients/setupControllerGetStatus'
 import { setupControllerSaveHqConnection } from '#/api/generated/clients/setupControllerSaveHqConnection'
 import { setupControllerGetStatusStatus200Schema } from '#/api/generated/schemas/setupControllerGetStatusSchema'
+import type { HqConnectionResponse } from '#/api/generated/types/HqConnectionResponse'
+import type { SetupIdentityResponse } from '#/api/generated/types/SetupIdentityResponse'
 import { setupKeys } from '#/features/setup/keys'
-
-export const Route = createFileRoute('/setup')({ component: SetupPage })
+import { ConnectionStep } from '#/features/setup/ConnectionStep'
+import { DoneStep } from '#/features/setup/DoneStep'
+import { IdentityStep } from '#/features/setup/IdentityStep'
+import { Checking, Problem } from '#/features/setup/SetupParts'
+import { SetupStepper } from '#/features/setup/SetupStepper'
+import { STEP_CHANGE, describeFailure } from '#/features/setup/setupFlow'
+import type { ConnectionForm, IdentityForm } from '#/features/setup/setupFlow'
+import { cn } from '#/lib/utils'
 
 /**
  * First-run terminal setup wizard (PRD §8.7 bootstrap, §9.2 secure
- * provisioning channel): step 1 saves the HQ-issued outlet ID + code and
- * creates the first admin; step 2 pairs with HQ using the one-time key
+ * provisioning channel, FR-11): step 1 saves the HQ-issued outlet ID + code
+ * and creates the first admin; step 2 pairs with HQ using the one-time key
  * issued in the HQ console. Both steps are public only while this terminal
  * is unprovisioned — the backend seals them permanently afterwards.
  */
-const identitySchema = z.object({
-  outletId: z
-    .string()
-    .uuid('Paste the Outlet ID (a UUID) from the HQ console.'),
-  outletCode: z
-    .string()
-    .min(1, 'Outlet code is required.')
-    .max(8, 'Outlet code is at most 8 characters.'),
-  adminEmail: z.string().email('Enter a valid email for the first admin.'),
-  adminPassword: z
-    .string()
-    .min(8, 'Admin password must be at least 8 characters.'),
-})
-
-const connectionSchema = z.object({
-  hqApiBaseUrl: z
-    .string()
-    .url('Enter the HQ base URL, e.g. http://hq-api:3000/api/v1.'),
-  keyId: z.string().min(8, 'Paste the key ID shown when HQ issued the key.'),
-  keySecret: z.string().min(16, 'Paste the one-time key secret from HQ.'),
-})
+export const Route = createFileRoute('/setup')({ component: SetupPage })
 
 /**
- * HQ also shows the key as one combined `keyId.secret` value — pasting that
- * blob into either field is the easy mistake that HQ answers with a 401.
- * Key IDs are `ok_<env>_<hex>` and secrets are base64url; neither contains a
- * dot, so a dot in either field always means the combined form and the first
- * dot splits it unambiguously. Both fields are (re)filled so the operator
- * sees exactly what will be sent.
+ * What the card shows. Derived on every render from the status query plus
+ * this session's own progress, so the wizard and the server can never
+ * disagree for more than a refetch. `sealed` = already paired when we
+ * arrived: nothing left to do here.
  */
-function splitCombinedKey(
-  value: string,
-): { keyId: string; keySecret: string } | null {
-  const trimmed = value.trim()
-  const dot = trimmed.indexOf('.')
-  if (dot <= 0 || dot === trimmed.length - 1) return null
-  return { keyId: trimmed.slice(0, dot), keySecret: trimmed.slice(dot + 1) }
+type View =
+  'checking' | 'unavailable' | 'identity' | 'connection' | 'done' | 'sealed'
+
+/** A wizard step — what the step panel shows. */
+type StepView = 'identity' | 'connection' | 'done'
+
+function isStepView(view: View): view is StepView {
+  return view === 'identity' || view === 'connection' || view === 'done'
 }
 
-/** Stable backend error codes (PRD §12) → human-friendly pairing messages. */
-const SETUP_ERROR_MESSAGES: Record<string, string> = {
-  UNAUTHENTICATED:
-    'HQ rejected this key — copy the key ID and the secret separately from the HQ console (each has its own copy button there) and check nothing extra came along with the paste.',
-  SYNC_TEMPORARILY_UNAVAILABLE:
-    'HQ is unreachable at that URL. Check the address and that HQ is running.',
-  FORBIDDEN: 'This terminal is already provisioned — setup is sealed.',
-  CONFLICT: 'Complete the previous setup step first.',
-  RATE_LIMITED: 'Too many attempts — wait a moment and try again.',
+/** The panel enters on its own (forward motion from below); leaving, it
+ * fades out in place so the swap to the next step is never a hard cut. */
+const PANEL_ENTER =
+  'animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out motion-reduce:animate-none'
+const PANEL_EXIT =
+  'pointer-events-none animate-out fade-out fill-mode-forwards duration-150 ease-in motion-reduce:animate-none'
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
-function setupErrorMessage(cause: unknown): string {
-  if (cause instanceof ApiError) {
-    // The backend tags the cross-outlet refusal with the key's real outlet
-    // (details.keyOutletId) — surface it distinctly instead of the generic
-    // "rejected" message, which sends the operator hunting for typos.
-    if (
-      cause.code === 'UNAUTHENTICATED' &&
-      cause.details &&
-      'keyOutletId' in cause.details
-    ) {
-      return 'HQ accepted this key, but it was issued for a different outlet. Open THIS outlet’s page in the HQ console and issue a new key there.'
-    }
-    const friendly = SETUP_ERROR_MESSAGES[cause.code]
-    return friendly ? friendly : `${cause.code}: ${cause.message}`
-  }
-  return 'Setup failed. Please try again.'
+/**
+ * Scrolls the card top back under the sticky header, unless it is already in
+ * view: the stepper there is what shows that the step changed, and the submit
+ * button sits at the bottom of a step that may be taller than the screen.
+ */
+function revealCard(card: HTMLElement) {
+  const { top } = card.getBoundingClientRect()
+  const headerBottom =
+    document.querySelector('header')?.getBoundingClientRect().bottom ?? 0
+  if (top >= headerBottom + 8 && top < window.innerHeight / 2) return
+  card.scrollIntoView({
+    block: 'start',
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+  })
 }
 
 function SetupPage() {
-  const navigate = useNavigate({ from: '/setup' })
   const queryClient = useQueryClient()
   const status = useQuery({
     queryKey: setupKeys.status(),
@@ -100,344 +82,244 @@ function SetupPage() {
       ),
     retry: false,
   })
+  const data = status.data
 
-  const [step, setStep] = useState<
-    'checking' | 'identity' | 'connection' | 'done'
-  >('checking')
-  const [identityForm, setIdentityForm] = useState({
-    outletId: '',
-    outletCode: '',
-    adminEmail: '',
-    adminPassword: '',
-  })
-  const [connectionForm, setConnectionForm] = useState({
-    hqApiBaseUrl: '',
-    keyId: '',
-    keySecret: '',
-  })
-  const [error, setError] = useState<string | null>(null)
-  const [pairedKeyId, setPairedKeyId] = useState<string | null>(null)
+  // Progress made in this session, kept apart from `status`: a success shows
+  // at once and stays up. Pairing flips `provisioned`, which must not bounce
+  // a freshly paired register to sign-in before it sees the confirmation.
+  const [savedIdentity, setSavedIdentity] =
+    useState<SetupIdentityResponse | null>(null)
+  const [paired, setPaired] = useState<HqConnectionResponse | null>(null)
+
+  const view: View = paired
+    ? 'done'
+    : data === undefined
+      ? status.isError
+        ? 'unavailable'
+        : 'checking'
+      : data.provisioned
+        ? 'sealed'
+        : data.identity || savedIdentity
+          ? 'connection'
+          : 'identity'
+
+  // Step-change choreography. A step the server just accepted stays on
+  // screen for a beat so its button can confirm the save (the stepper has
+  // already advanced), then fades out; only then does the next step fade in.
+  // The timers live in effects, so unmounting or a resync clears them.
+  const [outgoing, setOutgoing] = useState<StepView | null>(null)
+  const [leaving, setLeaving] = useState(false)
+  const shown: View = outgoing ?? view
 
   useEffect(() => {
-    if (status.isError) {
-      setError('Setup status unavailable — is the outlet backend running?')
-      return
-    }
-    if (!status.data) return
-    if (status.data.provisioned) {
-      // Already paired: nothing to do here.
-      void navigate({ to: '/login', replace: true })
-      return
-    }
-    setStep(status.data.identity ? 'connection' : 'identity')
-    // Pre-fill a sensible default base URL for the compose network.
-    setConnectionForm((form) => ({
-      ...form,
-      hqApiBaseUrl: form.hqApiBaseUrl || 'http://hq-api:3000/api/v1',
-    }))
-  }, [status.data, status.isError, navigate])
+    if (outgoing === null || leaving) return
+    const timer = window.setTimeout(
+      () => setLeaving(true),
+      STEP_CHANGE.confirmMs,
+    )
+    return () => window.clearTimeout(timer)
+  }, [outgoing, leaving])
+
+  useEffect(() => {
+    if (!leaving) return
+    const timer = window.setTimeout(() => {
+      setOutgoing(null)
+      setLeaving(false)
+    }, STEP_CHANGE.exitMs)
+    return () => window.clearTimeout(timer)
+  }, [leaving])
+
+  // Set when this session caused a step change (a submit or a resync): the
+  // new step's heading then takes focus, so keyboard and screen-reader users
+  // land on it instead of on a button that is about to unmount. A layout
+  // effect: the focus moves in the same commit as the swap, so there is no
+  // frame in which it has fallen back to <body>.
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const cardRef = useRef<HTMLElement>(null)
+  const focusHeading = useRef(false)
+  const previousShown = useRef(shown)
+  useLayoutEffect(() => {
+    const changed = previousShown.current !== shown
+    previousShown.current = shown
+    if (!changed || !focusHeading.current || !isStepView(shown)) return
+    focusHeading.current = false
+    headingRef.current?.focus({ preventScroll: true })
+  }, [shown])
+
+  /** The server is ahead of (or behind) the wizard: let status move it. */
+  function resync() {
+    focusHeading.current = true
+    void queryClient.invalidateQueries({ queryKey: setupKeys.status() })
+  }
+
+  /** A step succeeded: confirm it, bring the stepper into view, move on. */
+  function advance(step: StepView) {
+    setOutgoing(step)
+    focusHeading.current = true
+    if (cardRef.current) revealCard(cardRef.current)
+  }
+
+  const outletCode = savedIdentity?.outletCode ?? data?.outletCode ?? null
+  const adminEmail = savedIdentity?.adminEmail ?? null
+  const outletId = savedIdentity?.outletId ?? data?.outletId ?? ''
 
   const createIdentity = useMutation({
-    mutationFn: (body: z.infer<typeof identitySchema>) =>
-      setupControllerCreateIdentity({ body }),
-    onSuccess: () => {
-      setError(null)
-      setStep('connection')
+    mutationFn: (body: IdentityForm) => setupControllerCreateIdentity({ body }),
+    onSuccess: (result) => {
+      setSavedIdentity(result)
+      advance('identity')
       void queryClient.invalidateQueries({ queryKey: setupKeys.status() })
     },
-    onError: (cause) => setError(setupErrorMessage(cause)),
+    onError: (cause) => {
+      if (describeFailure(cause, { step: 'identity', outletCode }).resync) {
+        resync()
+      }
+    },
   })
 
   const saveConnection = useMutation({
-    mutationFn: (body: z.infer<typeof connectionSchema>) =>
+    mutationFn: (body: ConnectionForm) =>
       setupControllerSaveHqConnection({ body }),
-    onSuccess: (response) => {
-      setError(null)
-      setPairedKeyId(response.keyId)
-      setStep('done')
+    onSuccess: (result) => {
+      setPaired(result)
+      advance('connection')
       void queryClient.invalidateQueries({ queryKey: setupKeys.status() })
     },
-    onError: (cause) => setError(setupErrorMessage(cause)),
+    onError: (cause) => {
+      if (describeFailure(cause, { step: 'connection', outletCode }).resync) {
+        resync()
+      }
+    },
   })
 
-  function handleIdentity(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const parsed = identitySchema.safeParse(identityForm)
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the form.')
-      return
-    }
-    createIdentity.mutate(parsed.data)
-  }
-
-  function handleConnection(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const parsed = connectionSchema.safeParse(connectionForm)
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? 'Check the form.')
-      return
-    }
-    saveConnection.mutate(parsed.data)
+  if (view === 'sealed') {
+    // Already paired: nothing to do here.
+    return <Navigate to="/login" replace />
   }
 
   return (
     <main className="page-wrap py-16">
-      <div className="relative mx-auto max-w-lg">
+      <div className="relative mx-auto max-w-xl">
         <span
           aria-hidden="true"
           className="orb orb-lavender -top-14 -left-16 h-56 w-56"
         />
-        <section className="card-panel relative p-8">
-          <p className="kicker mb-2">Terminal Setup</p>
-          <h1 className="mb-1 font-display text-display-sm text-ink">
-            Pair this register
+        {/* The card opts out of scroll anchoring — otherwise the browser
+            compensates for the swapped step's height right after a step
+            change and cancels the scroll. The scroll margin clears the sticky
+            header, which wraps to two rows on phones. */}
+        <section
+          ref={cardRef}
+          aria-labelledby="setup-title"
+          className="card-panel relative scroll-mt-28 p-6 [overflow-anchor:none] sm:scroll-mt-24 sm:p-8"
+        >
+          <p className="kicker m-0 mb-2">Terminal setup</p>
+          <h1
+            id="setup-title"
+            className="m-0 mb-1.5 font-display text-display-sm text-ink"
+          >
+            Set up this register
           </h1>
-          <p className="mb-6 mt-1 text-sm text-body">
-            Two steps: save the outlet identity created in the HQ console, then
-            paste the HQ machine key to start syncing the menu and uploading
-            sales.
+          <p className="m-0 mb-6 text-sm text-body">
+            Two short steps, done once. Keep the HQ console open — each step
+            needs values you copy from there.
           </p>
 
-          <ol className="mb-6 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-            {(['identity', 'connection'] as const).map((label, index) => {
-              const active =
-                step === label ||
-                step === 'done' ||
-                (step === 'connection' && label === 'identity')
-              return (
-                <li
-                  key={label}
-                  className={`badge-pill ${active ? 'text-ink' : ''}`}
-                  aria-current={step === label ? 'step' : undefined}
-                >
-                  {index + 1}. {label === 'identity' ? 'Identity' : 'Pair HQ'}
-                </li>
-              )
-            })}
-          </ol>
+          {/* The stepper follows the server's truth, so it advances the
+              moment a step is accepted — before the panel below changes. */}
+          <SetupStepper
+            current={
+              view === 'done'
+                ? 'done'
+                : view === 'identity' || view === 'connection'
+                  ? view
+                  : null
+            }
+          />
 
-          {step === 'checking' ? (
-            <p className="m-0 text-sm text-body" aria-busy="true">
-              Checking this terminal…
-            </p>
-          ) : null}
+          <div
+            key={shown}
+            aria-busy={outgoing !== null}
+            className={cn(
+              'mt-6 border-t border-hairline pt-6',
+              leaving ? PANEL_EXIT : PANEL_ENTER,
+            )}
+          >
+            {shown === 'checking' ? <Checking /> : null}
+            {shown === 'unavailable' ? (
+              <Unavailable
+                error={status.error}
+                onRetry={() => {
+                  focusHeading.current = true
+                  void status.refetch()
+                }}
+              />
+            ) : null}
+            {shown === 'identity' ? (
+              <IdentityStep
+                headingRef={headingRef}
+                pending={createIdentity.isPending}
+                saved={outgoing === 'identity'}
+                error={createIdentity.error}
+                onSubmit={(values) => createIdentity.mutate(values)}
+              />
+            ) : null}
+            {shown === 'connection' ? (
+              <ConnectionStep
+                headingRef={headingRef}
+                pending={saveConnection.isPending}
+                saved={outgoing === 'connection'}
+                error={saveConnection.error}
+                identity={{ outletId, outletCode, adminEmail }}
+                onSubmit={(values) => saveConnection.mutate(values)}
+              />
+            ) : null}
+            {shown === 'done' && paired ? (
+              <DoneStep
+                headingRef={headingRef}
+                paired={paired}
+                identity={{ outletId, outletCode, adminEmail }}
+              />
+            ) : null}
+          </div>
 
-          {step === 'identity' ? (
-            <form
-              onSubmit={handleIdentity}
-              className="flex flex-col gap-4"
-              noValidate
-            >
-              <p className="m-0 text-xs text-body">
-                In HQ:{' '}
-                <span className="font-medium">Outlets → create the outlet</span>
-                , then copy its <span className="font-medium">Outlet ID</span>{' '}
-                and <span className="font-medium">code</span> here.
-              </p>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                Outlet ID
-                <input
-                  required
-                  value={identityForm.outletId}
-                  onChange={(event) =>
-                    setIdentityForm({
-                      ...identityForm,
-                      outletId: event.target.value.trim(),
-                    })
-                  }
-                  className="form-input font-normal"
-                  placeholder="11111111-1111-4111-8111-111111111111"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                Outlet code (receipt prefix)
-                <input
-                  required
-                  maxLength={8}
-                  value={identityForm.outletCode}
-                  onChange={(event) =>
-                    setIdentityForm({
-                      ...identityForm,
-                      outletCode: event.target.value.toUpperCase(),
-                    })
-                  }
-                  className="form-input font-normal"
-                  placeholder="A"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                First admin email
-                <input
-                  type="email"
-                  required
-                  autoComplete="username"
-                  value={identityForm.adminEmail}
-                  onChange={(event) =>
-                    setIdentityForm({
-                      ...identityForm,
-                      adminEmail: event.target.value,
-                    })
-                  }
-                  className="form-input font-normal"
-                  placeholder="admin@outlet-a.local"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                First admin password
-                <input
-                  type="password"
-                  required
-                  minLength={8}
-                  autoComplete="new-password"
-                  value={identityForm.adminPassword}
-                  onChange={(event) =>
-                    setIdentityForm({
-                      ...identityForm,
-                      adminPassword: event.target.value,
-                    })
-                  }
-                  className="form-input font-normal"
-                  placeholder="At least 8 characters"
-                />
-              </label>
-              {error ? (
-                <p
-                  role="alert"
-                  className="m-0 rounded-lg bg-error/10 px-3 py-2 text-sm text-error"
-                >
-                  {error}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={createIdentity.isPending}
-                className="btn-primary mt-2"
-              >
-                {createIdentity.isPending
-                  ? 'Saving identity…'
-                  : 'Save identity'}
-              </button>
-            </form>
-          ) : null}
-
-          {step === 'connection' ? (
-            <form
-              onSubmit={handleConnection}
-              className="flex flex-col gap-4"
-              noValidate
-            >
-              <p className="m-0 text-xs text-body">
-                In HQ: open this outlet’s page →{' '}
-                <span className="font-medium">API keys → Issue key</span>, copy
-                the one-time <span className="font-medium">key ID</span> and{' '}
-                <span className="font-medium">secret</span> (each has its own
-                copy button there), then pair below. Pasting the combined{' '}
-                <span className="font-medium">keyId.secret</span> value into
-                either field splits it automatically. HQ checks the key live
-                before anything is saved.
-              </p>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                HQ base URL
-                <input
-                  required
-                  value={connectionForm.hqApiBaseUrl}
-                  onChange={(event) =>
-                    setConnectionForm({
-                      ...connectionForm,
-                      hqApiBaseUrl: event.target.value.trim(),
-                    })
-                  }
-                  className="form-input font-normal"
-                  placeholder="http://hq-api:3000/api/v1"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                Key ID
-                <input
-                  required
-                  value={connectionForm.keyId}
-                  onChange={(event) => {
-                    const combined = splitCombinedKey(event.target.value)
-                    if (combined) {
-                      setConnectionForm({
-                        ...connectionForm,
-                        keyId: combined.keyId,
-                        keySecret: combined.keySecret,
-                      })
-                      return
-                    }
-                    setConnectionForm({
-                      ...connectionForm,
-                      keyId: event.target.value.trim(),
-                    })
-                  }}
-                  className="form-input font-normal"
-                  placeholder="ok_dev_…"
-                />
-              </label>
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-ink">
-                Key secret (shown once by HQ)
-                <input
-                  type="password"
-                  required
-                  autoComplete="off"
-                  value={connectionForm.keySecret}
-                  onChange={(event) => {
-                    const combined = splitCombinedKey(event.target.value)
-                    if (combined) {
-                      setConnectionForm({
-                        ...connectionForm,
-                        keyId: combined.keyId,
-                        keySecret: combined.keySecret,
-                      })
-                      return
-                    }
-                    setConnectionForm({
-                      ...connectionForm,
-                      keySecret: event.target.value.trim(),
-                    })
-                  }}
-                  className="form-input font-normal"
-                  placeholder="one-time secret"
-                />
-              </label>
-              {error ? (
-                <p
-                  role="alert"
-                  className="m-0 rounded-lg bg-error/10 px-3 py-2 text-sm text-error"
-                >
-                  {error}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                disabled={saveConnection.isPending}
-                className="btn-primary mt-2"
-              >
-                {saveConnection.isPending
-                  ? 'Validating with HQ…'
-                  : 'Test & pair'}
-              </button>
-            </form>
-          ) : null}
-
-          {step === 'done' ? (
-            <div className="flex flex-col gap-4">
-              <p className="m-0 rounded-lg bg-success/10 px-3 py-3 text-sm text-success">
-                Paired with HQ (key <span className="money">{pairedKeyId}</span>
-                ). The menu syncs automatically within a minute — stock items
-                via Inventory, then start selling.
-              </p>
-              <Link
-                to="/login"
-                className="btn-primary no-underline text-center"
-              >
-                Sign in with the admin account
-              </Link>
-            </div>
-          ) : null}
+          {/* Announces the save during the beat — the focused button's own
+              label change is not reliably spoken. */}
+          <p role="status" aria-live="polite" className="sr-only">
+            {outgoing === 'identity'
+              ? 'Outlet identity saved. Continuing to step 2.'
+              : outgoing === 'connection'
+                ? 'Paired with HQ. Setup complete.'
+                : null}
+          </p>
         </section>
       </div>
     </main>
+  )
+}
+
+function Unavailable({
+  error,
+  onRetry,
+}: {
+  error: Error | null
+  onRetry: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      <Problem
+        title="Couldn't check this terminal"
+        requestId={error instanceof ApiError ? error.requestId : undefined}
+      >
+        <p className="m-0 mt-0.5 text-sm text-body">
+          This register&apos;s backend didn&apos;t answer, so setup can&apos;t
+          tell whether it has been set up already. Check that the outlet backend
+          is running, then try again.
+        </p>
+      </Problem>
+      <button type="button" onClick={onRetry} className="btn-primary">
+        Try again
+      </button>
+    </div>
   )
 }

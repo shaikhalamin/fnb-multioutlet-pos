@@ -115,8 +115,10 @@ The whole flow is demo-able from the two UIs:
    **Outlet ID + code** (step 1 of the wizard), plus the first admin
    account for that POS. The backend writes identity, receipt counters, the
    sync checkpoint and the admin in one transaction and seals itself.
-3. **Issue the key in HQ** — the outlet's detail page → assign menu items →
-   *API keys → Issue key*. Copy the one-time **key ID + secret**.
+3. **Issue the key in HQ** — the outlet's detail page → *Settings* tab →
+   *Outlet sync keys* → *Issue new key* (a user allowed to manage keys). Copy
+   the one-time **Key ID + Key secret** with their own copy buttons — each
+   goes into its own field in the wizard's step 2.
 4. **Pair** — back in the wizard's step 2, paste the HQ base URL
    (`http://hq-api:3000/api/v1` inside Compose — pre-filled) plus the key
    pair and hit **Test & pair**. HQ validates the key live (a key minted for

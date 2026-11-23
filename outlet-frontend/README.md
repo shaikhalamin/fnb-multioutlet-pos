@@ -53,8 +53,12 @@ differs.
 - **Setup wizard** (`/setup`, public only while unprovisioned) — first-run
   terminal pairing (PRD §8.7/FR-11): step 1 pastes the HQ-issued outlet ID +
   code and creates the first admin; step 2 pastes the one-time HQ machine key
-  and live-validates it ("Test & pair"). Redirects to `/login` once paired;
-  the landing page shows a "Set up this terminal" CTA while unprovisioned.
+  and live-validates it ("Test & pair"). The stepper always shows both steps,
+  each panel names the HQ console path its values come from, and a finished
+  step confirms the save before the next one replaces it. A confirmation with
+  a sign-in button ends the wizard; `/setup` redirects to `/login` once the
+  terminal is provisioned, and the landing page shows a "Set up this terminal"
+  CTA while it is not.
 - **POS** (`features/pos`) — menu grid (`formatMinor` string money, live
   stock), quantity-stepper cart, checkout with **one idempotency key per
   sale attempt** held in a ref across retries until response or
